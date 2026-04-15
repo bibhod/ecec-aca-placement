@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ecec
+      POSTGRES_PASSWORD: ecec_secret
+      POSTGRES_DB: ecec_placement
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecec -d ecec_placement"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ecec:ecec_secret@db:5432/ecec_placement
+      SECRET_KEY: xK9mP2qL7vN4jR8wY1cT6bA3fD5hS0eU
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 480
+      FRONTEND_URL: http://localhost
+
+      # ── Email (Option A: SendGrid) ─────────────────────────────────────────
+      # Set SENDGRID_API_KEY to your key and leave USE_SMTP as "false"
+      SENDGRID_API_KEY: ""
+      USE_SMTP: "false"
+
+      # ── Email (Option B: SMTP/Gmail) ──────────────────────────────────────
+      # Set USE_SMTP to "true" and fill SMTP_USER / SMTP_PASSWORD
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+
+      FROM_EMAIL: noreply@academies.edu.au
+      FROM_NAME: Academies Australasia
+
+      # ── SMS — Twilio ──────────────────────────────────────────────────────
+      # Sign up at twilio.com, get a number, then fill these in
+      TWILIO_ACCOUNT_SID: ""
+      TWILIO_AUTH_TOKEN: ""
+      TWILIO_FROM_NUMBER: ""
+
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ""
+        # ── Google Maps API key for address autocomplete (Issue 7) ────────────
+        # Get a key at https://console.cloud.google.com → Enable "Places API"
+        # Then replace the empty string below with your key:
+        VITE_GOOGLE_MAPS_API_KEY: ""
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  uploads:
