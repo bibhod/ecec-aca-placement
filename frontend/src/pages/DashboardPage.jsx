@@ -18,15 +18,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([
-      api.get('/dashboard/stats'),
-      api.get('/dashboard/upcoming-appointments'),
-      api.get('/dashboard/expiring-documents'),
-    ]).then(([s, u, e]) => {
-      setStats(s.data)
-      setUpcoming(u.data)
-      setExpiring(e.data)
-    }).catch(console.error)
+    setLoading(true)
+    // Fetch each independently so one failure doesn't blank the whole dashboard
+    api.get('/dashboard/stats')
+      .then(r => setStats(r.data))
+      .catch(e => console.error('Dashboard stats failed:', e))
+    api.get('/dashboard/upcoming-appointments')
+      .then(r => setUpcoming(r.data))
+      .catch(() => setUpcoming([]))
+    api.get('/dashboard/expiring-documents')
+      .then(r => setExpiring(r.data))
+      .catch(() => setExpiring([]))
       .finally(() => setLoading(false))
   }, [])
 
