@@ -21,16 +21,21 @@ def send_email(
         logger.warning("No recipient email provided, skipping send")
         return False
 
+    print(f"[EMAIL] Attempting to send to: {to_email} | Subject: {subject}", flush=True)
+    print(f"[EMAIL] USE_SMTP={settings.USE_SMTP} | SMTP_USER={settings.SMTP_USER} | HAS_PASSWORD={'yes' if settings.SMTP_PASSWORD else 'no'}", flush=True)
     try:
         if settings.SENDGRID_API_KEY and not settings.USE_SMTP:
+            print(f"[EMAIL] Using SendGrid", flush=True)
             return _send_via_sendgrid(to_email, to_name, subject, html_body, plain_body)
         elif settings.SMTP_USER and settings.SMTP_PASSWORD:
+            print(f"[EMAIL] Using SMTP: {settings.SMTP_HOST}:{settings.SMTP_PORT}", flush=True)
             return _send_via_smtp(to_email, to_name, subject, html_body, plain_body)
         else:
+            print(f"[EMAIL SIMULATION] No credentials set — email NOT sent to {to_email}", flush=True)
             logger.info(f"[EMAIL SIMULATION] To: {to_email} | Subject: {subject}")
-            logger.info(f"[EMAIL BODY] {plain_body or html_body[:200]}")
             return True
     except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}", flush=True)
         logger.error(f"Email send failed to {to_email}: {e}")
         return False
 
