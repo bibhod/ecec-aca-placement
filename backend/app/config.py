@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     SENDGRID_API_KEY: Optional[str] = None
     USE_SMTP: bool = False
 
+    # ── Email — Brevo/Sendinblue ──────────────────────────────────────────────
+    BREVO_API_KEY: Optional[str] = None
+
     # ── Email — SMTP fallback ─────────────────────────────────────────────────
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

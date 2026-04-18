@@ -22,9 +22,11 @@ def send_email(
         return False
 
     print(f"[EMAIL] Attempting to send to: {to_email} | Subject: {subject}", flush=True)
-    print(f"[EMAIL] USE_SMTP={settings.USE_SMTP} | SMTP_USER={settings.SMTP_USER} | HAS_PASSWORD={'yes' if settings.SMTP_PASSWORD else 'no'}", flush=True)
     try:
-        if settings.SENDGRID_API_KEY and not settings.USE_SMTP:
+        if settings.BREVO_API_KEY:
+            print(f"[EMAIL] Using Brevo", flush=True)
+            return _send_via_brevo(to_email, to_name, subject, html_body, plain_body)
+        elif settings.SENDGRID_API_KEY and not settings.USE_SMTP:
             print(f"[EMAIL] Using SendGrid", flush=True)
             return _send_via_sendgrid(to_email, to_name, subject, html_body, plain_body)
         elif settings.SMTP_USER and settings.SMTP_PASSWORD:
@@ -32,12 +34,35 @@ def send_email(
             return _send_via_smtp(to_email, to_name, subject, html_body, plain_body)
         else:
             print(f"[EMAIL SIMULATION] No credentials set — email NOT sent to {to_email}", flush=True)
-            logger.info(f"[EMAIL SIMULATION] To: {to_email} | Subject: {subject}")
             return True
     except Exception as e:
         print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}", flush=True)
         logger.error(f"Email send failed to {to_email}: {e}")
         return False
+
+
+def _send_via_brevo(to_email, to_name, subject, html_body, plain_body):
+    import urllib.request, json
+    payload = json.dumps({
+        "sender": {"name": settings.FROM_NAME, "email": settings.FROM_EMAIL},
+        "to": [{"email": to_email, "name": to_name}],
+        "subject": subject,
+        "htmlContent": html_body,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=payload,
+        headers={
+            "accept": "application/json",
+            "content-type": "application/json",
+            "api-key": settings.BREVO_API_KEY,
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        result = json.loads(resp.read())
+        print(f"[EMAIL] Brevo sent OK: {result}", flush=True)
+        return True
 
 
 def _send_via_sendgrid(to_email, to_name, subject, html_body, plain_body):
