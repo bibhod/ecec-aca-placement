@@ -16,7 +16,6 @@ import { format } from 'date-fns'
 // Issue 4 — five required compliance document types
 const COMPLIANCE_DOC_TYPES = [
   { value: 'working_with_children_check',   label: 'Working with Children Check' },
-  { value: 'national_police_check',          label: 'National Police Check' },
   { value: 'first_aid_certificate',          label: 'Valid First Aid Certificate (including CPR)' },
   { value: 'work_placement_agreement',       label: 'Work Placement Agreement' },
   { value: 'memorandum_of_understanding',    label: 'Memorandum of Understanding (MOU)' },
