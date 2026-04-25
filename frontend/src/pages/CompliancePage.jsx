@@ -9,10 +9,10 @@ import { PageHeader, Spinner, Badge, Modal, FormRow, Select, SearchInput, EmptyS
 import { format } from 'date-fns'
 
 const DOC_TYPES = [
-  { value: 'working_with_children_check', label: 'Working with Children Check' },
-  { value: 'first_aid_certificate',        label: 'Valid First Aid Certificate (including CPR)' },
-  { value: 'work_placement_agreement',     label: 'Work Placement Agreement' },
-  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding (MOU)' },
+  { value: 'working_with_children_check', label: 'Working with Children Check', abbr: 'WWCC' },
+  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid' },
+  { value: 'work_placement_agreement',     label: 'Work Placement Agreement', abbr: 'WPA' },
+  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding', abbr: 'MOU' },
 ]
 
 const REQUIRED_TYPES = DOC_TYPES.map(d => d.value)
@@ -31,6 +31,7 @@ export default function CompliancePage() {
   const [missingOnly, setMissingOnly] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [sendingReminders, setSendingReminders] = useState(false)
+  const [reminderResults, setReminderResults] = useState(null)
   const [form, setForm] = useState({
     student_id: '', document_type: 'working_with_children_check',
     document_number: '', issue_date: '', expiry_date: '', notes: ''
@@ -96,7 +97,7 @@ export default function CompliancePage() {
     setSendingReminders(true)
     try {
       const res = await api.post('/compliance/send-reminders')
-      toast.success(res.data.message)
+      setReminderResults(res.data)
     } catch { toast.error('Failed to send reminders') }
     finally { setSendingReminders(false) }
   }
@@ -235,62 +236,148 @@ export default function CompliancePage() {
           </div>
 
           {reportLoading ? <Spinner size="lg" /> : (
-            <div className="card p-0 overflow-hidden overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Student</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Progress</th>
-                    {DOC_TYPES.map(t => (
-                      <th key={t.value} className="px-3 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{t.label.split('(')[0].trim()}</th>
-                    ))}
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Outstanding</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filteredReport.map(r => (
-                    <tr key={r.student_id} className={r.fully_compliant ? 'bg-green-50/20' : 'bg-red-50/20'}>
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-gray-900">{r.student_name}</p>
-                        <p className="text-xs text-gray-400">{r.student_ref} · {r.campus}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                            <div className={`h-1.5 rounded-full ${r.fully_compliant ? 'bg-green-500' : r.submitted_count >= 2 ? 'bg-yellow-400' : 'bg-red-400'}`}
-                              style={{ width: `${(r.submitted_count / r.required_count) * 100}%` }} />
-                          </div>
-                          <span className={`text-xs font-bold ${r.fully_compliant ? 'text-green-600' : 'text-orange-500'}`}>
-                            {r.submitted_count}/{r.required_count}
-                          </span>
-                        </div>
-                      </td>
-                      {DOC_TYPES.map(t => {
-                        const docInfo = r.documents[t.value]
-                        return (
-                          <td key={t.value} className="px-3 py-3 text-center">
-                            {docInfo?.submitted
-                              ? <CheckCircle size={16} className="text-green-500 mx-auto" title={docInfo.status} />
-                              : <XCircle size={16} className="text-red-400 mx-auto" title="Not submitted" />}
-                          </td>
-                        )
-                      })}
-                      <td className="px-4 py-3">
-                        {r.outstanding.length === 0
-                          ? <span className="text-xs text-green-600 font-medium">✓ Fully compliant</span>
-                          : <span className="text-xs text-red-500">{r.outstanding.join(', ')}</span>}
-                      </td>
+            <>
+              <p className="text-xs text-gray-400 mb-3">
+                Showing {filteredReport.length} student{filteredReport.length !== 1 ? 's' : ''} ·{' '}
+                <span className="text-green-600 font-medium">{filteredReport.filter(r => r.fully_compliant).length} fully compliant</span> ·{' '}
+                <span className="text-red-500 font-medium">{filteredReport.filter(r => !r.fully_compliant).length} incomplete</span>
+              </p>
+              <div className="card p-0 overflow-hidden overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Student</th>
+                      <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Campus</th>
+                      <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Qualification</th>
+                      <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Progress</th>
+                      {DOC_TYPES.map(t => (
+                        <th key={t.value} className="px-3 py-3 text-center font-medium text-gray-500 whitespace-nowrap" title={t.label}>{t.abbr}</th>
+                      ))}
+                      <th className="px-4 py-3 text-left font-medium text-gray-500">Outstanding Documents</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredReport.length === 0 && (
-                <p className="text-center text-gray-400 py-8 text-sm">No students found</p>
-              )}
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredReport.map(r => {
+                      const ABBR_MAP = {
+                        'Working with Children Check': 'WWCC',
+                        'Valid First Aid Certificate (including CPR)': 'First Aid',
+                        'First Aid Certificate (incl. CPR)': 'First Aid',
+                        'Work Placement Agreement': 'WPA',
+                        'Memorandum of Understanding (MOU)': 'MOU',
+                        'Memorandum of Understanding': 'MOU',
+                      }
+                      const outstandingAbbr = r.outstanding.map(o => ABBR_MAP[o] || o)
+                      return (
+                        <tr key={r.student_id} className={r.fully_compliant ? 'bg-green-50/30' : 'hover:bg-red-50/20'}>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-900">{r.student_name}</p>
+                            <p className="text-gray-400">{r.student_ref}</p>
+                          </td>
+                          <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '—'}</td>
+                          <td className="px-3 py-3 text-gray-500">{r.qualification || '—'}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-12 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
+                                <div className={`h-1.5 rounded-full ${r.fully_compliant ? 'bg-green-500' : r.submitted_count >= 2 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                                  style={{ width: `${(r.submitted_count / r.required_count) * 100}%` }} />
+                              </div>
+                              <span className={`font-bold whitespace-nowrap ${r.fully_compliant ? 'text-green-600' : 'text-orange-500'}`}>
+                                {r.submitted_count}/{r.required_count}
+                              </span>
+                            </div>
+                          </td>
+                          {DOC_TYPES.map(t => {
+                            const docInfo = r.documents?.[t.value]
+                            const statusColor = docInfo?.status === 'expired' ? 'text-red-400' : docInfo?.status === 'expiring_soon' ? 'text-yellow-500' : 'text-green-500'
+                            return (
+                              <td key={t.value} className="px-3 py-3 text-center">
+                                {docInfo?.submitted
+                                  ? <CheckCircle size={15} className={`${statusColor} mx-auto`} title={`${t.abbr}: ${docInfo.status}`} />
+                                  : <XCircle size={15} className="text-red-300 mx-auto" title={`${t.abbr}: not submitted`} />}
+                              </td>
+                            )
+                          })}
+                          <td className="px-4 py-3">
+                            {outstandingAbbr.length === 0
+                              ? <span className="text-green-600 font-medium">✓ Complete</span>
+                              : <span className="text-red-500 font-medium">{outstandingAbbr.join(', ')}</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {filteredReport.length === 0 && (
+                  <p className="text-center text-gray-400 py-8">No students found</p>
+                )}
+              </div>
+            </>
           )}
         </>
       )}
+
+      {/* Reminder Results Modal */}
+      <Modal open={!!reminderResults} onClose={() => setReminderResults(null)} title="Reminder Email Results" size="lg">
+        {reminderResults && (
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              <div className="flex-1 bg-green-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-green-600">{reminderResults.sent?.length || 0}</p>
+                <p className="text-sm text-green-700">Emails Sent</p>
+              </div>
+              <div className="flex-1 bg-gray-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-gray-500">{reminderResults.skipped?.length || 0}</p>
+                <p className="text-sm text-gray-500">Skipped</p>
+              </div>
+            </div>
+
+            {reminderResults.sent?.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-gray-700 mb-2">Emails sent to:</p>
+                <div className="border border-gray-100 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                  {reminderResults.sent.map((s, i) => (
+                    <div key={i} className="flex items-start justify-between px-4 py-2 border-b border-gray-50 last:border-0">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{s.student}</p>
+                        <p className="text-xs text-gray-400">{s.email}</p>
+                      </div>
+                      <div className="text-right ml-4">
+                        <p className="text-xs text-orange-500">{s.submitted_count}/4 submitted</p>
+                        <p className="text-xs text-gray-400">Missing: {s.outstanding?.map(o => {
+                          const abbr = {'Working with Children Check (WWCC)':'WWCC','First Aid Certificate (incl. CPR)':'First Aid','Work Placement Agreement (WPA)':'WPA','Memorandum of Understanding (MOU)':'MOU'}
+                          return abbr[o] || o
+                        }).join(', ')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reminderResults.skipped?.filter(s => s.reason !== 'Fully compliant').length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-gray-700 mb-2">Could not send:</p>
+                <div className="border border-red-100 rounded-xl overflow-hidden max-h-32 overflow-y-auto">
+                  {reminderResults.skipped.filter(s => s.reason !== 'Fully compliant').map((s, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2 border-b border-red-50 last:border-0">
+                      <p className="text-sm text-gray-700">{s.student}</p>
+                      <p className="text-xs text-red-400">{s.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400 bg-blue-50 rounded-lg p-3">
+              All sent emails have been recorded in each student's Communications log for compliance purposes.
+            </p>
+
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setReminderResults(null)} className="btn-primary">Close</button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Add Document Modal */}
       <Modal open={showModal} onClose={() => { setShowModal(false); setUploadFile(null) }} title="Add Compliance Document" size="md">

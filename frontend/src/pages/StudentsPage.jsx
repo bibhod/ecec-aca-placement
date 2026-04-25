@@ -60,7 +60,11 @@ function StudentCard({ student, onClick }) {
       <ProgressBar value={student.completed_hours} max={student.required_hours} />
       <div className="flex items-center justify-between mt-2">
         <span className={`text-xs font-medium ${compColor[student.compliance_status] || 'text-gray-500'}`}>
-          Compliance: {student.compliance_status}
+          {student.compliance_status === 'compliant'
+            ? '✓ Compliant'
+            : student.compliance_missing_count > 0
+              ? `Pending — ${student.compliance_missing_count} doc${student.compliance_missing_count > 1 ? 's' : ''} missing`
+              : `Compliance: ${student.compliance_status}`}
         </span>
         <span className="text-xs text-gray-400"><Clock size={10} className="inline mr-0.5" />{student.completed_hours}h</span>
       </div>

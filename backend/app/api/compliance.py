@@ -353,40 +353,82 @@ def send_compliance_reminders(
 ):
     """Send reminder emails to all active students who have outstanding compliance documents."""
     from app.services.email_service import send_email, _base_template
+    from app.models import Communication
 
-    students = db.query(Student).filter(Student.status == "active").all()
+    students_list = db.query(Student).filter(Student.status == "active").all()
     sent, skipped = [], []
 
-    for s in students:
+    ABBREV = {
+        "working_with_children_check": "Working with Children Check (WWCC)",
+        "first_aid_certificate": "First Aid Certificate (incl. CPR)",
+        "work_placement_agreement": "Work Placement Agreement (WPA)",
+        "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
+    }
+
+    for s in students_list:
         if not s.email:
             skipped.append({"student": s.full_name, "reason": "No email address"})
             continue
 
         docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
         submitted_types = {d.document_type for d in docs}
-        outstanding = [label for dtype, label in REQUIRED_DOC_TYPES.items() if dtype not in submitted_types]
+        outstanding_labels = [ABBREV.get(dtype, label) for dtype, label in REQUIRED_DOC_TYPES.items()
+                              if dtype not in submitted_types]
+        submitted_count = len(REQUIRED_DOC_TYPES) - len(outstanding_labels)
 
-        if not outstanding:
+        if not outstanding_labels:
             skipped.append({"student": s.full_name, "reason": "Fully compliant"})
             continue
 
-        outstanding_list = "".join(f"<li>{item}</li>" for item in outstanding)
-        content = f"""
+        outstanding_list_html = "".join(f"<li>{item}</li>" for item in outstanding_labels)
+        outstanding_list_txt = "\n".join(f"  - {item}" for item in outstanding_labels)
+        subject = "Action Required: Outstanding Compliance Documents"
+        body_text = (
+            f"Dear {s.full_name},\n\n"
+            f"This is a reminder that the following compliance documents are still outstanding "
+            f"for your work placement:\n\n{outstanding_list_txt}\n\n"
+            f"You currently have {submitted_count} of {len(REQUIRED_DOC_TYPES)} required documents submitted.\n\n"
+            "Please submit the outstanding documents as soon as possible to ensure your placement "
+            "is not affected.\n\nIf you have any questions, please contact your coordinator."
+        )
+        html_content = f"""
 <h2>Compliance Documents Reminder</h2>
 <p>Dear {s.full_name},</p>
 <p>This is a reminder that the following compliance documents are still outstanding for your work placement:</p>
 <div class="highlight">
-  <ul>{outstanding_list}</ul>
+  <ul>{outstanding_list_html}</ul>
 </div>
-<p>You currently have <strong>{len(REQUIRED_DOC_TYPES) - len(outstanding)} of {len(REQUIRED_DOC_TYPES)}</strong> required documents submitted.</p>
+<p>You currently have <strong>{submitted_count} of {len(REQUIRED_DOC_TYPES)}</strong> required documents submitted.</p>
 <p>Please submit the outstanding documents as soon as possible to ensure your placement is not affected.</p>
 <p>If you have any questions, please contact your coordinator.</p>
 """
-        ok = send_email(s.email, s.full_name, "Action Required: Outstanding Compliance Documents", _base_template(content))
+        ok = send_email(s.email, s.full_name, subject, _base_template(html_content))
+
+        # Record every attempt in the communications log
+        comm = Communication(
+            student_id=s.id,
+            sender_id=current_user.id,
+            recipient_email=s.email,
+            recipient_name=s.full_name,
+            message_type="email",
+            subject=subject,
+            body=body_text,
+            template_used="compliance_reminder_bulk",
+            sent_successfully=ok,
+        )
+        db.add(comm)
+
         if ok:
-            sent.append(s.full_name)
+            sent.append({
+                "student": s.full_name,
+                "email": s.email,
+                "outstanding": outstanding_labels,
+                "submitted_count": submitted_count,
+            })
         else:
-            skipped.append({"student": s.full_name, "reason": "Email failed"})
+            skipped.append({"student": s.full_name, "reason": "Email send failed"})
+
+    db.commit()
 
     return {
         "message": f"Reminders sent to {len(sent)} students, {len(skipped)} skipped",

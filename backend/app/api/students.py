@@ -25,12 +25,25 @@ def student_to_dict(s: Student, db: Session) -> dict:
     docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
     today = date.today()
 
-    if not docs:
+    # A student is only compliant when ALL 4 required doc types are submitted
+    REQUIRED_4 = ['working_with_children_check', 'first_aid_certificate',
+                  'work_placement_agreement', 'memorandum_of_understanding']
+    submitted_types = {d.document_type for d in docs}
+    required_submitted_count = sum(1 for t in REQUIRED_4 if t in submitted_types)
+    missing_count = len(REQUIRED_4) - required_submitted_count
+
+    if missing_count > 0:
         compliance_status = "pending"
     else:
-        expired = any(d.expiry_date and d.expiry_date < today for d in docs)
-        unverified = any(not d.verified for d in docs)
-        compliance_status = "expired" if expired else ("pending" if unverified else "compliant")
+        # All 4 submitted — check expiry on the latest per required type
+        latest_docs: dict = {}
+        for d in docs:
+            if d.document_type in REQUIRED_4:
+                existing = latest_docs.get(d.document_type)
+                if not existing or (d.created_at or date.min) > (existing.created_at or date.min):
+                    latest_docs[d.document_type] = d
+        expired = any(d.expiry_date and d.expiry_date < today for d in latest_docs.values())
+        compliance_status = "expired" if expired else "compliant"
 
     return {
         "id": s.id,
@@ -55,6 +68,8 @@ def student_to_dict(s: Student, db: Session) -> dict:
         "preferred_state": getattr(s, "preferred_state", None),
         "notes": s.notes,
         "compliance_status": compliance_status,
+        "compliance_submitted_count": required_submitted_count,
+        "compliance_missing_count": missing_count,
         "placement_site": {
             "id": centre.id,
             "centre_name": centre.centre_name,

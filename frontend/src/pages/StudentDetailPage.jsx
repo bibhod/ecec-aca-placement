@@ -217,7 +217,14 @@ export default function StudentDetailPage() {
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className="text-gray-400 text-sm">{student.student_id}</span>
               <Badge status={student.status} />
-              <Badge status={student.compliance_status} label={`Compliance: ${student.compliance_status}`} />
+              <Badge
+                status={student.compliance_status}
+                label={student.compliance_status === 'compliant'
+                  ? 'Compliance: Complete'
+                  : student.compliance_missing_count > 0
+                    ? `Compliance: Pending (${student.compliance_missing_count} missing)`
+                    : `Compliance: ${student.compliance_status}`}
+              />
             </div>
           </div>
         </div>
@@ -459,7 +466,7 @@ export default function StudentDetailPage() {
                                     try { await api.delete(`/compliance/${latest.id}`); toast.success('Deleted'); load() }
                                     catch { toast.error('Failed to delete') }
                                   }}
-                                  className="text-gray-300 hover:text-red-400 transition-colors p-1"
+                                  className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50"
                                   title="Delete"
                                 ><Trash2 size={14} /></button>
                               </div>
