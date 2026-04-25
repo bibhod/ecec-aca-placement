@@ -65,6 +65,14 @@ const ACTION_COLORS = {
   APPROVE: 'badge-green', LOGIN: 'badge-gray', REJECT: 'badge-yellow',
 }
 
+// ─── Qualification filter helper (groups Cert III or Diploma across old+new codes)
+function applyQualFilter(students, qual) {
+  if (!qual) return students
+  if (qual === 'cert_iii') return students.filter(s => s.qualification?.includes('30'))
+  if (qual === 'diploma')  return students.filter(s => s.qualification?.includes('50'))
+  return students.filter(s => s.qualification === qual)
+}
+
 // ─── CSV export helper ─────────────────────────────────────────────────────────
 function exportCsv(filename, rows) {
   const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -127,10 +135,12 @@ export default function AuditPage() {
       switch (selectedReport.id) {
         case 'compliance_status': {
           const p = new URLSearchParams()
-          if (filters.campus) p.append('campus', filters.campus)
           if (filters.missing_only) p.append('missing_only', 'true')
           const r = await api.get(`/compliance/report?${p}`)
-          data = r.data
+          // Filter campus client-side (case-insensitive)
+          data = filters.campus
+            ? r.data.filter(row => row.campus?.toLowerCase() === filters.campus.toLowerCase())
+            : r.data
           break
         }
         case 'expiring_documents': {
@@ -139,20 +149,26 @@ export default function AuditPage() {
           break
         }
         case 'placement_hours': {
+          // Fetch with only status from API; filter campus & qualification client-side
+          // to avoid case-sensitivity issues with stored campus values (e.g. "Sydney" vs "sydney")
           const p = new URLSearchParams()
-          if (filters.campus) p.append('campus', filters.campus)
-          if (filters.qualification) p.append('qualification', filters.qualification)
           if (filters.status) p.append('status', filters.status)
           const r = await api.get(`/students?${p}`)
-          data = [...r.data].sort((a, b) => a.hours_percentage - b.hours_percentage)
+          let d = r.data
+          if (filters.campus) d = d.filter(s => s.campus?.toLowerCase() === filters.campus.toLowerCase())
+          if (filters.qualification) d = applyQualFilter(d, filters.qualification)
+          data = [...d].sort((a, b) => a.hours_percentage - b.hours_percentage)
           break
         }
         case 'enrollment_summary': {
+          // Fetch with only status from API; filter campus & qualification client-side
           const p = new URLSearchParams()
           if (filters.status) p.append('status', filters.status)
-          if (filters.campus) p.append('campus', filters.campus)
           const r = await api.get(`/students?${p}`)
-          data = r.data
+          let d = r.data
+          if (filters.campus) d = d.filter(s => s.campus?.toLowerCase() === filters.campus.toLowerCase())
+          if (filters.qualification) d = applyQualFilter(d, filters.qualification)
+          data = d
           break
         }
         case 'communications_log': {
@@ -253,10 +269,16 @@ export default function AuditPage() {
             <label className="block text-xs font-medium text-gray-500 mb-1">Qualification</label>
             <select className={inputCls} value={filters.qualification} onChange={e => setFilter('qualification', e.target.value)}>
               <option value="">All Qualifications</option>
-              <option value="CHC30125">Cert III (CHC30125)</option>
-              <option value="CHC50125">Diploma (CHC50125)</option>
-              <option value="CHC30121">Cert III (CHC30121)</option>
-              <option value="CHC50121">Diploma (CHC50121)</option>
+              <optgroup label="— Grouped —">
+                <option value="cert_iii">All Cert III (CHC30121 + CHC30125)</option>
+                <option value="diploma">All Diploma (CHC50121 + CHC50125)</option>
+              </optgroup>
+              <optgroup label="— Specific code —">
+                <option value="CHC30125">CHC30125 – Cert III (current)</option>
+                <option value="CHC50125">CHC50125 – Diploma (current)</option>
+                <option value="CHC30121">CHC30121 – Cert III (superseded)</option>
+                <option value="CHC50121">CHC50121 – Diploma (superseded)</option>
+              </optgroup>
             </select>
           </div>
         )}
