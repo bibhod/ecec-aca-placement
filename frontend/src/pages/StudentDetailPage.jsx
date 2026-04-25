@@ -307,7 +307,12 @@ export default function StudentDetailPage() {
                 ['Appointments', appointments.length],
                 ['Issues', issues.length],
                 ['Communications', comms.length],
-                ['Compliance Docs', student.compliance_documents?.length || 0],
+                ['Compliance', (() => {
+                  const types = new Set((student.compliance_documents || []).map(d => d.document_type))
+                  const required = ['working_with_children_check','first_aid_certificate','work_placement_agreement','memorandum_of_understanding']
+                  const done = required.filter(t => types.has(t)).length
+                  return `${done} / 4 required`
+                })()],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2 border-b border-gray-50 last:border-0 text-sm">
                   <span className="text-gray-500">{k}</span>
@@ -409,7 +414,7 @@ export default function StudentDetailPage() {
               </div>
             </div>
 
-            {/* All submitted documents */}
+            {/* All submitted documents — grouped by type, latest first */}
             <div className="card">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-navy">Submitted Documents</h3>
@@ -417,26 +422,77 @@ export default function StudentDetailPage() {
               </div>
               {allDocs.length === 0
                 ? <p className="text-center text-gray-400 py-8">No compliance documents recorded</p>
-                : <div className="space-y-3">
-                  {allDocs.map(d => {
-                    const docLabel = COMPLIANCE_DOC_TYPES.find(t => t.value === d.document_type)?.label
-                      || d.document_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-                    return (
-                      <div key={d.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                        <div>
-                          <p className="font-medium text-sm text-gray-900">{docLabel}</p>
-                          {d.document_number && <p className="text-xs text-gray-500">#{d.document_number}</p>}
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {d.expiry_date ? `Expires: ${format(new Date(d.expiry_date), 'd MMM yyyy')}` : 'No expiry'}
-                            {d.verified && ` · Verified by ${d.verified_by}`}
-                          </p>
-                          {d.file_url && <a href={d.file_url} target="_blank" rel="noreferrer" className="text-xs text-cyan hover:underline">View file</a>}
-                        </div>
-                        <Badge status={d.status} />
-                      </div>
-                    )
-                  })}
-                </div>
+                : (() => {
+                  // Group by document_type, sort each group newest first
+                  const groups = {}
+                  allDocs.forEach(d => {
+                    if (!groups[d.document_type]) groups[d.document_type] = []
+                    groups[d.document_type].push(d)
+                  })
+                  Object.values(groups).forEach(g => g.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')))
+
+                  return (
+                    <div className="space-y-3">
+                      {Object.entries(groups).map(([dtype, docs]) => {
+                        const latest = docs[0]
+                        const older = docs.slice(1)
+                        const docLabel = COMPLIANCE_DOC_TYPES.find(t => t.value === dtype)?.label
+                          || dtype.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                        return (
+                          <div key={dtype} className="border border-gray-100 rounded-xl overflow-hidden">
+                            {/* Latest / current document */}
+                            <div className="flex items-center justify-between p-4 bg-gray-50">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-gray-900">{docLabel}</p>
+                                {latest.document_number && <p className="text-xs text-gray-500">#{latest.document_number}</p>}
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                  {latest.expiry_date ? `Expires: ${format(new Date(latest.expiry_date), 'd MMM yyyy')}` : 'No expiry'}
+                                  {latest.verified && ` · Verified by ${latest.verified_by}`}
+                                </p>
+                                {latest.file_url && <a href={latest.file_url} target="_blank" rel="noreferrer" className="text-xs text-cyan hover:underline">View file</a>}
+                              </div>
+                              <div className="flex items-center gap-2 ml-3">
+                                <Badge status={latest.status} />
+                                <button
+                                  onClick={async () => {
+                                    if (!window.confirm('Delete this document?')) return
+                                    try { await api.delete(`/compliance/${latest.id}`); toast.success('Deleted'); load() }
+                                    catch { toast.error('Failed to delete') }
+                                  }}
+                                  className="text-gray-300 hover:text-red-400 transition-colors p-1"
+                                  title="Delete"
+                                ><Trash2 size={14} /></button>
+                              </div>
+                            </div>
+                            {/* Previous submissions for same type (valid history) */}
+                            {older.length > 0 && (
+                              <div className="bg-gray-50 border-t border-gray-100 px-4 py-2">
+                                <p className="text-xs text-gray-400 font-medium mb-1">Previous submissions ({older.length}):</p>
+                                {older.map(od => (
+                                  <div key={od.id} className="flex items-center justify-between py-1">
+                                    <span className="text-xs text-gray-400">
+                                      {od.document_number ? `#${od.document_number} · ` : ''}{od.expiry_date ? `Expired ${format(new Date(od.expiry_date), 'd MMM yyyy')}` : 'No expiry'}
+                                      {od.file_url && <> · <a href={od.file_url} target="_blank" rel="noreferrer" className="text-cyan hover:underline">View file</a></>}
+                                    </span>
+                                    <button
+                                      onClick={async () => {
+                                        if (!window.confirm('Delete this document from history?')) return
+                                        try { await api.delete(`/compliance/${od.id}`); toast.success('Deleted'); load() }
+                                        catch { toast.error('Failed to delete') }
+                                      }}
+                                      className="text-gray-300 hover:text-red-400 transition-colors p-1 ml-2"
+                                      title="Remove from history"
+                                    ><Trash2 size={12} /></button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()
               }
             </div>
           </div>
