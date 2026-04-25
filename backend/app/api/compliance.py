@@ -22,14 +22,16 @@ router = APIRouter()
 UPLOAD_DIR = "uploads/compliance"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Human-readable labels for the five required document types (Issue 4, 12)
-DOC_TYPE_LABELS = {
-    "working_with_children_check":   "Working with Children Check",
-    "national_police_check":          "National Police Check",
-    "first_aid_certificate":          "Valid First Aid Certificate (including CPR)",
-    "work_placement_agreement":       "Work Placement Agreement",
-    "memorandum_of_understanding":    "Memorandum of Understanding (MOU)",
+# The 4 required compliance document types
+REQUIRED_DOC_TYPES = {
+    "working_with_children_check": "Working with Children Check",
+    "first_aid_certificate":       "Valid First Aid Certificate (including CPR)",
+    "work_placement_agreement":    "Work Placement Agreement",
+    "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
 }
+
+# Keep legacy label map for backward compatibility with existing data
+DOC_TYPE_LABELS = {**REQUIRED_DOC_TYPES, "national_police_check": "National Police Check"}
 
 
 def doc_to_dict(d: ComplianceDocument) -> dict:
@@ -283,6 +285,114 @@ def update_document(
             doc.verified_at = date.today()
     db.commit()
     return doc_to_dict(doc)
+
+
+# ─── Compliance Report — per-student document status ─────────────────────────
+@router.get("/report")
+def compliance_report(
+    campus: Optional[str] = None,
+    qualification: Optional[str] = None,
+    missing_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns every active student with their compliance status for each of the
+    4 required document types, plus a submitted count and list of outstanding docs.
+    """
+    q = db.query(Student).filter(Student.status == "active")
+    if campus:
+        q = q.filter(Student.campus == campus)
+    if qualification:
+        q = q.filter(Student.qualification == qualification)
+    students = q.order_by(Student.full_name).all()
+
+    result = []
+    for s in students:
+        docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
+        submitted_types = {d.document_type for d in docs}
+
+        doc_status = {}
+        for dtype, dlabel in REQUIRED_DOC_TYPES.items():
+            matching = [d for d in docs if d.document_type == dtype]
+            if matching:
+                latest = sorted(matching, key=lambda d: d.created_at or date.min, reverse=True)[0]
+                dd = doc_to_dict(latest)
+                doc_status[dtype] = {"submitted": True, "label": dlabel, "status": dd["status"], "verified": dd["verified"]}
+            else:
+                doc_status[dtype] = {"submitted": False, "label": dlabel, "status": "missing", "verified": False}
+
+        submitted_count = sum(1 for v in doc_status.values() if v["submitted"])
+        outstanding = [v["label"] for v in doc_status.values() if not v["submitted"]]
+        fully_compliant = submitted_count == len(REQUIRED_DOC_TYPES)
+
+        if missing_only and fully_compliant:
+            continue
+
+        result.append({
+            "student_id": s.id,
+            "student_ref": s.student_id,
+            "student_name": s.full_name,
+            "email": s.email,
+            "campus": s.campus,
+            "qualification": s.qualification,
+            "submitted_count": submitted_count,
+            "required_count": len(REQUIRED_DOC_TYPES),
+            "fully_compliant": fully_compliant,
+            "outstanding": outstanding,
+            "documents": doc_status,
+        })
+    return result
+
+
+# ─── Send reminder emails to students with outstanding documents ──────────────
+@router.post("/send-reminders")
+def send_compliance_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Send reminder emails to all active students who have outstanding compliance documents."""
+    from app.services.email_service import send_email, _base_template
+
+    students = db.query(Student).filter(Student.status == "active").all()
+    sent, skipped = [], []
+
+    for s in students:
+        if not s.email:
+            skipped.append({"student": s.full_name, "reason": "No email address"})
+            continue
+
+        docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
+        submitted_types = {d.document_type for d in docs}
+        outstanding = [label for dtype, label in REQUIRED_DOC_TYPES.items() if dtype not in submitted_types]
+
+        if not outstanding:
+            skipped.append({"student": s.full_name, "reason": "Fully compliant"})
+            continue
+
+        outstanding_list = "".join(f"<li>{item}</li>" for item in outstanding)
+        content = f"""
+<h2>Compliance Documents Reminder</h2>
+<p>Dear {s.full_name},</p>
+<p>This is a reminder that the following compliance documents are still outstanding for your work placement:</p>
+<div class="highlight">
+  <ul>{outstanding_list}</ul>
+</div>
+<p>You currently have <strong>{len(REQUIRED_DOC_TYPES) - len(outstanding)} of {len(REQUIRED_DOC_TYPES)}</strong> required documents submitted.</p>
+<p>Please submit the outstanding documents as soon as possible to ensure your placement is not affected.</p>
+<p>If you have any questions, please contact your coordinator.</p>
+"""
+        ok = send_email(s.email, s.full_name, "Action Required: Outstanding Compliance Documents", _base_template(content))
+        if ok:
+            sent.append(s.full_name)
+        else:
+            skipped.append({"student": s.full_name, "reason": "Email failed"})
+
+    return {
+        "message": f"Reminders sent to {len(sent)} students, {len(skipped)} skipped",
+        "sent": sent,
+        "skipped": skipped,
+    }
 
 
 # ─── Delete ───────────────────────────────────────────────────────────────────

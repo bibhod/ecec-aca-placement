@@ -363,38 +363,85 @@ export default function StudentDetailPage() {
       )}
 
       {/* ── Compliance Tab ─────────────────────────────────────────────────── */}
-      {activeTab === 'compliance' && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-navy">Compliance Documents</h3>
-            {/* Issue 5 — Compliance section has its own + Add button */}
-            <button onClick={() => setShowComplianceModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Document</button>
-          </div>
-          {(student.compliance_documents || []).length === 0
-            ? <p className="text-center text-gray-400 py-8">No compliance documents recorded</p>
-            : <div className="space-y-3">
-              {student.compliance_documents.map(d => {
-                const docLabel = COMPLIANCE_DOC_TYPES.find(t => t.value === d.document_type)?.label
-                  || d.document_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-                return (
-                  <div key={d.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                    <div>
-                      <p className="font-medium text-sm text-gray-900">{docLabel}</p>
-                      {d.document_number && <p className="text-xs text-gray-500">#{d.document_number}</p>}
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {d.expiry_date ? `Expires: ${format(new Date(d.expiry_date), 'd MMM yyyy')}` : 'No expiry'}
-                        {d.verified && ` · Verified by ${d.verified_by}`}
-                      </p>
-                      {d.file_url && <a href={d.file_url} target="_blank" rel="noreferrer" className="text-xs text-cyan hover:underline">View file</a>}
+      {activeTab === 'compliance' && (() => {
+        const REQUIRED = [
+          { value: 'working_with_children_check', label: 'Working with Children Check' },
+          { value: 'first_aid_certificate',        label: 'Valid First Aid Certificate (including CPR)' },
+          { value: 'work_placement_agreement',     label: 'Work Placement Agreement' },
+          { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding (MOU)' },
+        ]
+        const allDocs = student.compliance_documents || []
+        const submittedTypes = new Set(allDocs.map(d => d.document_type))
+        const submittedCount = REQUIRED.filter(r => submittedTypes.has(r.value)).length
+        const pct = Math.round((submittedCount / REQUIRED.length) * 100)
+        const barColor = pct === 100 ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-400'
+
+        return (
+          <div className="space-y-4">
+            {/* Progress tracker */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-navy">Compliance Progress</h3>
+                <span className={`text-sm font-bold ${pct === 100 ? 'text-green-600' : 'text-orange-500'}`}>
+                  {submittedCount} / {REQUIRED.length} submitted
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                <div className={`h-2.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {REQUIRED.map(r => {
+                  const doc = allDocs.find(d => d.document_type === r.value)
+                  return (
+                    <div key={r.value} className={`flex items-center justify-between p-3 rounded-lg ${doc ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                      <div className="flex items-center gap-2">
+                        {doc
+                          ? <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                          : <XCircle size={16} className="text-red-400 flex-shrink-0" />}
+                        <span className="text-sm font-medium text-gray-800">{r.label}</span>
+                      </div>
+                      {doc
+                        ? <Badge status={doc.status} />
+                        : <span className="text-xs text-red-500 font-medium">Outstanding</span>}
                     </div>
-                    <Badge status={d.status} />
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          }
-        </div>
-      )}
+
+            {/* All submitted documents */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-navy">Submitted Documents</h3>
+                <button onClick={() => setShowComplianceModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Document</button>
+              </div>
+              {allDocs.length === 0
+                ? <p className="text-center text-gray-400 py-8">No compliance documents recorded</p>
+                : <div className="space-y-3">
+                  {allDocs.map(d => {
+                    const docLabel = COMPLIANCE_DOC_TYPES.find(t => t.value === d.document_type)?.label
+                      || d.document_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                    return (
+                      <div key={d.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                        <div>
+                          <p className="font-medium text-sm text-gray-900">{docLabel}</p>
+                          {d.document_number && <p className="text-xs text-gray-500">#{d.document_number}</p>}
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {d.expiry_date ? `Expires: ${format(new Date(d.expiry_date), 'd MMM yyyy')}` : 'No expiry'}
+                            {d.verified && ` · Verified by ${d.verified_by}`}
+                          </p>
+                          {d.file_url && <a href={d.file_url} target="_blank" rel="noreferrer" className="text-xs text-cyan hover:underline">View file</a>}
+                        </div>
+                        <Badge status={d.status} />
+                      </div>
+                    )
+                  })}
+                </div>
+              }
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Appointments Tab ────────────────────────────────────────────────── */}
       {activeTab === 'appointments' && (
