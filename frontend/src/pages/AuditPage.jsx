@@ -14,7 +14,7 @@ const REPORTS = [
   {
     id: 'compliance_status',
     title: 'Compliance Status Report',
-    description: 'All active students with their document submission status and any outstanding requirements.',
+    description: 'All current students with their document submission status and any outstanding requirements.',
     icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50',
   },
   {

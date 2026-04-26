@@ -90,7 +90,7 @@ export default function AppointmentsPage() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
-    api.get('/students?status=active').then(r => setStudents(r.data)).catch(() => {})
+    api.get('/students?status=current').then(r => setStudents(r.data)).catch(() => {})
     api.get('/users').then(r => setTrainers(r.data.filter(u => ['coordinator','admin','trainer'].includes(u.role)))).catch(() => {})
     api.get('/centres').then(r => setCentres(r.data)).catch(() => {})
   }, [])

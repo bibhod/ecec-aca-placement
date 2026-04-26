@@ -251,11 +251,18 @@ def report_overview(db: Session = Depends(get_db), current_user: User = Depends(
     by_campus, by_qualification, by_status = {}, {}, {}
     hours_data, compliance_data = [], []
 
+    # Normalise legacy 'active' → 'current' for display purposes
+    _STATUS_DISPLAY = {"active": "Current", "current": "Current", "completed": "Completed", "withdrawn": "Withdrawn"}
+
     for s in students:
-        by_campus[s.campus] = by_campus.get(s.campus, 0) + 1
+        campus_key = (s.campus or "unknown").title()
+        by_campus[campus_key] = by_campus.get(campus_key, 0) + 1
+
         qual_label = QUAL_LABELS.get(s.qualification, s.qualification)
         by_qualification[qual_label] = by_qualification.get(qual_label, 0) + 1
-        by_status[s.status] = by_status.get(s.status, 0) + 1
+
+        status_key = _STATUS_DISPLAY.get(s.status, s.status.title() if s.status else "Unknown")
+        by_status[status_key] = by_status.get(status_key, 0) + 1
 
         pct = round(s.completed_hours / s.required_hours * 100, 1) if s.required_hours else 0
         hours_data.append({
@@ -466,7 +473,7 @@ def export_report_pdf(
         filter_parts = []
         if campus:   filter_parts.append(f"Campus: {campus.title()}")
         if qualification: filter_parts.append(f"Qualification: {qualification}")
-        filter_desc = "  |  ".join(filter_parts) if filter_parts else "All active students"
+        filter_desc = "  |  ".join(filter_parts) if filter_parts else "All current students"
 
         q = db.query(Student)
         if status:
@@ -517,7 +524,7 @@ def export_report_pdf(
         filter_parts = []
         if campus:       filter_parts.append(f"Campus: {campus.title()}")
         if missing_only: filter_parts.append("Incomplete only")
-        filter_desc = "  |  ".join(filter_parts) if filter_parts else "All active students"
+        filter_desc = "  |  ".join(filter_parts) if filter_parts else "All current students"
 
         students = db.query(Student).filter(Student.status == "current").all()
         if campus:

@@ -114,7 +114,7 @@ export default function StudentsPage() {
 
   const openAdd = () => {
     setEditStudent(null)
-    setForm({ student_id: '', full_name: '', email: '', phone: '', qualification: 'CHC30125', campus: 'sydney', status: 'active', course_start_date: '', course_end_date: '', placement_centre_id: '', placement_start_date: '', placement_end_date: '', required_hours: 160, coordinator_id: '', notes: '' })
+    setForm({ student_id: '', full_name: '', email: '', phone: '', qualification: 'CHC30125', campus: 'sydney', status: 'current', course_start_date: '', course_end_date: '', placement_centre_id: '', placement_start_date: '', placement_end_date: '', required_hours: 160, coordinator_id: '', notes: '' })
     setShowModal(true)
   }
 

@@ -26,7 +26,7 @@ export function HoursPage() {
     Promise.all([
       api.get('/hours/summary'),
       api.get('/hours'),
-      api.get('/students?status=active'),
+      api.get('/students?status=current'),
     ]).then(([s, l, st]) => { setSummary(s.data); setLogs(l.data); setStudents(st.data) })
       .finally(() => setLoading(false))
   }
