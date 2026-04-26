@@ -345,6 +345,68 @@ def compliance_report(
     return result
 
 
+# ─── Preview which students would receive reminders (no emails sent) ─────────
+@router.get("/reminder-preview")
+def get_reminder_preview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns the list of students who would receive a compliance reminder,
+    including each student's outstanding documents and a personalised email
+    preview. No emails are sent.
+    """
+    ABBREV = {
+        "working_with_children_check": "Working with Children Check (WWCC)",
+        "first_aid_certificate":       "First Aid Certificate (incl. CPR)",
+        "work_placement_agreement":    "Work Placement Agreement (WPA)",
+        "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
+    }
+    students_list = db.query(Student).filter(Student.status == "active").all()
+    recipients, compliant_count, no_email_count = [], 0, 0
+
+    for s in students_list:
+        if not s.email:
+            no_email_count += 1
+            continue
+        docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
+        submitted_types = {d.document_type for d in docs}
+        outstanding_labels = [ABBREV.get(dtype, label) for dtype, label in REQUIRED_DOC_TYPES.items()
+                              if dtype not in submitted_types]
+        submitted_count = len(REQUIRED_DOC_TYPES) - len(outstanding_labels)
+        if not outstanding_labels:
+            compliant_count += 1
+            continue
+        outstanding_txt = "\n".join(f"  - {item}" for item in outstanding_labels)
+        email_preview = (
+            f"Dear {s.full_name},\n\n"
+            f"This is a reminder that the following compliance documents are still outstanding "
+            f"for your work placement:\n\n{outstanding_txt}\n\n"
+            f"You currently have {submitted_count} of {len(REQUIRED_DOC_TYPES)} required "
+            f"documents submitted.\n\n"
+            "Please submit the outstanding documents as soon as possible to ensure your "
+            "placement is not affected.\n\n"
+            "If you have any questions, please contact your coordinator."
+        )
+        recipients.append({
+            "student_id": s.id,
+            "student_name": s.full_name,
+            "email": s.email,
+            "campus": s.campus,
+            "submitted_count": submitted_count,
+            "outstanding": outstanding_labels,
+            "email_preview": email_preview,
+        })
+
+    return {
+        "subject": "Action Required: Outstanding Compliance Documents",
+        "recipient_count": len(recipients),
+        "compliant_count": compliant_count,
+        "no_email_count": no_email_count,
+        "recipients": recipients,
+    }
+
+
 # ─── Send reminder emails to students with outstanding documents ──────────────
 @router.post("/send-reminders")
 def send_compliance_reminders(

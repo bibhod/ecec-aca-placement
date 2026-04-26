@@ -111,35 +111,69 @@ def _send_via_smtp(to_email, to_name, subject, html_body, plain_body):
 def _base_template(content: str) -> str:
     return f"""
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Academies Australasia</title>
 <style>
-  body {{ font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 0; }}
-  .container {{ max-width: 600px; margin: 30px auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
-  .header {{ background: #1A2B5F; padding: 24px 32px; }}
-  .header h1 {{ color: white; margin: 0; font-size: 20px; }}
-  .header p {{ color: #00AEEF; margin: 4px 0 0; font-size: 13px; }}
-  .body {{ padding: 32px; color: #333; line-height: 1.6; }}
-  .highlight {{ background: #EAF6FC; border-left: 4px solid #00AEEF; padding: 16px; border-radius: 4px; margin: 20px 0; }}
-  .btn {{ display: inline-block; background: #00AEEF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 16px; font-weight: bold; }}
-  .footer {{ background: #f0f0f0; padding: 16px 32px; font-size: 12px; color: #888; text-align: center; }}
-  table {{ width: 100%; border-collapse: collapse; margin: 16px 0; }}
-  td, th {{ padding: 10px 12px; border: 1px solid #e0e0e0; text-align: left; }}
-  th {{ background: #f5f5f5; font-weight: bold; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; background: #f0f4f8; margin: 0; padding: 0; }}
+  .wrapper {{ max-width: 640px; margin: 0 auto; padding: 24px 12px; }}
+  .container {{ background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.10); }}
+  .header {{ background: #1A2B5F; padding: 0; }}
+  .header-top {{ padding: 24px 36px 20px; border-bottom: 3px solid #00AEEF; }}
+  .header h1 {{ color: #ffffff; margin: 0 0 4px; font-size: 22px; font-weight: 700; }}
+  .header .tagline {{ color: #5BBDE4; margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }}
+  .header-banner {{ background: #132248; padding: 7px 36px; }}
+  .header-banner p {{ color: #8aaed4; margin: 0; font-size: 11px; }}
+  .body {{ padding: 36px; color: #2c3e50; line-height: 1.75; font-size: 14px; }}
+  .body h2 {{ color: #1A2B5F; margin-top: 0; margin-bottom: 16px; font-size: 18px; border-bottom: 2px solid #e8f4fb; padding-bottom: 10px; }}
+  .body p {{ margin: 0 0 14px; }}
+  .highlight {{ background: #EAF6FC; border-left: 4px solid #00AEEF; padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 20px 0; }}
+  .highlight ul {{ margin: 8px 0 0; padding-left: 20px; }}
+  .highlight li {{ margin: 8px 0; color: #1A2B5F; font-weight: 600; font-size: 14px; }}
+  .btn {{ display: inline-block; background: #00AEEF; color: #ffffff !important; padding: 13px 30px; text-decoration: none; border-radius: 6px; margin-top: 18px; font-weight: 700; font-size: 14px; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }}
+  td, th {{ padding: 10px 14px; border: 1px solid #dce6ef; text-align: left; }}
+  th {{ background: #f0f6fb; font-weight: 700; color: #1A2B5F; }}
+  tr:nth-child(even) td {{ background: #f8fbfd; }}
+  .footer {{ background: #f7f9fb; border-top: 2px solid #e2ebf3; padding: 28px 36px; }}
+  .footer-name {{ color: #1A2B5F; font-weight: 700; font-size: 14px; margin: 0 0 8px; }}
+  .footer-address {{ color: #5a6a7a; font-size: 12px; line-height: 1.8; margin: 0 0 14px; }}
+  .footer-address a {{ color: #00AEEF; text-decoration: none; }}
+  .footer-divider {{ border: none; border-top: 1px solid #dce6ef; margin: 14px 0; }}
+  .footer-note {{ color: #9aaab8; font-size: 11px; line-height: 1.6; margin: 0; }}
 </style>
 </head>
 <body>
+<div class="wrapper">
 <div class="container">
   <div class="header">
-    <h1>Academies Australasia</h1>
-    <p>ECEC Work Placement Management System</p>
+    <div class="header-top">
+      <h1>Academies Australasia</h1>
+      <p class="tagline">ECEC Work Placement Management System</p>
+    </div>
+    <div class="header-banner">
+      <p>Early Childhood Education &amp; Care &mdash; Work Placement Portal &nbsp;|&nbsp; ABN 14 003 069 987</p>
+    </div>
   </div>
   <div class="body">{content}</div>
   <div class="footer">
-    This is an automated message from Academies Australasia.<br>
-    Level 6, 505 George Street, Sydney NSW 2000 | T: +61 2 9224 5500
+    <p class="footer-name">Academies Australasia Pty Ltd</p>
+    <p class="footer-address">
+      Level 6, 505 George Street, Sydney NSW 2000<br>
+      T: <a href="tel:+61292245500">+61 2 9224 5500</a> &nbsp;&bull;&nbsp; F: +61 2 9224 5599<br>
+      E: <a href="mailto:info@academies.edu.au">info@academies.edu.au</a> &nbsp;&bull;&nbsp;
+      W: <a href="https://www.academiesaustralasiafpc.com.au">www.academiesaustralasiafpc.com.au</a>
+    </p>
+    <hr class="footer-divider">
+    <p class="footer-note">
+      This is an automated message from the ECEC Work Placement Management System.
+      Please do not reply — contact your coordinator directly with any questions.<br>
+      &copy; 2025 Academies Australasia Pty Ltd. All rights reserved.
+    </p>
   </div>
+</div>
 </div>
 </body>
 </html>"""
