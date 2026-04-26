@@ -62,11 +62,36 @@ def ensure_admin():
         db.close()
 
 
+def migrate_active_to_current():
+    """
+    One-time data migration: rename the legacy status value 'active' → 'current'
+    for all Student rows that still carry the old value.
+    Safe to run on every startup — does nothing if no rows need updating.
+    """
+    from app.models import Student
+    db = SessionLocal()
+    try:
+        updated = db.query(Student).filter(Student.status == "active").update(
+            {"status": "current"}, synchronize_session=False
+        )
+        if updated:
+            db.commit()
+            logger.info(f"migrate_active_to_current: updated {updated} student(s) from 'active' → 'current'")
+        else:
+            logger.info("migrate_active_to_current: no rows needed updating")
+    except Exception as e:
+        logger.error(f"migrate_active_to_current failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_database()
-    ensure_admin()          # <-- always runs, guarantees login works
+    ensure_admin()              # always runs — guarantees login works
+    migrate_active_to_current() # one-time rename 'active' → 'current'
     start_scheduler()
     yield
     shutdown_scheduler()
