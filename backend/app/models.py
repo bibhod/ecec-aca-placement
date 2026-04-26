@@ -158,7 +158,7 @@ class Student(Base):
     date_of_birth = Column(Date, nullable=True)
     qualification = Column(String, nullable=False)
     campus = Column(String, nullable=False, default="sydney")
-    status = Column(String, default="active")
+    status = Column(String, default="current")
     course_start_date = Column(Date, nullable=True)
     course_end_date = Column(Date, nullable=True)
     placement_centre_id = Column(String, ForeignKey("placement_centres.id"), nullable=True)

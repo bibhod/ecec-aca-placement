@@ -151,7 +151,7 @@ def check_hours_non_submission():
     try:
         today = date.today()
         cutoff = today - timedelta(days=14)
-        students = db.query(Student).filter(Student.status == "active").all()
+        students = db.query(Student).filter(Student.status == "current").all()
 
         for s in students:
             recent_log = db.query(HoursLog).filter(
@@ -198,7 +198,7 @@ def check_low_attendance():
         today = date.today()
         threshold_date = today + timedelta(days=30)
         students = db.query(Student).filter(
-            Student.status == "active",
+            Student.status == "current",
             Student.placement_end_date != None,
             Student.placement_end_date <= threshold_date,
         ).all()
@@ -386,6 +386,39 @@ def check_visit_advance_reminders():
         db.close()
 
 
+# ─── Auto-complete students when course_end_date has passed ──────────────────
+def auto_complete_students():
+    """
+    Daily job: automatically set status to 'completed' for any student whose
+    course_end_date has passed and who is still 'current'.
+    Withdrawn students are never auto-completed.
+    """
+    db = SessionLocal()
+    try:
+        today = date.today()
+        students = db.query(Student).filter(
+            Student.status == "current",
+            Student.course_end_date.isnot(None),
+            Student.course_end_date < today,
+        ).all()
+
+        for s in students:
+            logger.info(f"Auto-completing student {s.student_id} — course end date {s.course_end_date} has passed")
+            s.status = "completed"
+
+        if students:
+            db.commit()
+            logger.info(f"Auto-completed {len(students)} student(s)")
+        else:
+            logger.info("Auto-complete check: no students to complete")
+
+    except Exception as e:
+        logger.error(f"Auto-complete students job error: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def start_scheduler():
     scheduler.add_job(
         check_appointment_reminders,
@@ -430,8 +463,16 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
     )
+    # Auto-complete students whose course_end_date has passed
+    scheduler.add_job(
+        auto_complete_students,
+        trigger=IntervalTrigger(hours=24),
+        id="auto_complete_students",
+        replace_existing=True,
+        max_instances=1,
+    )
     scheduler.start()
-    logger.info("Background scheduler started (6 jobs registered)")
+    logger.info("Background scheduler started (7 jobs registered)")
 
 
 def shutdown_scheduler():

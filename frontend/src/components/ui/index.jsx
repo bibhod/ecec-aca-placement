@@ -80,11 +80,12 @@ export function StatCard({ label, value, icon: Icon, color = 'cyan', sub, onClic
 export function Badge({ status, label }) {
   const map = {
     // Compliance
-    valid: 'badge-green', compliant: 'badge-green', active: 'badge-green',
+    valid: 'badge-green', compliant: 'badge-green', active: 'badge-blue',
+    current: 'badge-blue',
     completed: 'badge-green', resolved: 'badge-green', approved: 'badge-green',
     expired: 'badge-red', expiring_soon: 'badge-yellow',
     pending: 'badge-yellow', open: 'badge-yellow', in_progress: 'badge-blue',
-    scheduled: 'badge-blue', deferred: 'badge-gray', withdrawn: 'badge-gray',
+    scheduled: 'badge-blue', deferred: 'badge-gray', withdrawn: 'badge-red',
     cancelled: 'badge-gray', closed: 'badge-gray',
     // Priority
     critical: 'badge-red', high: 'badge-yellow', medium: 'badge-blue', low: 'badge-green',

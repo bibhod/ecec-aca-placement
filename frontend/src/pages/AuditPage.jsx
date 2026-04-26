@@ -66,7 +66,7 @@ export default function AuditPage() {
   // ── Custom Reports state ────────────────────────────────────────────────────
   const [selectedReport, setSelectedReport] = useState(null)
   const [filters, setFilters] = useState({
-    campus: '', qualification: '', status: 'active',
+    campus: '', qualification: '', status: 'current',
     days: '30', missing_only: false,
   })
   const [results, setResults] = useState(null)
@@ -288,7 +288,7 @@ export default function AuditPage() {
             <label className="block text-xs font-medium text-gray-500 mb-1">Student Status</label>
             <select className={cls} value={filters.status} onChange={e => setFilter('status', e.target.value)}>
               <option value="">All</option>
-              <option value="active">Active</option>
+              <option value="current">Current</option>
               <option value="completed">Completed</option>
               <option value="withdrawn">Withdrawn</option>
             </select>

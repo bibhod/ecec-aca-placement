@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Building2, Calendar, FileCheck, AlertTriangle, Clock, FileX, TrendingUp, ShieldAlert } from 'lucide-react'
+import { Users, Building2, Calendar, FileCheck, AlertTriangle, Clock, FileX, TrendingUp, ShieldAlert, GraduationCap, UserX, BookOpen } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import api from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -42,10 +42,9 @@ export default function DashboardPage() {
     ? Object.entries(stats.campus_breakdown).map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
     : []
 
+  // Backend already aggregates to "Cert III" / "Diploma" — use as-is
   const qualData = stats?.qualification_breakdown
-    ? Object.entries(stats.qualification_breakdown).map(([name, value]) => ({
-        name: name === 'CHC30121' ? 'Cert III' : 'Diploma', value
-      }))
+    ? Object.entries(stats.qualification_breakdown).map(([name, value]) => ({ name, value }))
     : []
 
   return (
@@ -131,9 +130,46 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Student Status Overview */}
+      <div className="mb-4 card">
+        <h2 className="font-semibold text-navy flex items-center gap-2 mb-4">
+          <Users size={18} />
+          Student Enrolment Status
+        </h2>
+        <div className="grid grid-cols-3 gap-4">
+          <button
+            onClick={() => navigate('/students?status=current')}
+            className="flex flex-col items-center p-4 rounded-xl bg-blue-50 border border-blue-200 hover:border-blue-400 transition-all hover:shadow-md cursor-pointer"
+          >
+            <BookOpen size={24} className="text-blue-600 mb-2" />
+            <p className="text-3xl font-bold text-blue-700">{stats?.current_students ?? '—'}</p>
+            <p className="text-sm font-semibold text-blue-600 mt-1">Current</p>
+            <p className="text-xs text-gray-400">Enrolled students</p>
+          </button>
+          <button
+            onClick={() => navigate('/students?status=completed')}
+            className="flex flex-col items-center p-4 rounded-xl bg-green-50 border border-green-200 hover:border-green-400 transition-all hover:shadow-md cursor-pointer"
+          >
+            <GraduationCap size={24} className="text-green-600 mb-2" />
+            <p className="text-3xl font-bold text-green-700">{stats?.completed_students ?? '—'}</p>
+            <p className="text-sm font-semibold text-green-600 mt-1">Completed</p>
+            <p className="text-xs text-gray-400">Course finished</p>
+          </button>
+          <button
+            onClick={() => navigate('/students?status=withdrawn')}
+            className="flex flex-col items-center p-4 rounded-xl bg-red-50 border border-red-200 hover:border-red-400 transition-all hover:shadow-md cursor-pointer"
+          >
+            <UserX size={24} className="text-red-600 mb-2" />
+            <p className="text-3xl font-bold text-red-700">{stats?.withdrawn_students ?? '—'}</p>
+            <p className="text-sm font-semibold text-red-600 mt-1">Withdrawn</p>
+            <p className="text-xs text-gray-400">Left the course</p>
+          </button>
+        </div>
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Students" value={stats?.total_students ?? 0} icon={Users} color="navy"
+        <StatCard label="Current Students" value={stats?.current_students ?? 0} icon={Users} color="navy"
           onClick={() => navigate('/students')} />
         <StatCard label="Active Placements" value={stats?.active_placements ?? 0} icon={Building2} color="cyan"
           onClick={() => navigate('/students')} />

@@ -7,11 +7,12 @@
  */
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Mail, Phone, MapPin, Clock, FileCheck, Calendar, AlertTriangle, MessageSquare, Plus, CheckCircle, XCircle, Trash2 } from 'lucide-react'
+import { ArrowLeft, Mail, Phone, MapPin, Clock, FileCheck, Calendar, AlertTriangle, MessageSquare, Plus, CheckCircle, XCircle, Trash2, UserCog } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { Badge, ProgressBar, Spinner, Modal, FormRow, Select } from '../components/ui/index'
 import { format } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 // Issue 4 — five required compliance document types
 const COMPLIANCE_DOC_TYPES = [
@@ -26,6 +27,7 @@ const ISSUE_TYPES = ['attendance', 'behaviour', 'performance', 'compliance', 'ot
 export default function StudentDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [student, setStudent] = useState(null)
   const [hours, setHours] = useState([])
   const [appointments, setAppointments] = useState([])
@@ -210,6 +212,30 @@ export default function StudentDetailPage() {
     } finally { setGeneratingCompletion(false) }
   }
 
+  // ── Admin status change ──────────────────────────────────────────────────
+  const [showStatusModal, setShowStatusModal] = useState(false)
+  const [statusForm, setStatusForm] = useState({ status: '', notes: '' })
+  const [savingStatus, setSavingStatus] = useState(false)
+
+  const openStatusModal = () => {
+    setStatusForm({ status: student.status, notes: '' })
+    setShowStatusModal(true)
+  }
+
+  const changeStatus = async () => {
+    if (!statusForm.status) return toast.error('Please select a status')
+    if (statusForm.status === student.status) { setShowStatusModal(false); return }
+    setSavingStatus(true)
+    try {
+      await api.patch(`/students/${id}/status`, statusForm)
+      toast.success(`Status changed to ${statusForm.status}`)
+      setShowStatusModal(false)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to change status')
+    } finally { setSavingStatus(false) }
+  }
+
   const approveHours = async (logId) => { await api.put(`/hours/${logId}/approve`); toast.success('Hours approved'); load() }
   const rejectHours = async (logId) => { await api.put(`/hours/${logId}/reject`); toast.success('Hours rejected'); load() }
 
@@ -255,6 +281,11 @@ export default function StudentDetailPage() {
         </div>
         {/* Issue 5 — only global action is Email; each section has its own + Add */}
         <div className="flex gap-2">
+          {['admin', 'superadmin'].includes(user?.role) && (
+            <button onClick={openStatusModal} className="btn-secondary text-sm flex items-center gap-1">
+              <UserCog size={15} /> Change Status
+            </button>
+          )}
           <button onClick={() => setShowEmailModal(true)} className="btn-secondary text-sm"><Mail size={15} /> Email</button>
         </div>
       </div>
@@ -809,6 +840,46 @@ export default function StudentDetailPage() {
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={() => setShowIssueModal(false)} className="btn-secondary">Cancel</button>
           <button onClick={addIssue} className="btn-primary"><Plus size={14} /> Log Issue</button>
+        </div>
+      </Modal>
+
+      {/* ── Admin: Change Student Status Modal ────────────────────────────────── */}
+      <Modal open={showStatusModal} onClose={() => setShowStatusModal(false)} title="Change Enrolment Status" size="sm">
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-800">
+            <p>Current status: <strong className="capitalize">{student?.status}</strong></p>
+            <p className="text-xs text-blue-600 mt-1">This action will be recorded in the audit log.</p>
+          </div>
+          <FormRow label="New Status" required>
+            <Select
+              value={statusForm.status}
+              onChange={v => setStatusForm(f => ({ ...f, status: v }))}
+              options={[
+                { value: 'current',   label: '🔵 Current — actively enrolled' },
+                { value: 'completed', label: '✅ Completed — course finished' },
+                { value: 'withdrawn', label: '🔴 Withdrawn — left the course' },
+              ]}
+              placeholder=""
+            />
+          </FormRow>
+          <FormRow label="Reason / Notes (optional)">
+            <textarea
+              className="input h-20 resize-none text-sm"
+              value={statusForm.notes}
+              onChange={e => setStatusForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="e.g. Student withdrew due to personal reasons..."
+            />
+          </FormRow>
+        </div>
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <button onClick={() => setShowStatusModal(false)} className="btn-secondary">Cancel</button>
+          <button
+            onClick={changeStatus}
+            disabled={savingStatus || statusForm.status === student?.status}
+            className={`btn-primary ${statusForm.status === 'withdrawn' ? 'bg-red-600 hover:bg-red-700 border-red-600' : statusForm.status === 'completed' ? 'bg-green-600 hover:bg-green-700 border-green-600' : ''}`}
+          >
+            {savingStatus ? 'Saving...' : `Set to ${statusForm.status || '...'}`}
+          </button>
         </div>
       </Modal>
     </div>

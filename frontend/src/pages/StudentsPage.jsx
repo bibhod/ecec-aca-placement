@@ -21,7 +21,7 @@ const QUALIFICATIONS = [
 ]
 
 const CAMPUSES = ['sydney', 'melbourne', 'perth']
-const STATUSES = ['active', 'completed', 'withdrawn', 'deferred']
+const STATUSES = ['current', 'completed', 'withdrawn']
 
 // Issue 9 — short labels for display
 const QUAL_SHORT = {
@@ -82,7 +82,7 @@ export default function StudentsPage() {
   const [search, setSearch] = useState('')
   const [filterCampus, setFilterCampus] = useState('')
   const [filterQual, setFilterQual] = useState('')
-  const [filterStatus, setFilterStatus] = useState('active')
+  const [filterStatus, setFilterStatus] = useState('current')
   const [showModal, setShowModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)  // Issue 13
   const [editStudent, setEditStudent] = useState(null)
@@ -92,7 +92,7 @@ export default function StudentsPage() {
   const [importResult, setImportResult] = useState(null)
   const [form, setForm] = useState({
     student_id: '', full_name: '', email: '', phone: '', qualification: 'CHC30125',
-    campus: 'sydney', status: 'active', course_start_date: '', course_end_date: '',
+    campus: 'sydney', status: 'current', course_start_date: '', course_end_date: '',
     placement_centre_id: '', placement_start_date: '', placement_end_date: '',
     required_hours: 160, coordinator_id: '', notes: ''
   })
@@ -188,7 +188,11 @@ export default function StudentsPage() {
           options={CAMPUSES.map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} />
         <Select value={filterQual} onChange={setFilterQual} placeholder="All Qualifications" options={QUALIFICATIONS} />
         <Select value={filterStatus} onChange={setFilterStatus} placeholder="All Statuses"
-          options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} />
+          options={[
+            { value: 'current',   label: 'Current'   },
+            { value: 'completed', label: 'Completed' },
+            { value: 'withdrawn', label: 'Withdrawn' },
+          ]} />
         <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden ml-auto">
           <button onClick={() => setView('grid')} className={`p-2 ${view === 'grid' ? 'bg-navy text-white' : 'text-gray-500 hover:bg-gray-50'}`}><Grid size={16} /></button>
           <button onClick={() => setView('list')} className={`p-2 ${view === 'list' ? 'bg-navy text-white' : 'text-gray-500 hover:bg-gray-50'}`}><List size={16} /></button>
@@ -261,7 +265,12 @@ export default function StudentsPage() {
             <Select value={form.campus} onChange={v => setForm(f => ({ ...f, campus: v }))} options={CAMPUSES.map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} placeholder="" />
           </FormRow>
           <FormRow label="Status">
-            <Select value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} options={STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} placeholder="" />
+            <Select value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))}
+              options={[
+                { value: 'current',   label: 'Current'   },
+                { value: 'completed', label: 'Completed' },
+                { value: 'withdrawn', label: 'Withdrawn' },
+              ]} placeholder="" />
           </FormRow>
           <FormRow label="Required Hours">
             <input className="input" type="number" value={form.required_hours} onChange={e => setForm(f => ({ ...f, required_hours: +e.target.value }))} />

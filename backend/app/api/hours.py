@@ -41,7 +41,7 @@ def hours_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    students = db.query(Student).filter(Student.status == "active").all()
+    students = db.query(Student).filter(Student.status == "current").all()
     result = []
     for s in students:
         logs = db.query(HoursLog).filter(HoursLog.student_id == s.id).all()

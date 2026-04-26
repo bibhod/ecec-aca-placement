@@ -162,7 +162,7 @@ class StudentCreate(BaseModel):
     date_of_birth: Optional[str] = None
     qualification: str
     campus: str
-    status: str = "active"
+    status: str = "current"
     course_start_date: Optional[str] = None
     course_end_date: Optional[str] = None
     placement_centre_id: Optional[str] = None
@@ -277,6 +277,58 @@ def update_student(
         db, current_user, "student.update", "student",
         resource_id=s.id, resource_label=f"{s.full_name} ({s.student_id})",
         details={"updated_fields": list(data.dict(exclude_none=True).keys())},
+    )
+    db.commit()
+
+    return student_to_dict(s, db)
+
+
+# ─── Admin-only: change student enrolment status ─────────────────────────────
+VALID_STUDENT_STATUSES = {"current", "completed", "withdrawn"}
+
+
+class StatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+
+
+@router.patch("/{student_id}/status")
+def update_student_status(
+    student_id: str,
+    data: StatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Admin-only endpoint to change a student's enrolment status.
+    Valid values: current, completed, withdrawn.
+    """
+    if current_user.role not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Only admins can change student status")
+
+    if data.status not in VALID_STUDENT_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{data.status}'. Valid values: {', '.join(sorted(VALID_STUDENT_STATUSES))}",
+        )
+
+    s = db.query(Student).filter(Student.id == student_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    old_status = s.status
+    s.status = data.status
+    if data.notes:
+        s.notes = (s.notes or "") + f"\n[{date.today()}] Status changed to {data.status}: {data.notes}"
+
+    db.commit()
+    db.refresh(s)
+
+    write_audit(
+        db, current_user, "student.status_change", "student",
+        resource_id=s.id,
+        resource_label=f"{s.full_name} ({s.student_id}): {old_status} → {data.status}",
+        details={"old_status": old_status, "new_status": data.status, "notes": data.notes},
     )
     db.commit()
 
@@ -557,7 +609,7 @@ async def bulk_import_students(
                 phone=row.get("phone") or None,
                 qualification=qual,
                 campus=campus,
-                status=row.get("status", "active"),
+                status=row.get("status", "current"),
                 required_hours=req_hours,
                 completed_hours=0,
                 course_start_date=date.fromisoformat(row["course_start_date"]) if row.get("course_start_date") else None,

@@ -99,7 +99,7 @@ def db_count_students(centre: PlacementCentre) -> int:
     from app.models import Student as Stu
     return _current_db.query(Stu).filter(
         Stu.placement_centre_id == centre.id,
-        Stu.status == "active",
+        Stu.status == "current",
     ).count()
 
 

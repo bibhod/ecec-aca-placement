@@ -54,7 +54,7 @@ def list_centres(db: Session = Depends(get_db), current_user: User = Depends(get
     for c in centres:
         d = centre_to_dict(c)
         d["student_count"] = db.query(Student).filter(
-            Student.placement_centre_id == c.id, Student.status == "active"
+            Student.placement_centre_id == c.id, Student.status == "current"
         ).count()
         result.append(d)
     return result
@@ -387,7 +387,7 @@ def export_report_pdf(
     report_type: str = "enrollment_summary",
     campus: str = "",
     qualification: str = "",
-    status: str = "active",
+    status: str = "current",
     days: str = "30",
     missing_only: bool = False,
     db: Session = Depends(get_db),
@@ -519,7 +519,7 @@ def export_report_pdf(
         if missing_only: filter_parts.append("Incomplete only")
         filter_desc = "  |  ".join(filter_parts) if filter_parts else "All active students"
 
-        students = db.query(Student).filter(Student.status == "active").all()
+        students = db.query(Student).filter(Student.status == "current").all()
         if campus:
             students = [s for s in students if (s.campus or "").lower() == campus.lower()]
 

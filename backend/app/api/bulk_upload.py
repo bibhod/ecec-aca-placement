@@ -61,7 +61,7 @@ def template_students():
          "campus", "status", "required_hours", "course_start_date", "course_end_date",
          "placement_start_date", "placement_end_date", "notes"],
         [["STU2025001", "Jane Smith", "jane@email.com", "0412345678",
-          "CHC30125", "sydney", "active", "160", "2025-02-01", "2025-11-30",
+          "CHC30125", "sydney", "current", "160", "2025-02-01", "2025-11-30",
           "2025-04-01", "2025-10-31", ""]],
         "template_students.csv",
     )
@@ -168,7 +168,7 @@ async def import_students(
                 email=row.get("email") or None,
                 phone=row.get("phone") or None,
                 qualification=qual, campus=campus,
-                status=row.get("status") or "active",
+                status=row.get("status") or "current",
                 required_hours=hrs, completed_hours=0,
                 course_start_date=parsed_dates.get("course_start_date"),
                 course_end_date=parsed_dates.get("course_end_date"),

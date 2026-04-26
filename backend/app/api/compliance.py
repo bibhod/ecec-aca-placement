@@ -310,7 +310,7 @@ def compliance_report(
     Returns every active student with their compliance status for each of the
     4 required document types, plus a submitted count and list of outstanding docs.
     """
-    q = db.query(Student).filter(Student.status == "active")
+    q = db.query(Student).filter(Student.status == "current")
     if campus:
         q = q.filter(Student.campus == campus)
     if qualification:
@@ -372,7 +372,7 @@ def get_reminder_preview(
         "work_placement_agreement":    "Work Placement Agreement (WPA)",
         "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
     }
-    students_list = db.query(Student).filter(Student.status == "active").all()
+    students_list = db.query(Student).filter(Student.status == "current").all()
     recipients, compliant_count, no_email_count = [], 0, 0
 
     for s in students_list:
@@ -427,7 +427,7 @@ def send_compliance_reminders(
     from app.services.email_service import send_email, _base_template
     from app.models import Communication
 
-    students_list = db.query(Student).filter(Student.status == "active").all()
+    students_list = db.query(Student).filter(Student.status == "current").all()
     sent, skipped = [], []
 
     ABBREV = {
@@ -537,7 +537,7 @@ def get_hours_reminder_preview(
             return f"Diploma of ECEC ({student.qualification})"
         return student.qualification or "Unknown"
 
-    students_list = db.query(Student).filter(Student.status == "active").all()
+    students_list = db.query(Student).filter(Student.status == "current").all()
     recipients, met_count, no_email_count = [], 0, 0
 
     for s in students_list:
@@ -612,7 +612,7 @@ def send_hours_reminders(
             return f"Diploma of ECEC ({student.qualification})"
         return student.qualification or "Unknown"
 
-    students_list = db.query(Student).filter(Student.status == "active").all()
+    students_list = db.query(Student).filter(Student.status == "current").all()
     sent, skipped = [], []
 
     for s in students_list:

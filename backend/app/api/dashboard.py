@@ -31,10 +31,13 @@ def get_dashboard_stats(
     next_7_days = today + timedelta(days=7)
     expiry_30_days = today + timedelta(days=30)
 
-    total_students = _safe(db, lambda: db.query(Student).filter(Student.status == "active").count())
+    current_students  = _safe(db, lambda: db.query(Student).filter(Student.status == "current").count())
+    completed_students = _safe(db, lambda: db.query(Student).filter(Student.status == "completed").count())
+    withdrawn_students = _safe(db, lambda: db.query(Student).filter(Student.status == "withdrawn").count())
+    total_students = current_students + completed_students + withdrawn_students
 
     active_placements = _safe(db, lambda: db.query(Student).filter(
-        Student.status == "active",
+        Student.status == "current",
         Student.placement_centre_id.isnot(None),
         Student.placement_start_date <= today,
         Student.placement_end_date >= today
@@ -70,20 +73,35 @@ def get_dashboard_stats(
         HoursLog.log_date == today
     ).scalar() or 0, default=0)
 
-    campus_breakdown = _safe(db, lambda: {
-        c: n for c, n in db.query(Student.campus, func.count(Student.id)).filter(
-            Student.status == "active"
-        ).group_by(Student.campus).all() if c
-    }, default={})
+    # Campus: normalise to lower-case so "Sydney"/"sydney" don't produce duplicates
+    def _campus_breakdown():
+        rows = db.query(func.lower(Student.campus), func.count(Student.id)).filter(
+            Student.status == "current"
+        ).group_by(func.lower(Student.campus)).all()
+        return {c.title(): n for c, n in rows if c}
 
-    qualification_breakdown = _safe(db, lambda: {
-        q: n for q, n in db.query(Student.qualification, func.count(Student.id)).filter(
-            Student.status == "active"
-        ).group_by(Student.qualification).all() if q
-    }, default={})
+    campus_breakdown = _safe(db, _campus_breakdown, default={})
+
+    # Qualification: aggregate CHC30121/CHC30125 → "Cert III", CHC50121/CHC50125 → "Diploma"
+    def _qual_breakdown():
+        rows = db.query(Student.qualification, func.count(Student.id)).filter(
+            Student.status == "current"
+        ).group_by(Student.qualification).all()
+        agg: dict = {}
+        for q, n in rows:
+            if not q:
+                continue
+            label = "Cert III" if "30" in q else "Diploma"
+            agg[label] = agg.get(label, 0) + n
+        return agg
+
+    qualification_breakdown = _safe(db, _qual_breakdown, default={})
 
     return {
         "total_students": total_students,
+        "current_students": current_students,
+        "completed_students": completed_students,
+        "withdrawn_students": withdrawn_students,
         "active_placements": active_placements,
         "upcoming_appointments": upcoming_appointments,
         "pending_compliance": pending_compliance,
@@ -221,7 +239,7 @@ def get_action_items(
         .subquery()
     )
     zero_hours_month = _safe(db, lambda: db.query(Student).filter(
-        Student.status == "active",
+        Student.status == "current",
         ~Student.id.in_(students_with_hours_this_month),
     ).count(), 0)
 
