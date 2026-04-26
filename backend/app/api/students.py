@@ -13,6 +13,8 @@ from typing import Optional, List
 from pydantic import BaseModel
 from datetime import date
 
+from sqlalchemy import func as sqlfunc
+
 from app.database import get_db
 from app.models import Student, PlacementCentre, ComplianceDocument, HoursLog, User, QUALIFICATION_CHOICES
 from app.utils.auth import get_current_user
@@ -121,11 +123,11 @@ def list_students(
             Student.email.ilike(f"%{search}%"),
         ))
     if campus:
-        q = q.filter(Student.campus == campus)
+        q = q.filter(sqlfunc.lower(Student.campus) == campus.lower())
     if qualification:
         q = q.filter(Student.qualification == qualification)
     if status:
-        q = q.filter(Student.status == status)
+        q = q.filter(sqlfunc.lower(Student.status) == status.lower())
     students = q.order_by(Student.full_name).all()
     return [student_to_dict(s, db) for s in students]
 
@@ -201,8 +203,8 @@ def create_student(
         phone=data.phone,
         date_of_birth=date.fromisoformat(data.date_of_birth) if data.date_of_birth else None,
         qualification=data.qualification,
-        campus=data.campus,
-        status=data.status,
+        campus=(data.campus or "").lower().strip(),
+        status=(data.status or "current").lower().strip(),
         course_start_date=date.fromisoformat(data.course_start_date) if data.course_start_date else None,
         course_end_date=date.fromisoformat(data.course_end_date) if data.course_end_date else None,
         placement_centre_id=data.placement_centre_id,
@@ -265,6 +267,10 @@ def update_student(
     for field, val in data.dict(exclude_none=True).items():
         if field in date_fields:
             setattr(s, field, date.fromisoformat(val) if val else None)
+        elif field == "campus":
+            s.campus = (val or "").lower().strip()
+        elif field == "status":
+            s.status = (val or "current").lower().strip()
         else:
             if hasattr(s, field):
                 setattr(s, field, val)

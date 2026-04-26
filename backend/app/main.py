@@ -62,6 +62,31 @@ def ensure_admin():
         db.close()
 
 
+def migrate_normalise_campus():
+    """
+    One-time migration: lowercase all campus values so filters work consistently.
+    Safe to run on every startup — rows already lowercase are unaffected.
+    """
+    from app.models import Student
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        # Use raw SQL for a single efficient UPDATE
+        result = db.execute(
+            text("UPDATE students SET campus = LOWER(TRIM(campus)) WHERE campus != LOWER(TRIM(campus))")
+        )
+        db.commit()
+        if result.rowcount:
+            logger.info(f"migrate_normalise_campus: normalised {result.rowcount} row(s)")
+        else:
+            logger.info("migrate_normalise_campus: all campus values already normalised")
+    except Exception as e:
+        logger.error(f"migrate_normalise_campus failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def migrate_active_to_current():
     """
     One-time data migration: rename the legacy status value 'active' → 'current'
@@ -91,6 +116,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_database()
     ensure_admin()              # always runs — guarantees login works
+    migrate_normalise_campus()  # lowercase all campus values so filters match
     migrate_active_to_current() # one-time rename 'active' → 'current'
     start_scheduler()
     yield
