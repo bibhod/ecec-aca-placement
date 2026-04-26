@@ -18,6 +18,7 @@ from datetime import date, datetime
 from app.database import get_db
 from app.models import AssessorVisit, Student, User, PlacementCentre
 from app.utils.auth import get_current_user, require_admin
+from app.api.audit import write_audit
 
 router = APIRouter()
 
@@ -140,6 +141,14 @@ def create_visit(
     db.commit()
     db.refresh(visit)
 
+    write_audit(
+        db, current_user, "visit.create", "assessor_visit",
+        resource_id=visit.id,
+        resource_label=f"{visit.visit_reference} — {student.full_name}",
+        details={"visit_date": data.visit_date, "student_id": data.student_id, "purpose": data.visit_purpose},
+    )
+    db.commit()
+
     result = visit_to_dict(visit)
     if admin_approval_required:
         result["warning"] = (
@@ -232,6 +241,15 @@ def approve_claim(
     visit.claim_approved_at = datetime.utcnow()
     visit.status = "approved"
     db.commit()
+
+    write_audit(
+        db, current_user, "visit.approve", "assessor_visit",
+        resource_id=visit.id,
+        resource_label=f"{visit.visit_reference} — claim approved",
+        details={"approved_by": current_user.full_name, "status": "approved"},
+    )
+    db.commit()
+
     return visit_to_dict(visit)
 
 
@@ -253,9 +271,19 @@ def update_visit(
     visit = db.query(AssessorVisit).filter(AssessorVisit.id == visit_id).first()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
-    for field, val in data.dict(exclude_none=True).items():
+    changed = data.dict(exclude_none=True)
+    for field, val in changed.items():
         setattr(visit, field, val)
     db.commit()
+
+    write_audit(
+        db, current_user, "visit.update", "assessor_visit",
+        resource_id=visit.id,
+        resource_label=f"{visit.visit_reference} updated",
+        details={"updated_fields": list(changed.keys())},
+    )
+    db.commit()
+
     return visit_to_dict(visit)
 
 

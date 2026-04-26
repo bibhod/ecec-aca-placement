@@ -270,6 +270,122 @@ def check_supervisor_feedback():
         db.close()
 
 
+def check_visit_advance_reminders():
+    """
+    Send 14-day, 7-day, 3-day, and 1-day advance reminders for upcoming appointments.
+    Sends to both the student and assigned trainer/assessor.
+    Uses the Communication log as a dedup gate — each appointment+interval is sent only once,
+    even if the scheduler restarts.
+    """
+    db = SessionLocal()
+    try:
+        today = date.today()
+        from app.models import Communication, PlacementCentre
+        from app.services.email_service import email_appointment_reminder
+
+        for days_ahead in [14, 7, 3, 1]:
+            target_date = today + timedelta(days=days_ahead)
+            appointments = db.query(Appointment).filter(
+                Appointment.scheduled_date == target_date,
+                Appointment.status == "scheduled",
+                Appointment.cancelled == False,
+            ).all()
+
+            for appt in appointments:
+                # Unique dedup key per appointment + interval — stored as template_used
+                dedup_key = f"visit_reminder_{appt.id}_{days_ahead}d"
+
+                # Skip if already sent for this appointment + interval
+                already_sent = db.query(Communication).filter(
+                    Communication.template_used == dedup_key
+                ).first()
+                if already_sent:
+                    continue
+
+                student = db.query(Student).filter(Student.id == appt.student_id).first()
+                if not student:
+                    continue
+
+                centre = (
+                    db.query(PlacementCentre).filter(
+                        PlacementCentre.id == appt.placement_centre_id
+                    ).first()
+                    if appt.placement_centre_id else None
+                )
+                location_detail = (
+                    ", ".join(filter(None, [
+                        centre.address if centre else None,
+                        centre.suburb if centre else None,
+                        centre.state if centre else None,
+                        centre.postcode if centre else None,
+                    ]))
+                    or getattr(appt, "location_address", None)
+                    or "To be confirmed"
+                )
+                location_type = getattr(appt, "visit_type", "onsite") or "onsite"
+                hours_ahead_equiv = days_ahead * 24  # pass to email template for label
+
+                # --- Write dedup sentinel BEFORE sending to prevent double-send on restart ---
+                db.add(Communication(
+                    student_id=student.id,
+                    recipient_email="",
+                    recipient_name="system",
+                    message_type="email",
+                    subject=f"{days_ahead}-day advance reminder — {appt.title}",
+                    body=(
+                        f"Automated {days_ahead}-day reminder sent for appointment {appt.id} "
+                        f"({appt.title}) on {appt.scheduled_date}."
+                    ),
+                    template_used=dedup_key,
+                    sent_successfully=True,
+                ))
+                db.commit()
+
+                # --- Send to trainer/assessor ---
+                ta_id = getattr(appt, "trainer_assessor_id", None) or appt.coordinator_id
+                if ta_id:
+                    ta = db.query(User).filter(User.id == ta_id).first()
+                    if ta and ta.email:
+                        try:
+                            email_appointment_reminder(
+                                ta.full_name, ta.email, student.full_name, appt.title,
+                                str(appt.scheduled_date),
+                                appt.scheduled_time or "09:00",
+                                location_type, location_detail,
+                                appt.preparation_notes or "",
+                                hours_ahead_equiv,
+                                settings.FRONTEND_URL,
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to email trainer {ta.email}: {e}")
+
+                # --- Send to student ---
+                if student.email:
+                    try:
+                        email_appointment_reminder(
+                            student.full_name, student.email, student.full_name, appt.title,
+                            str(appt.scheduled_date),
+                            appt.scheduled_time or "09:00",
+                            location_type, location_detail,
+                            appt.preparation_notes or "",
+                            hours_ahead_equiv,
+                            settings.FRONTEND_URL,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to email student {student.email}: {e}")
+
+                logger.info(
+                    f"Sent {days_ahead}-day advance reminder for appointment {appt.id} "
+                    f"({student.full_name})"
+                )
+
+    except Exception as e:
+        logger.error(f"Visit advance reminder job error: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def start_scheduler():
     scheduler.add_job(
         check_appointment_reminders,
@@ -285,7 +401,6 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
     )
-    # Issue 16 — new scheduled jobs
     scheduler.add_job(
         check_hours_non_submission,
         trigger=IntervalTrigger(hours=24),
@@ -307,8 +422,16 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
     )
+    # Task 2 — 14/7/3/1 day advance visit reminders, runs daily
+    scheduler.add_job(
+        check_visit_advance_reminders,
+        trigger=IntervalTrigger(hours=24),
+        id="visit_advance_reminders",
+        replace_existing=True,
+        max_instances=1,
+    )
     scheduler.start()
-    logger.info("Background scheduler started (5 jobs registered)")
+    logger.info("Background scheduler started (6 jobs registered)")
 
 
 def shutdown_scheduler():

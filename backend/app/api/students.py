@@ -16,6 +16,7 @@ from datetime import date
 from app.database import get_db
 from app.models import Student, PlacementCentre, ComplianceDocument, HoursLog, User, QUALIFICATION_CHOICES
 from app.utils.auth import get_current_user
+from app.api.audit import write_audit
 
 router = APIRouter()
 
@@ -232,6 +233,14 @@ def create_student(
             frontend_url="",
         )
 
+    # Audit: record student creation
+    write_audit(
+        db, current_user, "student.create", "student",
+        resource_id=s.id, resource_label=f"{s.full_name} ({s.student_id})",
+        details={"student_id": s.student_id, "qualification": s.qualification, "campus": s.campus},
+    )
+    db.commit()
+
     return student_to_dict(s, db)
 
 
@@ -262,7 +271,213 @@ def update_student(
 
     db.commit()
     db.refresh(s)
+
+    # Audit: record student update
+    write_audit(
+        db, current_user, "student.update", "student",
+        resource_id=s.id, resource_label=f"{s.full_name} ({s.student_id})",
+        details={"updated_fields": list(data.dict(exclude_none=True).keys())},
+    )
+    db.commit()
+
     return student_to_dict(s, db)
+
+
+# ─── Placement Completion Checklist ──────────────────────────────────────────
+
+@router.get("/{student_id}/checklist")
+def get_placement_checklist(
+    student_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns the real-time placement completion checklist for a student.
+    All four criteria must be green before a completion record can be generated.
+    """
+    from app.models import ComplianceDocument, HoursLog, Appointment, Issue, PlacementCompletion, VISIT_LIMITS
+    from datetime import date
+
+    s = db.query(Student).filter(Student.id == student_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    today = date.today()
+    REQUIRED_4 = [
+        "working_with_children_check", "first_aid_certificate",
+        "work_placement_agreement", "memorandum_of_understanding",
+    ]
+
+    # 1. All 4 compliance docs submitted (not just any doc — all required types)
+    submitted_types = {
+        d.document_type
+        for d in db.query(ComplianceDocument).filter(
+            ComplianceDocument.student_id == s.id
+        ).all()
+    }
+    compliance_ok = all(t in submitted_types for t in REQUIRED_4)
+    compliance_detail = (
+        "All 4 required documents submitted"
+        if compliance_ok
+        else f"Missing: {', '.join(t.replace('_', ' ').title() for t in REQUIRED_4 if t not in submitted_types)}"
+    )
+
+    # 2. Required placement hours met
+    hours_ok = s.completed_hours >= s.required_hours if s.required_hours else False
+    hours_detail = (
+        f"{s.completed_hours:.0f} / {s.required_hours:.0f} hours completed"
+    )
+
+    # 3. All required visits completed (status = completed or approved)
+    required_visits = VISIT_LIMITS.get(s.qualification, 3)
+    completed_visits = db.query(Appointment).filter(
+        Appointment.student_id == s.id,
+        Appointment.completed == True,
+    ).count()
+    visits_ok = completed_visits >= required_visits
+    visits_detail = f"{completed_visits} of {required_visits} required visits completed"
+
+    # 4. No open critical issues
+    open_critical = db.query(Issue).filter(
+        Issue.student_id == s.id,
+        Issue.status.in_(["open", "in_progress"]),
+        Issue.priority == "critical",
+    ).count()
+    issues_ok = open_critical == 0
+    issues_detail = (
+        "No open critical issues"
+        if issues_ok
+        else f"{open_critical} open critical issue(s) must be resolved"
+    )
+
+    all_green = compliance_ok and hours_ok and visits_ok and issues_ok
+
+    # Check if completion record already exists
+    existing_completion = db.query(PlacementCompletion).filter(
+        PlacementCompletion.student_id == s.id
+    ).order_by(PlacementCompletion.created_at.desc()).first()
+
+    return {
+        "student_id": s.id,
+        "student_name": s.full_name,
+        "all_complete": all_green,
+        "checklist": [
+            {
+                "id": "compliance",
+                "label": "All 4 required compliance documents submitted",
+                "ok": compliance_ok,
+                "detail": compliance_detail,
+            },
+            {
+                "id": "hours",
+                "label": f"Required placement hours met ({s.required_hours:.0f}h)",
+                "ok": hours_ok,
+                "detail": hours_detail,
+            },
+            {
+                "id": "visits",
+                "label": f"All required workplace visits completed ({required_visits} visits)",
+                "ok": visits_ok,
+                "detail": visits_detail,
+            },
+            {
+                "id": "issues",
+                "label": "No open critical issues or flags",
+                "ok": issues_ok,
+                "detail": issues_detail,
+            },
+        ],
+        "completion_record": {
+            "id": existing_completion.id,
+            "reference_number": existing_completion.reference_number,
+            "completion_date": str(existing_completion.completion_date),
+            "created_at": str(existing_completion.created_at),
+        } if existing_completion else None,
+    }
+
+
+@router.post("/{student_id}/generate-completion")
+def generate_placement_completion(
+    student_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generates and stores a Placement Completion Record.
+    Only allowed when all 4 checklist items are green.
+    """
+    from app.models import ComplianceDocument, Appointment, Issue, PlacementCompletion, VISIT_LIMITS
+    from datetime import date
+
+    s = db.query(Student).filter(Student.id == student_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    today = date.today()
+    REQUIRED_4 = [
+        "working_with_children_check", "first_aid_certificate",
+        "work_placement_agreement", "memorandum_of_understanding",
+    ]
+
+    submitted_types = {
+        d.document_type for d in db.query(ComplianceDocument).filter(
+            ComplianceDocument.student_id == s.id
+        ).all()
+    }
+    if not all(t in submitted_types for t in REQUIRED_4):
+        raise HTTPException(status_code=400, detail="Not all required compliance documents are submitted")
+
+    if not (s.required_hours and s.completed_hours >= s.required_hours):
+        raise HTTPException(status_code=400, detail="Required placement hours not yet met")
+
+    required_visits = VISIT_LIMITS.get(s.qualification, 3)
+    completed_visits = db.query(Appointment).filter(
+        Appointment.student_id == s.id,
+        Appointment.completed == True,
+    ).count()
+    if completed_visits < required_visits:
+        raise HTTPException(status_code=400, detail=f"Only {completed_visits} of {required_visits} required visits completed")
+
+    open_critical = db.query(Issue).filter(
+        Issue.student_id == s.id,
+        Issue.status.in_(["open", "in_progress"]),
+        Issue.priority == "critical",
+    ).count()
+    if open_critical > 0:
+        raise HTTPException(status_code=400, detail=f"Student has {open_critical} open critical issue(s)")
+
+    # Generate sequential reference number
+    count = db.query(PlacementCompletion).count() + 1
+    ref = f"COMP-{today.year}-{count:05d}"
+
+    completion = PlacementCompletion(
+        student_id=s.id,
+        reference_number=ref,
+        completion_date=today,
+        generated_by=current_user.id,
+        hours_completed=s.completed_hours,
+        hours_required=s.required_hours,
+        compliance_docs_count=len(submitted_types),
+        visits_count=completed_visits,
+    )
+    db.add(completion)
+    db.commit()
+    db.refresh(completion)
+
+    write_audit(
+        db, current_user, "placement.completion", "student",
+        resource_id=s.id, resource_label=f"{s.full_name} ({s.student_id})",
+        details={"reference_number": ref, "completion_date": str(today)},
+    )
+    db.commit()
+
+    return {
+        "id": completion.id,
+        "reference_number": ref,
+        "completion_date": str(today),
+        "student_name": s.full_name,
+        "message": f"Placement Completion Record {ref} generated successfully.",
+    }
 
 
 @router.delete("/{student_id}")

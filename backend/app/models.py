@@ -356,3 +356,31 @@ class EmailTemplate(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLACEMENT COMPLETION RECORD
+# ─────────────────────────────────────────────────────────────────────────────
+class PlacementCompletion(Base):
+    """
+    Generated when a student meets ALL placement requirements:
+      - All 4 compliance docs submitted
+      - Required hours met
+      - All visits completed
+      - No open critical issues
+    """
+    __tablename__ = "placement_completions"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    student_id = Column(String, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    reference_number = Column(String, unique=True, nullable=False)
+    completion_date = Column(Date, nullable=False)
+    generated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Snapshot of status at time of completion
+    hours_completed = Column(Float, nullable=True)
+    hours_required = Column(Float, nullable=True)
+    compliance_docs_count = Column(Integer, nullable=True)
+    visits_count = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    student = relationship("Student", backref="placement_completions")

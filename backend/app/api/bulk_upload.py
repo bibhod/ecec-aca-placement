@@ -123,37 +123,70 @@ async def import_students(
     content = await file.read()
     rows = _read_file(content, file.filename)
     created, skipped, errors = [], [], []
+
     for i, row in enumerate(rows, 2):
-        sid = (row.get("student_id") or "").strip()
-        name = (row.get("full_name") or "").strip()
-        qual = (row.get("qualification") or "").strip()
+        sid   = (row.get("student_id")  or "").strip()
+        name  = (row.get("full_name")   or "").strip()
+        qual  = (row.get("qualification") or "").strip()
         campus = (row.get("campus") or "sydney").strip()
-        if not sid or not name or not qual:
-            errors.append({"row": i, "error": "Missing student_id, full_name or qualification"}); continue
+
+        # Required-field checks with plain-English messages
+        if not sid:
+            errors.append({"row": i, "field": "student_id", "error": 'Required field "student_id" is empty'}); continue
+        if not name:
+            errors.append({"row": i, "field": "full_name", "error": 'Required field "full_name" is empty'}); continue
+        if not qual:
+            errors.append({"row": i, "field": "qualification", "error": 'Required field "qualification" is empty'}); continue
         if qual not in QUALIFICATION_CHOICES:
-            errors.append({"row": i, "error": f"Invalid qualification '{qual}'"}); continue
+            errors.append({"row": i, "field": "qualification", "error": f'Invalid qualification "{qual}" — valid values: {", ".join(QUALIFICATION_CHOICES)}'}); continue
         if db.query(Student).filter(Student.student_id == sid).first():
             skipped.append(sid); continue
+
+        # Date field validation with specific column names
+        date_fields = {
+            "course_start_date": row.get("course_start_date"),
+            "course_end_date": row.get("course_end_date"),
+            "placement_start_date": row.get("placement_start_date"),
+            "placement_end_date": row.get("placement_end_date"),
+        }
+        parsed_dates, date_error = {}, None
+        for field_name, raw_val in date_fields.items():
+            if raw_val and str(raw_val).strip():
+                try:
+                    parsed_dates[field_name] = date.fromisoformat(str(raw_val).strip())
+                except ValueError:
+                    date_error = {"row": i, "field": field_name,
+                                  "error": f'Invalid date format in column "{field_name}" — expected YYYY-MM-DD, got "{raw_val}"'}
+                    break
+        if date_error:
+            errors.append(date_error); continue
+
         try:
             hrs = float(row.get("required_hours") or 0) or (288 if "50" in qual else 160)
             s = Student(
                 student_id=sid, full_name=name,
-                email=row.get("email") or None, phone=row.get("phone") or None,
+                email=row.get("email") or None,
+                phone=row.get("phone") or None,
                 qualification=qual, campus=campus,
                 status=row.get("status") or "active",
                 required_hours=hrs, completed_hours=0,
-                course_start_date=date.fromisoformat(row["course_start_date"]) if row.get("course_start_date") else None,
-                course_end_date=date.fromisoformat(row["course_end_date"]) if row.get("course_end_date") else None,
-                placement_start_date=date.fromisoformat(row["placement_start_date"]) if row.get("placement_start_date") else None,
-                placement_end_date=date.fromisoformat(row["placement_end_date"]) if row.get("placement_end_date") else None,
+                course_start_date=parsed_dates.get("course_start_date"),
+                course_end_date=parsed_dates.get("course_end_date"),
+                placement_start_date=parsed_dates.get("placement_start_date"),
+                placement_end_date=parsed_dates.get("placement_end_date"),
                 notes=row.get("notes") or None,
             )
-            db.add(s); created.append(sid)
+            db.add(s)
+            created.append(sid)
         except Exception as e:
-            errors.append({"row": i, "student_id": sid, "error": str(e)})
+            errors.append({"row": i, "field": "unknown", "error": str(e)})
+
     db.commit()
-    return {"message": f"{len(created)} created, {len(skipped)} skipped, {len(errors)} errors",
-            "created": created, "skipped": skipped, "errors": errors}
+    total = len(rows)
+    return {
+        "message": f"{len(created)} of {total} rows imported successfully",
+        "created": created, "skipped": skipped, "errors": errors,
+    }
 
 
 @router.post("/import/centres")
@@ -200,30 +233,60 @@ async def import_hours(
     content = await file.read()
     rows = _read_file(content, file.filename)
     created, errors = [], []
+
     for i, row in enumerate(rows, 2):
-        sid = (row.get("student_id") or "").strip()
-        log_date = (row.get("log_date") or "").strip()
-        hrs = (row.get("hours") or "").strip()
-        if not sid or not log_date or not hrs:
-            errors.append({"row": i, "error": "Missing required fields"}); continue
+        sid      = (row.get("student_id") or "").strip()
+        log_date = (row.get("log_date")   or "").strip()
+        hrs_raw  = (row.get("hours")      or "").strip()
+
+        if not sid:
+            errors.append({"row": i, "field": "student_id", "error": 'Required field "student_id" is empty'}); continue
+        if not log_date:
+            errors.append({"row": i, "field": "log_date", "error": 'Required field "log_date" is empty'}); continue
+        if not hrs_raw:
+            errors.append({"row": i, "field": "hours", "error": 'Required field "hours" is empty'}); continue
+
         student = db.query(Student).filter(Student.student_id == sid).first()
         if not student:
-            errors.append({"row": i, "error": f"Student '{sid}' not found"}); continue
+            errors.append({"row": i, "field": "student_id", "error": f'Student ID "{sid}" not found in the system'}); continue
+
         try:
-            h = float(hrs)
+            parsed_date = date.fromisoformat(log_date)
+        except ValueError:
+            errors.append({"row": i, "field": "log_date",
+                           "error": f'Invalid date format in "log_date" — expected YYYY-MM-DD, got "{log_date}"'}); continue
+
+        try:
+            h = float(hrs_raw)
+        except ValueError:
+            errors.append({"row": i, "field": "hours",
+                           "error": f'Invalid number in "hours" — expected a decimal number, got "{hrs_raw}"'}); continue
+
+        if h <= 0 or h > 24:
+            errors.append({"row": i, "field": "hours",
+                           "error": f'"hours" must be between 0 and 24 (got {h})'}); continue
+
+        try:
             log = HoursLog(
-                student_id=student.id, log_date=date.fromisoformat(log_date),
-                hours=h, activity_description=row.get("activity_description") or None,
-                flagged_unrealistic=h > 10, approved=False, created_by=current_user.id,
+                student_id=student.id, log_date=parsed_date,
+                hours=h,
+                activity_description=row.get("activity_description") or None,
+                flagged_unrealistic=h > 10,
+                approved=False,
+                created_by=current_user.id,
             )
             db.add(log)
             student.completed_hours = (student.completed_hours or 0) + h
             created.append(f"{sid}/{log_date}")
         except Exception as e:
-            errors.append({"row": i, "error": str(e)})
+            errors.append({"row": i, "field": "unknown", "error": str(e)})
+
     db.commit()
-    return {"message": f"{len(created)} entries created, {len(errors)} errors",
-            "created": created, "errors": errors}
+    total = len(rows)
+    return {
+        "message": f"{len(created)} of {total} rows imported successfully",
+        "created": created, "errors": errors,
+    }
 
 
 @router.post("/import/visits")

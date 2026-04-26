@@ -170,3 +170,64 @@ def get_expiring_documents(
         except Exception as e:
             logger.warning(f"Skipping document: {e}")
     return result
+
+
+@router.get("/action-items")
+def get_action_items(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns live counts for the dashboard 'Action Required' panel.
+    All four items are always returned (count may be 0).
+    """
+    from datetime import date, timedelta
+    today = date.today()
+
+    # 1. Students with compliance docs expiring within 7 days (unique student count)
+    in_7 = today + timedelta(days=7)
+    expiring_student_ids = (
+        db.query(ComplianceDocument.student_id)
+        .filter(
+            ComplianceDocument.expiry_date >= today,
+            ComplianceDocument.expiry_date <= in_7,
+        )
+        .distinct()
+    )
+    expiring_7d = _safe(db, lambda: expiring_student_ids.count(), 0)
+
+    # 2. Overdue visits — scheduled date has passed, not yet completed or cancelled
+    overdue_visits = _safe(db, lambda: db.query(Appointment).filter(
+        Appointment.scheduled_date < today,
+        Appointment.completed == False,
+        Appointment.cancelled == False,
+        Appointment.status == "scheduled",
+    ).count(), 0)
+
+    # 3. Appointments in the next 7 days
+    appts_7d = _safe(db, lambda: db.query(Appointment).filter(
+        Appointment.scheduled_date >= today,
+        Appointment.scheduled_date <= today + timedelta(days=7),
+        Appointment.status == "scheduled",
+        Appointment.cancelled == False,
+    ).count(), 0)
+
+    # 4. Active students with zero hours logged this calendar month
+    month_start = today.replace(day=1)
+    students_with_hours_this_month = (
+        db.query(HoursLog.student_id)
+        .filter(HoursLog.log_date >= month_start)
+        .distinct()
+        .subquery()
+    )
+    zero_hours_month = _safe(db, lambda: db.query(Student).filter(
+        Student.status == "active",
+        ~Student.id.in_(students_with_hours_this_month),
+    ).count(), 0)
+
+    return {
+        "expiring_compliance_7d": expiring_7d,
+        "overdue_visits": overdue_visits,
+        "appointments_7d": appts_7d,
+        "zero_hours_this_month": zero_hours_month,
+    }

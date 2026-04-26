@@ -4,7 +4,7 @@
  * Tab 2: Email & SMS Log — every email / SMS sent by the system (searchable, filterable by date)
  */
 import React, { useState, useEffect, useCallback } from 'react'
-import { Download, Play, BarChart2, Clock, Users, Mail, AlertTriangle, CheckCircle, XCircle, RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { Download, Play, BarChart2, Clock, Users, Mail, AlertTriangle, CheckCircle, XCircle, RefreshCw, Eye, EyeOff, FileText, Shield } from 'lucide-react'
 import api, { downloadFile } from '../utils/api'
 import { PageHeader, Spinner, EmptyState, Badge } from '../components/ui/index'
 import { format, parseISO } from 'date-fns'
@@ -72,6 +72,14 @@ export default function AuditPage() {
   const [results, setResults] = useState(null)
   const [running, setRunning] = useState(false)
 
+  // ── Audit Log state ─────────────────────────────────────────────────────────
+  const [auditLogs, setAuditLogs] = useState([])
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditError, setAuditError] = useState(false)
+  const [auditSearch, setAuditSearch] = useState('')
+  const [auditAction, setAuditAction] = useState('')
+  const [auditResource, setAuditResource] = useState('')
+
   // ── Email & SMS Log state ───────────────────────────────────────────────────
   const [allComms, setAllComms] = useState([])
   const [commsLoading, setCommsLoading] = useState(false)
@@ -81,6 +89,35 @@ export default function AuditPage() {
   const [commsType, setCommsType] = useState('')
   const [commsSearch, setCommsSearch] = useState('')
   const [expandedId, setExpandedId] = useState(null)
+
+  // ── Load audit log ──────────────────────────────────────────────────────────
+  const loadAuditLogs = useCallback(() => {
+    setAuditLoading(true)
+    setAuditError(false)
+    api.get('/audit')
+      .then(r => setAuditLogs(Array.isArray(r.data) ? r.data : []))
+      .catch(() => { setAuditError(true); setAuditLogs([]) })
+      .finally(() => setAuditLoading(false))
+  }, [])
+
+  useEffect(() => { if (activeTab === 'audit') loadAuditLogs() }, [activeTab, loadAuditLogs])
+
+  // Format audit detail into plain English
+  const formatAuditDetail = (action, details) => {
+    if (!details) return action.replace('.', ' → ')
+    if (action === 'student.create') return `Created student ${details.student_id || ''} (${details.qualification || ''})`
+    if (action === 'student.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
+    if (action === 'compliance.add') return `Added ${(details.document_type || '').replace(/_/g, ' ')} for student`
+    if (action === 'compliance.delete') return `Deleted ${(details.document_type || '').replace(/_/g, ' ')}`
+    if (action === 'hours.create') return `Logged ${details.hours}h on ${details.log_date}`
+    if (action === 'hours.approve') return `Approved ${details.hours}h logged on ${details.log_date}`
+    if (action === 'visit.create') return `Created visit on ${details.visit_date || ''}`
+    if (action === 'visit.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
+    if (action === 'visit.approve') return `Claim approved by ${details.approved_by || ''}`
+    if (action === 'placement.completion') return `Placement completion record ${details.reference_number || ''} generated`
+    // Fallback: pretty-print the details object
+    return Object.entries(details).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ')
+  }
 
   // ── Load email/SMS log ──────────────────────────────────────────────────────
   const loadComms = useCallback(() => {
@@ -194,6 +231,22 @@ export default function AuditPage() {
   }
 
   const setFilter = (key, val) => setFilters(f => ({ ...f, [key]: val }))
+
+  // ── PDF export ───────────────────────────────────────────────────────────────
+  const doExportPdf = () => {
+    if (!results || !selectedReport) return
+    const { reportId } = results
+    const params = new URLSearchParams({ report_type: reportId })
+    if (filters.campus)         params.append('campus', filters.campus)
+    if (filters.qualification)  params.append('qualification', filters.qualification)
+    if (filters.status)         params.append('status', filters.status)
+    if (filters.days)           params.append('days', filters.days)
+    if (filters.missing_only)   params.append('missing_only', 'true')
+    // Use downloadFile util so auth token is sent
+    import('../utils/api').then(({ downloadFile }) => {
+      downloadFile(`/reports/export/pdf?${params}`, `${reportId}_report.pdf`)
+    })
+  }
 
   // ─── Filter panel for each report ──────────────────────────────────────────
   const renderFilters = () => {
@@ -400,8 +453,9 @@ export default function AuditPage() {
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-gray-200">
         {[
-          { key: 'reports', label: 'Custom Reports', icon: BarChart2 },
+          { key: 'reports', label: 'Custom Reports',  icon: BarChart2 },
           { key: 'comms',   label: 'Email & SMS Log', icon: Mail },
+          { key: 'audit',   label: 'Audit Log',       icon: Shield },
         ].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors
@@ -438,9 +492,14 @@ export default function AuditPage() {
                   <Play size={15}/> {running ? 'Running…' : `Run: ${selectedReport.title}`}
                 </button>
                 {results && (
-                  <button onClick={doExportCsv} className="btn-secondary flex items-center gap-2">
-                    <Download size={15}/> Export CSV
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={doExportCsv} className="btn-secondary flex items-center gap-2">
+                      <Download size={15}/> Export CSV
+                    </button>
+                    <button onClick={doExportPdf} className="btn-secondary flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50">
+                      <FileText size={15}/> Download PDF
+                    </button>
+                  </div>
                 )}
                 {results && (
                   <span className="text-xs text-gray-400">
@@ -611,6 +670,127 @@ export default function AuditPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Audit Log ─────────────────────────────────────────────────────────────────── */}
+      {activeTab === 'audit' && (
+        <div>
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5 text-sm text-blue-800">
+            <strong>Audit Log</strong> — A read-only record of all create, update, and delete actions performed in the system. Each entry shows who did what and when.
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 mb-4 items-end">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Action type</label>
+              <select className="input text-sm py-2" value={auditAction} onChange={e => setAuditAction(e.target.value)}>
+                <option value="">All actions</option>
+                <option value="student.create">Student created</option>
+                <option value="student.update">Student updated</option>
+                <option value="compliance.add">Compliance doc added</option>
+                <option value="compliance.delete">Compliance doc deleted</option>
+                <option value="hours.create">Hours logged</option>
+                <option value="hours.approve">Hours approved</option>
+                <option value="visit.create">Visit created</option>
+                <option value="visit.update">Visit updated</option>
+                <option value="visit.approve">Visit claim approved</option>
+                <option value="placement.completion">Placement completed</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Resource type</label>
+              <select className="input text-sm py-2" value={auditResource} onChange={e => setAuditResource(e.target.value)}>
+                <option value="">All resources</option>
+                <option value="student">Student</option>
+                <option value="compliance_document">Compliance document</option>
+                <option value="hours_log">Hours log</option>
+                <option value="assessor_visit">Assessor visit</option>
+              </select>
+            </div>
+            <div className="flex-1 min-w-40">
+              <label className="block text-xs text-gray-500 mb-1">Search user / record</label>
+              <input type="text" className="input text-sm py-2 w-full"
+                placeholder="e.g. coordinator name or student ID…"
+                value={auditSearch} onChange={e => setAuditSearch(e.target.value)} />
+            </div>
+            <button onClick={loadAuditLogs} className="btn-secondary text-sm flex items-center gap-1">
+              <RefreshCw size={14}/> Refresh
+            </button>
+            {(auditAction || auditResource || auditSearch) && (
+              <button onClick={() => { setAuditAction(''); setAuditResource(''); setAuditSearch('') }}
+                className="text-sm text-gray-400 hover:text-navy underline self-end">Clear</button>
+            )}
+          </div>
+
+          {auditLoading ? (
+            <Spinner size="lg"/>
+          ) : auditError ? (
+            <div className="text-center py-12">
+              <p className="text-red-500 font-medium">Could not load audit log.</p>
+              <button onClick={loadAuditLogs} className="mt-3 btn-secondary text-sm">Try again</button>
+            </div>
+          ) : (() => {
+            const filtered = auditLogs.filter(entry => {
+              if (auditAction && entry.action !== auditAction) return false
+              if (auditResource && entry.resource_type !== auditResource) return false
+              if (auditSearch) {
+                const q = auditSearch.toLowerCase()
+                if (!entry.user_name?.toLowerCase().includes(q) &&
+                    !entry.user_email?.toLowerCase().includes(q) &&
+                    !entry.resource_label?.toLowerCase().includes(q) &&
+                    !entry.resource_id?.toLowerCase().includes(q)) return false
+              }
+              return true
+            })
+            if (filtered.length === 0) return (
+              <EmptyState icon={Shield} title="No audit entries found"
+                message="Audit entries are created when coordinators create or update student, compliance, hours, or visit records." />
+            )
+            return (
+              <div className="card p-0 overflow-hidden overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      {['Timestamp', 'User', 'Action', 'Record', 'Detail'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filtered.map(entry => (
+                      <tr key={entry.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
+                          {entry.created_at ? format(parseISO(entry.created_at), 'd MMM yyyy, h:mm a') : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{entry.user_name || '—'}</p>
+                          <p className="text-gray-400">{entry.user_email || ''}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap
+                            ${entry.action?.includes('create') || entry.action?.includes('add') ? 'bg-green-100 text-green-700'
+                              : entry.action?.includes('delete') ? 'bg-red-100 text-red-600'
+                              : entry.action?.includes('approve') || entry.action?.includes('completion') ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-600'
+                            }`}>
+                            {entry.action || '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-gray-700 font-medium">{(entry.resource_type || '').replace(/_/g, ' ')}</p>
+                          <p className="text-gray-400 truncate max-w-32" title={entry.resource_label}>{entry.resource_label || entry.resource_id || '—'}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 max-w-xs">
+                          {formatAuditDetail(entry.action || '', entry.details)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>

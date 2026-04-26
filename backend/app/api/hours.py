@@ -14,6 +14,7 @@ from datetime import date, datetime
 from app.database import get_db
 from app.models import HoursLog, Student, User
 from app.utils.auth import get_current_user
+from app.api.audit import write_audit
 
 router = APIRouter()
 
@@ -166,6 +167,14 @@ def create_hours_log(
             from app.services.email_service import email_hours_milestone
             email_hours_milestone(student.full_name, student.email, student.completed_hours, student.required_hours, milestone, "")
 
+    write_audit(
+        db, current_user, "hours.create", "hours_log",
+        resource_id=log.id,
+        resource_label=f"{data.hours}h logged for student {data.student_id} on {data.log_date}",
+        details={"student_id": data.student_id, "log_date": data.log_date, "hours": data.hours},
+    )
+    db.commit()
+
     result = log_to_dict(log)
     result["warnings"] = []
     if flag_unreal:
@@ -248,6 +257,15 @@ def approve_hours(
     log.approved_by = current_user.full_name
     log.approved_at = datetime.utcnow()
     db.commit()
+
+    write_audit(
+        db, current_user, "hours.approve", "hours_log",
+        resource_id=log.id,
+        resource_label=f"Approved {log.hours}h for student on {log.log_date}",
+        details={"hours": log.hours, "log_date": str(log.log_date), "student_id": log.student_id},
+    )
+    db.commit()
+
     return log_to_dict(log)
 
 

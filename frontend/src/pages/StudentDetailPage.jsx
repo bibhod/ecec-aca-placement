@@ -65,6 +65,19 @@ export default function StudentDetailPage() {
   const [showIssueModal, setShowIssueModal] = useState(false)
   const [issueForm, setIssueForm] = useState({ issue_type: 'attendance', title: '', description: '', priority: 'medium' })
 
+  // Placement completion checklist
+  const [checklist, setChecklist] = useState(null)
+  const [checklistLoading, setChecklistLoading] = useState(false)
+  const [generatingCompletion, setGeneratingCompletion] = useState(false)
+
+  const loadChecklist = () => {
+    setChecklistLoading(true)
+    api.get(`/students/${id}/checklist`)
+      .then(r => setChecklist(r.data))
+      .catch(() => setChecklist(null))
+      .finally(() => setChecklistLoading(false))
+  }
+
   const load = () => {
     Promise.all([
       api.get(`/students/${id}`),
@@ -78,6 +91,7 @@ export default function StudentDetailPage() {
   }
 
   useEffect(() => { load() }, [id])
+  useEffect(() => { if (activeTab === 'overview') loadChecklist() }, [id, activeTab])
   useEffect(() => {
     api.get('/centres').then(r => setCentres(r.data)).catch(() => {})
     api.get('/users').then(r => setTrainers(r.data.filter(u => ['coordinator', 'admin', 'trainer'].includes(u.role)))).catch(() => {})
@@ -183,6 +197,17 @@ export default function StudentDetailPage() {
       setShowIssueModal(false)
       load()
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
+  }
+
+  const generateCompletion = async () => {
+    setGeneratingCompletion(true)
+    try {
+      const r = await api.post(`/students/${id}/generate-completion`)
+      toast.success(`Completion record ${r.data.reference_number} generated!`)
+      loadChecklist()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Could not generate completion record')
+    } finally { setGeneratingCompletion(false) }
   }
 
   const approveHours = async (logId) => { await api.put(`/hours/${logId}/approve`); toast.success('Hours approved'); load() }
@@ -327,6 +352,60 @@ export default function StudentDetailPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* ── Placement Completion Checklist ──────────────────────────────── */}
+          <div className={`card mt-6 border-2 ${checklist?.all_complete ? 'border-green-400 bg-green-50/30' : 'border-gray-100'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-navy flex items-center gap-2">
+                <CheckCircle size={16} className={checklist?.all_complete ? 'text-green-500' : 'text-gray-400'} />
+                Placement Completion Checklist
+              </h3>
+              {checklist?.all_complete && !checklist?.completion_record && (
+                <button
+                  onClick={generateCompletion}
+                  disabled={generatingCompletion}
+                  className="btn-primary text-sm flex items-center gap-1">
+                  <CheckCircle size={14} />
+                  {generatingCompletion ? 'Generating...' : 'Generate Completion Record'}
+                </button>
+              )}
+              {checklist?.completion_record && (
+                <div className="text-right">
+                  <span className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full">
+                    ✓ PLACEMENT COMPLETE
+                  </span>
+                  <p className="text-xs text-gray-400 mt-1">Ref: {checklist.completion_record.reference_number}</p>
+                </div>
+              )}
+            </div>
+
+            {checklistLoading ? (
+              <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-2 border-cyan border-t-transparent" /></div>
+            ) : checklist ? (
+              <div className="space-y-2">
+                {checklist.checklist.map(item => (
+                  <div key={item.id}
+                    className={`flex items-start gap-3 p-3 rounded-xl border
+                      ${item.ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    {item.ok
+                      ? <CheckCircle size={16} className="text-green-500 flex-shrink-0 mt-0.5" />
+                      : <XCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />}
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{item.label}</p>
+                      <p className={`text-xs mt-0.5 ${item.ok ? 'text-green-600' : 'text-red-500'}`}>{item.detail}</p>
+                    </div>
+                  </div>
+                ))}
+                {checklist.all_complete && !checklist.completion_record && (
+                  <div className="mt-3 p-3 bg-green-100 rounded-xl border border-green-300 text-sm text-green-800 font-medium text-center">
+                    All criteria met! Click "Generate Completion Record" to finalise.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-4">Unable to load checklist</p>
+            )}
           </div>
         </div>
       )}

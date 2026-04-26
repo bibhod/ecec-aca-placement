@@ -15,6 +15,7 @@ from datetime import date, datetime
 from app.database import get_db
 from app.models import ComplianceDocument, Student, User, COMPLIANCE_DOC_TYPE_CHOICES
 from app.utils.auth import get_current_user
+from app.api.audit import write_audit
 
 router = APIRouter()
 
@@ -157,6 +158,15 @@ def create_document(
     db.add(doc)
     db.commit()
     db.refresh(doc)
+
+    write_audit(
+        db, current_user, "compliance.add", "compliance_document",
+        resource_id=doc.id,
+        resource_label=f"{doc.document_type.replace('_', ' ').title()} for student {doc.student_id}",
+        details={"document_type": doc.document_type, "student_id": doc.student_id},
+    )
+    db.commit()
+
     return doc_to_dict(doc)
 
 
@@ -692,6 +702,18 @@ def delete_document(
     doc = db.query(ComplianceDocument).filter(ComplianceDocument.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    student_id = doc.student_id
+    doc_type = doc.document_type
+    doc_id = doc.id
     db.delete(doc)
     db.commit()
+
+    write_audit(
+        db, current_user, "compliance.delete", "compliance_document",
+        resource_id=doc_id,
+        resource_label=f"{doc_type.replace('_', ' ').title()} deleted",
+        details={"document_type": doc_type, "student_id": student_id},
+    )
+    db.commit()
+
     return {"message": "Document deleted"}

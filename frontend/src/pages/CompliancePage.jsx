@@ -204,15 +204,9 @@ export default function CompliancePage() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <PageHeader title="Compliance" subtitle="Manage student compliance documents"
         actions={
-          <div className="flex gap-2">
-            <button onClick={openReminderPreview} disabled={previewLoading}
-              className="btn-secondary text-sm flex items-center gap-1">
-              <Mail size={15} /> {previewLoading ? 'Loading...' : 'Send Reminders'}
-            </button>
-            <button onClick={() => setShowModal(true)} className="btn-primary text-sm flex items-center gap-1">
-              <Plus size={15} /> Add Document
-            </button>
-          </div>
+          <button onClick={() => setShowModal(true)} className="btn-primary text-sm flex items-center gap-1">
+            <Plus size={15} /> Add Document
+          </button>
         } />
 
       {/* Summary cards */}

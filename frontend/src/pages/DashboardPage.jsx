@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Building2, Calendar, FileCheck, AlertTriangle, Clock, FileX, TrendingUp } from 'lucide-react'
+import { Users, Building2, Calendar, FileCheck, AlertTriangle, Clock, FileX, TrendingUp, ShieldAlert } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import api from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null)
   const [upcoming, setUpcoming] = useState([])
   const [expiring, setExpiring] = useState([])
+  const [actionItems, setActionItems] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -30,6 +31,9 @@ export default function DashboardPage() {
       .then(r => setExpiring(r.data))
       .catch(() => setExpiring([]))
       .finally(() => setLoading(false))
+    api.get('/dashboard/action-items')
+      .then(r => setActionItems(r.data))
+      .catch(() => setActionItems(null))
   }, [])
 
   if (loading) return <div className="p-8"><Spinner size="lg" /></div>
@@ -50,6 +54,81 @@ export default function DashboardPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-navy">Welcome back, {user?.full_name?.split(' ')[0]} 👋</h1>
         <p className="text-gray-500 text-sm mt-1">Here's an overview of your placement activities — {format(new Date(), 'EEEE, d MMMM yyyy')}</p>
+      </div>
+
+      {/* ── Action Required ───────────────────────────────────────────────────────────────── */}
+      <div className="mb-6 card border-l-4 border-red-400">
+        <h2 className="font-semibold text-navy flex items-center gap-2 mb-4">
+          <ShieldAlert size={18} className="text-red-500" />
+          Action Required
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            {
+              label: 'Compliance Expiring',
+              sublabel: 'within 7 days',
+              count: actionItems?.expiring_compliance_7d ?? '—',
+              color: 'red',
+              link: '/compliance',
+              icon: FileX,
+            },
+            {
+              label: 'Overdue Visits',
+              sublabel: 'not yet completed',
+              count: actionItems?.overdue_visits ?? '—',
+              color: 'orange',
+              link: '/appointments',
+              icon: Calendar,
+            },
+            {
+              label: 'Upcoming Appointments',
+              sublabel: 'in the next 7 days',
+              count: actionItems?.appointments_7d ?? '—',
+              color: 'purple',
+              link: '/appointments',
+              icon: Calendar,
+            },
+            {
+              label: 'Students — No Hours',
+              sublabel: 'logged this month',
+              count: actionItems?.zero_hours_this_month ?? '—',
+              color: 'yellow',
+              link: '/hours',
+              icon: Clock,
+            },
+          ].map(item => {
+            const isZero = item.count === 0
+            return (
+              <button
+                key={item.label}
+                onClick={() => navigate(item.link)}
+                className={`text-left p-4 rounded-xl border-2 transition-all hover:shadow-md
+                  ${isZero
+                    ? 'border-gray-100 bg-gray-50 opacity-60 cursor-default'
+                    : item.color === 'red'    ? 'border-red-200 bg-red-50 hover:border-red-400'
+                    : item.color === 'orange' ? 'border-orange-200 bg-orange-50 hover:border-orange-400'
+                    : item.color === 'purple' ? 'border-purple-200 bg-purple-50 hover:border-purple-400'
+                    : 'border-yellow-200 bg-yellow-50 hover:border-yellow-400'
+                  }`}
+              >
+                <p className={`text-2xl font-bold mb-1
+                  ${isZero ? 'text-gray-400'
+                    : item.color === 'red'    ? 'text-red-600'
+                    : item.color === 'orange' ? 'text-orange-600'
+                    : item.color === 'purple' ? 'text-purple-600'
+                    : 'text-yellow-600'
+                  }`}>
+                  {item.count}
+                </p>
+                <p className="text-sm font-semibold text-gray-700">{item.label}</p>
+                <p className="text-xs text-gray-400">{item.sublabel}</p>
+                {!isZero && (
+                  <p className="text-xs mt-2 font-medium text-cyan">View →</p>
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Stat cards */}
