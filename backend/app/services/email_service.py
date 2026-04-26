@@ -154,23 +154,23 @@ def _base_template(content: str) -> str:
       <p class="tagline">ECEC Work Placement Management System</p>
     </div>
     <div class="header-banner">
-      <p>Early Childhood Education &amp; Care &mdash; Work Placement Portal &nbsp;|&nbsp; ABN 14 003 069 987</p>
+      <p>Early Childhood Education &amp; Care &mdash; Work Placement Portal</p>
     </div>
   </div>
   <div class="body">{content}</div>
   <div class="footer">
-    <p class="footer-name">Academies Australasia Pty Ltd</p>
+    <p class="footer-name">Academies Australasia</p>
     <p class="footer-address">
       Level 6, 505 George Street, Sydney NSW 2000<br>
-      T: <a href="tel:+61292245500">+61 2 9224 5500</a> &nbsp;&bull;&nbsp; F: +61 2 9224 5599<br>
+      T: <a href="tel:+61292245500">+61 2 9224 5500</a><br>
       E: <a href="mailto:info@academies.edu.au">info@academies.edu.au</a> &nbsp;&bull;&nbsp;
-      W: <a href="https://www.academiesaustralasiafpc.com.au">www.academiesaustralasiafpc.com.au</a>
+      W: <a href="https://www.academies.edu.au">www.academies.edu.au</a>
     </p>
     <hr class="footer-divider">
     <p class="footer-note">
       This is an automated message from the ECEC Work Placement Management System.
       Please do not reply — contact your coordinator directly with any questions.<br>
-      &copy; 2025 Academies Australasia Pty Ltd. All rights reserved.
+      &copy; 2026 Academies Australasia. All rights reserved.
     </p>
   </div>
 </div>
