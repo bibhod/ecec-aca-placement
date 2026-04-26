@@ -6,7 +6,7 @@
  *  - Send Reminders: preview first, then confirm-send
  */
 import React, { useEffect, useState, useCallback } from 'react'
-import { Plus, Upload, CheckCircle, AlertTriangle, XCircle, Mail, FileText, Clock, Eye } from 'lucide-react'
+import { Plus, Upload, CheckCircle, AlertTriangle, XCircle, Mail, FileText, Clock, Eye, BarChart2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { PageHeader, Spinner, Badge, Modal, FormRow, Select, SearchInput, EmptyState } from '../components/ui/index'
@@ -41,12 +41,23 @@ export default function CompliancePage() {
   const [uploadFile, setUploadFile] = useState(null)
   const [saving, setSaving] = useState(false)
 
-  // ── Reminder preview / send state ────────────────────────────────────────
+  // ── Compliance reminder preview / send state ─────────────────────────────
   const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewData, setPreviewData] = useState(null)      // preview modal open
+  const [previewData, setPreviewData] = useState(null)
   const [sendingReminders, setSendingReminders] = useState(false)
-  const [reminderResults, setReminderResults] = useState(null) // results modal open
-  const [expandedPreview, setExpandedPreview] = useState(null) // student_id whose email is expanded
+  const [reminderResults, setReminderResults] = useState(null)
+  const [expandedPreview, setExpandedPreview] = useState(null)
+
+  // ── Hours Report / reminder state ─────────────────────────────────────────
+  const [hoursReport, setHoursReport] = useState([])
+  const [hoursReportLoading, setHoursReportLoading] = useState(false)
+  const [hoursSearch, setHoursSearch] = useState('')
+  const [hoursCampus, setHoursCampus] = useState('')
+  const [hoursPreviewLoading, setHoursPreviewLoading] = useState(false)
+  const [hoursPreviewData, setHoursPreviewData] = useState(null)
+  const [sendingHoursReminders, setSendingHoursReminders] = useState(false)
+  const [hoursReminderResults, setHoursReminderResults] = useState(null)
+  const [expandedHoursPreview, setExpandedHoursPreview] = useState(null)
 
   // ── Data loaders ─────────────────────────────────────────────────────────
   const load = useCallback(() => {
@@ -63,19 +74,26 @@ export default function CompliancePage() {
   const loadEmailLog = useCallback(() => {
     setEmailLogLoading(true)
     api.get('/communications').then(r => {
-      // Show all compliance-related emails: bulk reminders + individual sends
       const filtered = r.data.filter(c =>
         c.template_used === 'compliance_reminder_bulk' ||
+        c.template_used === 'hours_log_reminder' ||
         c.subject?.toLowerCase().includes('compliance') ||
-        c.subject?.toLowerCase().includes('outstanding')
+        c.subject?.toLowerCase().includes('outstanding') ||
+        c.subject?.toLowerCase().includes('hours log')
       )
       setEmailLog(filtered)
     }).finally(() => setEmailLogLoading(false))
   }, [])
 
+  const loadHoursReport = useCallback(() => {
+    setHoursReportLoading(true)
+    api.get('/hours/summary').then(r => setHoursReport(r.data)).finally(() => setHoursReportLoading(false))
+  }, [])
+
   useEffect(() => { load() }, [load])
   useEffect(() => { if (activeTab === 'report') loadReport() }, [activeTab, loadReport])
   useEffect(() => { if (activeTab === 'email_log') loadEmailLog() }, [activeTab, loadEmailLog])
+  useEffect(() => { if (activeTab === 'hours_report') loadHoursReport() }, [activeTab, loadHoursReport])
 
   // ── Filters ───────────────────────────────────────────────────────────────
   const filtered = docs.filter(d => {
@@ -131,6 +149,32 @@ export default function CompliancePage() {
       }
     } catch { toast.error('Failed to load preview') }
     finally { setPreviewLoading(false) }
+  }
+
+  /** Hours Step 1: fetch preview (no emails sent) */
+  const openHoursReminderPreview = async () => {
+    setHoursPreviewLoading(true)
+    try {
+      const res = await api.get('/compliance/hours-reminder-preview')
+      if (res.data.recipient_count === 0) {
+        toast.success('All active students have met their required placement hours — no reminders needed!')
+      } else {
+        setHoursPreviewData(res.data)
+      }
+    } catch { toast.error('Failed to load preview') }
+    finally { setHoursPreviewLoading(false) }
+  }
+
+  /** Hours Step 2: confirmed — actually send */
+  const sendHoursReminders = async () => {
+    setSendingHoursReminders(true)
+    try {
+      const res = await api.post('/compliance/send-hours-reminders')
+      setHoursPreviewData(null)
+      setHoursReminderResults(res.data)
+      if (activeTab === 'email_log') loadEmailLog()
+    } catch { toast.error('Failed to send reminders') }
+    finally { setSendingHoursReminders(false) }
   }
 
   /** Step 2: confirmed — actually send */
@@ -195,9 +239,10 @@ export default function CompliancePage() {
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-gray-200">
         {[
-          { key: 'documents', label: 'Documents', icon: FileText },
-          { key: 'report', label: 'Compliance Report', icon: CheckCircle },
-          { key: 'email_log', label: 'Email Log', icon: Mail },
+          { key: 'documents',    label: 'Documents',              icon: FileText   },
+          { key: 'report',       label: 'Compliance Report',       icon: CheckCircle },
+          { key: 'hours_report', label: 'Placement Hours Report',  icon: BarChart2  },
+          { key: 'email_log',    label: 'Email Log',               icon: Mail       },
         ].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? 'border-navy text-navy' : 'border-transparent text-gray-500 hover:text-navy'}`}>
@@ -402,7 +447,255 @@ export default function CompliancePage() {
         </>
       )}
 
+      {/* ── Placement Hours Report Tab ────────────────────────────────────── */}
+      {activeTab === 'hours_report' && (() => {
+        const campuses = [...new Set(hoursReport.map(r => r.campus).filter(Boolean))]
+        const filtered = hoursReport.filter(r => {
+          if (hoursSearch && !r.student_name?.toLowerCase().includes(hoursSearch.toLowerCase()) &&
+              !r.student_ref?.toLowerCase().includes(hoursSearch.toLowerCase())) return false
+          if (hoursCampus && (r.campus || '').toLowerCase() !== hoursCampus) return false
+          return true
+        })
+        const metCount     = filtered.filter(r => (r.completed_hours || 0) >= (r.required_hours || 1)).length
+        const pendingCount = filtered.length - metCount
+        return (
+          <>
+            {/* Controls */}
+            <div className="flex flex-wrap gap-3 mb-4 items-center">
+              <input
+                className="input text-sm py-2 w-56"
+                placeholder="Search student name or ID..."
+                value={hoursSearch}
+                onChange={e => setHoursSearch(e.target.value)}
+              />
+              <select
+                className="input text-sm py-2 w-44"
+                value={hoursCampus}
+                onChange={e => setHoursCampus(e.target.value)}
+              >
+                <option value="">All Campuses</option>
+                {campuses.map(c => <option key={c} value={c.toLowerCase()}>{c}</option>)}
+              </select>
+              {(hoursSearch || hoursCampus) && (
+                <button onClick={() => { setHoursSearch(''); setHoursCampus('') }}
+                  className="text-sm text-gray-500 hover:text-navy underline">Clear</button>
+              )}
+              <button
+                onClick={openHoursReminderPreview}
+                disabled={hoursPreviewLoading}
+                className="btn-secondary text-sm flex items-center gap-1 ml-auto">
+                <Mail size={15} />
+                {hoursPreviewLoading ? 'Loading...' : 'Send Reminders to Submit Placement Hours Log'}
+              </button>
+            </div>
+
+            {/* Summary cards */}
+            {!hoursReportLoading && (
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="card text-center py-3">
+                  <p className="text-xl font-bold text-gray-800">{filtered.length}</p>
+                  <p className="text-xs text-gray-500">Active Students</p>
+                </div>
+                <div className="card text-center py-3">
+                  <p className="text-xl font-bold text-green-600">{metCount}</p>
+                  <p className="text-xs text-gray-500">Hours Requirement Met</p>
+                </div>
+                <div className="card text-center py-3">
+                  <p className="text-xl font-bold text-orange-500">{pendingCount}</p>
+                  <p className="text-xs text-gray-500">Hours Still Pending</p>
+                </div>
+              </div>
+            )}
+
+            {hoursReportLoading ? <Spinner size="lg" /> : (
+              <div className="card p-0 overflow-hidden overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      {['Student', 'Campus', 'Qualification', 'Required', 'Completed', 'Unapproved', 'Remaining', 'Progress', 'Status'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filtered.map(r => {
+                      const required  = r.required_hours  || 0
+                      const completed = r.completed_hours || 0
+                      const pending   = r.pending_hours   || 0
+                      const remaining = Math.max(0, required - completed)
+                      const pct       = required > 0 ? Math.min(100, Math.round(completed / required * 100)) : 0
+                      const met       = required > 0 && completed >= required
+                      return (
+                        <tr key={r.student_id} className={met ? 'bg-green-50/30' : 'hover:bg-orange-50/20'}>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-900">{r.student_name}</p>
+                            <p className="text-gray-400">{r.student_ref}</p>
+                          </td>
+                          <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '—'}</td>
+                          <td className="px-3 py-3 text-gray-500">{r.qualification || '—'}</td>
+                          <td className="px-3 py-3 font-medium text-gray-700">{required}h</td>
+                          <td className="px-3 py-3 font-semibold text-blue-700">{completed}h</td>
+                          <td className="px-3 py-3 text-gray-500">{pending > 0 ? `${pending}h` : '—'}</td>
+                          <td className={`px-3 py-3 font-semibold ${met ? 'text-green-600' : remaining > required * 0.5 ? 'text-red-500' : 'text-orange-500'}`}>
+                            {met ? '—' : `${remaining}h`}
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
+                                <div
+                                  className={`h-1.5 rounded-full ${met ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span className={`font-bold whitespace-nowrap ${met ? 'text-green-600' : 'text-orange-500'}`}>{pct}%</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            {met
+                              ? <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">✓ Met</span>
+                              : <span className="text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full">Pending</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {filtered.length === 0 && (
+                  <p className="text-center text-gray-400 py-8 text-sm">No students found</p>
+                )}
+              </div>
+            )}
+          </>
+        )
+      })()}
+
       {/* ════════════ MODALS ════════════ */}
+
+      {/* Hours Preview Modal — shown BEFORE sending */}
+      <Modal open={!!hoursPreviewData} onClose={() => setHoursPreviewData(null)} title="Preview: Placement Hours Log Reminder" size="lg">
+        {hoursPreviewData && (
+          <div className="space-y-5">
+            {/* Summary */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-blue-50 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold text-blue-600">{hoursPreviewData.recipient_count}</p>
+                <p className="text-xs text-blue-600 font-medium">Will receive email</p>
+              </div>
+              <div className="bg-green-50 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold text-green-600">{hoursPreviewData.met_count}</p>
+                <p className="text-xs text-green-600 font-medium">Already met hours (skipped)</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold text-gray-500">{hoursPreviewData.no_email_count}</p>
+                <p className="text-xs text-gray-500 font-medium">No email on file (skipped)</p>
+              </div>
+            </div>
+
+            {/* Subject */}
+            <div className="bg-gray-50 rounded-lg px-4 py-3 flex items-center gap-2">
+              <Mail size={14} className="text-gray-400 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">Subject</p>
+                <p className="text-sm font-semibold text-gray-800">{hoursPreviewData.subject}</p>
+              </div>
+            </div>
+
+            {/* Recipients */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">
+                Recipients ({hoursPreviewData.recipient_count} students):
+              </p>
+              <div className="border border-gray-100 rounded-xl overflow-hidden max-h-72 overflow-y-auto divide-y divide-gray-50">
+                {hoursPreviewData.recipients.map(r => (
+                  <div key={r.student_id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{r.student_name}</p>
+                        <p className="text-xs text-gray-400">{r.email} · {r.campus || '—'}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{r.qualification}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0 space-y-1">
+                        <p className="text-xs font-semibold text-blue-700">{r.completed_hours}h / {r.required_hours}h</p>
+                        <p className="text-xs font-semibold text-red-500">{r.remaining_hours}h remaining</p>
+                        <button
+                          onClick={() => setExpandedHoursPreview(expandedHoursPreview === r.student_id ? null : r.student_id)}
+                          className="text-xs text-cyan hover:underline flex items-center gap-1 ml-auto">
+                          <Eye size={11} /> {expandedHoursPreview === r.student_id ? 'Hide' : 'Preview email'}
+                        </button>
+                      </div>
+                    </div>
+                    {expandedHoursPreview === r.student_id && (
+                      <pre className="mt-3 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100">{r.email_preview}</pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg p-3">
+              ⚠️ Emails will be sent immediately when you click the button below. All emails will be recorded in the <strong>Email Log</strong> tab.
+            </p>
+
+            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+              <button onClick={() => { setHoursPreviewData(null); setExpandedHoursPreview(null) }} className="btn-secondary">
+                Cancel
+              </button>
+              <button onClick={sendHoursReminders} disabled={sendingHoursReminders} className="btn-primary flex items-center gap-2">
+                <Mail size={15} />
+                {sendingHoursReminders ? 'Sending…' : `Send to ${hoursPreviewData.recipient_count} Students`}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Hours Results Modal — shown AFTER sending */}
+      <Modal
+        open={!!hoursReminderResults}
+        onClose={() => { setHoursReminderResults(null); setActiveTab('email_log') }}
+        title="Hours Reminder Emails Sent"
+        size="lg">
+        {hoursReminderResults && (
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              <div className="flex-1 bg-green-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-green-600">{hoursReminderResults.sent?.length || 0}</p>
+                <p className="text-sm text-green-700">Emails Sent</p>
+              </div>
+              <div className="flex-1 bg-gray-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-gray-500">{hoursReminderResults.skipped?.length || 0}</p>
+                <p className="text-sm text-gray-500">Skipped</p>
+              </div>
+            </div>
+            {hoursReminderResults.sent?.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-gray-700 mb-2">Sent to:</p>
+                <div className="border border-gray-100 rounded-xl overflow-hidden max-h-44 overflow-y-auto divide-y divide-gray-50">
+                  {hoursReminderResults.sent.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{s.student}</p>
+                        <p className="text-xs text-gray-400">{s.email}</p>
+                      </div>
+                      <span className="text-xs text-orange-500 font-medium">
+                        {s.completed_hours}h / {s.required_hours}h ({s.remaining_hours}h remaining)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="text-xs bg-blue-50 text-blue-700 rounded-lg p-3">
+              All sent emails are recorded in the <strong>Email Log</strong> tab.
+            </p>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => { setHoursReminderResults(null); setActiveTab('email_log') }} className="btn-primary">
+                View Email Log
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Preview Modal — shown BEFORE sending */}
       <Modal open={!!previewData} onClose={() => setPreviewData(null)} title="Preview: Compliance Reminder Email" size="lg">

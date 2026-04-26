@@ -332,5 +332,36 @@ def email_issue_notification(
 """
     return send_email(coordinator_email, coordinator_name, subject, _base_template(content))
 
+def email_hours_log_reminder(
+    student_name: str,
+    student_email: str,
+    qualification: str,
+    completed_hours: float,
+    required_hours: float,
+    remaining_hours: float,
+    frontend_url: str
+) -> bool:
+    """Hours Log Submission Reminder — sent to students who haven't met their required hours."""
+    rem_color = "red" if remaining_hours > required_hours * 0.5 else "darkorange"
+    subject = "Reminder: Please Submit Your Placement Hours Log"
+    content = f"""
+<h2>Placement Hours Log Reminder</h2>
+<p>Dear {student_name},</p>
+<p>This is a reminder that your placement hours are still outstanding and need to be submitted and kept up to date.</p>
+<div class="highlight">
+  <table>
+    <tr><th>Qualification</th><td>{qualification}</td></tr>
+    <tr><th>Required Hours</th><td>{required_hours:.0f} hours</td></tr>
+    <tr><th>Completed Hours</th><td>{completed_hours:.1f} hours</td></tr>
+    <tr><th>Remaining Hours</th><td style="color:{rem_color};font-weight:bold">{remaining_hours:.1f} hours</td></tr>
+  </table>
+</div>
+<p>Please ensure you are submitting your placement hours log regularly so your coordinator can track your progress and support your completion.</p>
+<p>If you have recently completed placement hours that have not yet been recorded, please contact your coordinator to update your records as soon as possible.</p>
+<a href="{frontend_url}/hours" class="btn">View Hours Log in Portal</a>
+"""
+    return send_email(student_email, student_name, subject, _base_template(content))
+
+
 # Public alias for use by other modules
 base_template = _base_template

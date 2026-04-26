@@ -499,6 +499,189 @@ def send_compliance_reminders(
     }
 
 
+# ─── Hours Reminder: Preview (no emails sent) ────────────────────────────────
+@router.get("/hours-reminder-preview")
+def get_hours_reminder_preview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns the list of students who have not yet met their required placement
+    hours, including a personalised email preview for each. No emails are sent.
+    Cert III (qualification contains '30') = 160 h required.
+    Diploma  (qualification contains '50') = 288 h required.
+    """
+    def _required(student) -> float:
+        qual = (student.qualification or "").lower()
+        if "30" in qual:
+            return 160.0
+        if "50" in qual:
+            return 288.0
+        return float(student.required_hours or 0)
+
+    def _qual_label(student) -> str:
+        qual = (student.qualification or "").lower()
+        if "30" in qual:
+            return f"Certificate III in ECEC ({student.qualification})"
+        if "50" in qual:
+            return f"Diploma of ECEC ({student.qualification})"
+        return student.qualification or "Unknown"
+
+    students_list = db.query(Student).filter(Student.status == "active").all()
+    recipients, met_count, no_email_count = [], 0, 0
+
+    for s in students_list:
+        if not s.email:
+            no_email_count += 1
+            continue
+        required  = _required(s)
+        completed = float(s.completed_hours or 0)
+        remaining = max(0.0, required - completed)
+        qual_label = _qual_label(s)
+
+        if required > 0 and completed >= required:
+            met_count += 1
+            continue
+
+        email_preview = (
+            f"Dear {s.full_name},\n\n"
+            f"This is a reminder that your placement hours are still outstanding.\n\n"
+            f"  Qualification:   {qual_label}\n"
+            f"  Required Hours:  {required:.0f} h\n"
+            f"  Completed Hours: {completed:.1f} h\n"
+            f"  Remaining Hours: {remaining:.1f} h\n\n"
+            f"Please ensure you are submitting your placement hours log regularly so "
+            f"your coordinator can track your progress.\n\n"
+            f"If you have recently completed placement hours that have not been recorded, "
+            f"please contact your coordinator to update your records as soon as possible."
+        )
+        recipients.append({
+            "student_id":      s.id,
+            "student_name":    s.full_name,
+            "email":           s.email,
+            "campus":          s.campus,
+            "qualification":   qual_label,
+            "completed_hours": completed,
+            "required_hours":  required,
+            "remaining_hours": remaining,
+            "email_preview":   email_preview,
+        })
+
+    return {
+        "subject":          "Reminder: Please Submit Your Placement Hours Log",
+        "recipient_count":  len(recipients),
+        "met_count":        met_count,
+        "no_email_count":   no_email_count,
+        "recipients":       recipients,
+    }
+
+
+# ─── Hours Reminder: Send ─────────────────────────────────────────────────────
+@router.post("/send-hours-reminders")
+def send_hours_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Send 'Hours Log Submission Reminder' emails to students who haven't met their required hours."""
+    from app.services.email_service import send_email, _base_template
+    from app.models import Communication
+
+    def _required(student) -> float:
+        qual = (student.qualification or "").lower()
+        if "30" in qual:
+            return 160.0
+        if "50" in qual:
+            return 288.0
+        return float(student.required_hours or 0)
+
+    def _qual_label(student) -> str:
+        qual = (student.qualification or "").lower()
+        if "30" in qual:
+            return f"Certificate III in ECEC ({student.qualification})"
+        if "50" in qual:
+            return f"Diploma of ECEC ({student.qualification})"
+        return student.qualification or "Unknown"
+
+    students_list = db.query(Student).filter(Student.status == "active").all()
+    sent, skipped = [], []
+
+    for s in students_list:
+        if not s.email:
+            skipped.append({"student": s.full_name, "reason": "No email address"})
+            continue
+
+        required  = _required(s)
+        completed = float(s.completed_hours or 0)
+        remaining = max(0.0, required - completed)
+        qual_label = _qual_label(s)
+
+        if required > 0 and completed >= required:
+            skipped.append({"student": s.full_name, "reason": "Hours requirement met"})
+            continue
+
+        subject = "Reminder: Please Submit Your Placement Hours Log"
+        body_text = (
+            f"Dear {s.full_name},\n\n"
+            f"This is a reminder that your placement hours are still outstanding.\n\n"
+            f"  Qualification:   {qual_label}\n"
+            f"  Required Hours:  {required:.0f} h\n"
+            f"  Completed Hours: {completed:.1f} h\n"
+            f"  Remaining Hours: {remaining:.1f} h\n\n"
+            f"Please ensure you are submitting your placement hours log regularly so your "
+            f"coordinator can track your progress.\n\n"
+            f"If you have recently completed placement hours that have not been recorded, "
+            f"please contact your coordinator to update your records as soon as possible."
+        )
+        rem_color = "red" if remaining > required * 0.5 else "darkorange"
+        html_content = f"""
+<h2>Placement Hours Log Reminder</h2>
+<p>Dear {s.full_name},</p>
+<p>This is a reminder that your placement hours are still outstanding and need to be submitted and kept up to date.</p>
+<div class="highlight">
+  <table>
+    <tr><th>Qualification</th><td>{qual_label}</td></tr>
+    <tr><th>Required Hours</th><td>{required:.0f} hours</td></tr>
+    <tr><th>Completed Hours</th><td>{completed:.1f} hours</td></tr>
+    <tr><th>Remaining Hours</th><td style="color:{rem_color};font-weight:bold">{remaining:.1f} hours</td></tr>
+  </table>
+</div>
+<p>Please ensure you are submitting your placement hours log regularly so your coordinator can track your progress and support your completion.</p>
+<p>If you have recently completed placement hours that have not yet been recorded, please contact your coordinator to update your records as soon as possible.</p>
+"""
+        ok = send_email(s.email, s.full_name, subject, _base_template(html_content))
+
+        comm = Communication(
+            student_id=s.id,
+            sender_id=current_user.id,
+            recipient_email=s.email,
+            recipient_name=s.full_name,
+            message_type="email",
+            subject=subject,
+            body=body_text,
+            template_used="hours_log_reminder",
+            sent_successfully=ok,
+        )
+        db.add(comm)
+
+        if ok:
+            sent.append({
+                "student":         s.full_name,
+                "email":           s.email,
+                "completed_hours": completed,
+                "required_hours":  required,
+                "remaining_hours": remaining,
+            })
+        else:
+            skipped.append({"student": s.full_name, "reason": "Email send failed"})
+
+    db.commit()
+    return {
+        "message": f"Hours reminders sent to {len(sent)} students, {len(skipped)} skipped",
+        "sent":    sent,
+        "skipped": skipped,
+    }
+
+
 # ─── Delete ───────────────────────────────────────────────────────────────────
 @router.delete("/{doc_id}")
 def delete_document(
