@@ -136,11 +136,11 @@ export default function ReportsPage() {
       )}
 
       {tab === 'hours' && (
-        <div className="card p-0 overflow-hidden overflow-x-auto">
+        <div className="card p-0 overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
           <table className="w-full">
-            <thead className="bg-gray-50"><tr>
+            <thead className="bg-gray-50 sticky top-0 z-10"><tr>
               {['Student', 'Qualification', 'Campus', 'Progress', 'Completed', 'Required', '%'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>
               ))}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
@@ -161,11 +161,11 @@ export default function ReportsPage() {
       )}
 
       {tab === 'compliance' && (
-        <div className="card p-0 overflow-hidden overflow-x-auto">
+        <div className="card p-0 overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
           <table className="w-full">
-            <thead className="bg-gray-50"><tr>
+            <thead className="bg-gray-50 sticky top-0 z-10"><tr>
               {['Student', 'Campus', 'Total Docs', 'Expired', 'Expiring Soon', 'Pending', 'Status'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>
               ))}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">

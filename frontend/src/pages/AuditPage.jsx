@@ -325,9 +325,9 @@ export default function AuditPage() {
 
     if (reportId === 'compliance_status') return (
       <table className="w-full text-xs">
-        <thead className="bg-gray-50"><tr>
+        <thead className="bg-gray-50 sticky top-0 z-10"><tr>
           {['Student','Campus','Qualification','Progress','WWCC','WPA','MOU','First Aid','Outstanding'].map(h =>
-            <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+            <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>)}
         </tr></thead>
         <tbody className="divide-y divide-gray-50">
           {data.map(r => {
@@ -353,9 +353,9 @@ export default function AuditPage() {
 
     if (reportId === 'expiring_documents') return (
       <table className="w-full text-xs">
-        <thead className="bg-gray-50"><tr>
+        <thead className="bg-gray-50 sticky top-0 z-10"><tr>
           {['Student','Campus','Document','Expiry Date','Days Left','Status','Verified'].map(h =>
-            <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+            <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>)}
         </tr></thead>
         <tbody className="divide-y divide-gray-50">
           {data.map(d => (
@@ -375,9 +375,9 @@ export default function AuditPage() {
 
     if (reportId === 'placement_hours') return (
       <table className="w-full text-xs">
-        <thead className="bg-gray-50"><tr>
+        <thead className="bg-gray-50 sticky top-0 z-10"><tr>
           {['Student','Campus','Qualification','Status','Completed','Required','Progress'].map(h =>
-            <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+            <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>)}
         </tr></thead>
         <tbody className="divide-y divide-gray-50">
           {data.map(s => (
@@ -416,9 +416,9 @@ export default function AuditPage() {
             ))}
           </div>
           <table className="w-full text-xs">
-            <thead className="bg-gray-50"><tr>
+            <thead className="bg-gray-50 sticky top-0 z-10"><tr>
               {['Student ID','Full Name','Campus','Qualification','Status','Email','Course Start','Course End','Compliance'].map(h =>
-                <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {data.map(s=>(
@@ -512,7 +512,7 @@ export default function AuditPage() {
 
           {running && <div className="mt-6"><Spinner size="lg"/></div>}
           {!running && results && (
-            <div className="mt-6 card p-0 overflow-hidden overflow-x-auto">{renderResults()}</div>
+            <div className="mt-6 card p-0 overflow-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>{renderResults()}</div>
           )}
           {!selectedReport && (
             <div className="mt-4 text-center py-12 text-gray-400">
@@ -748,12 +748,12 @@ export default function AuditPage() {
                 message="Audit entries are created when coordinators create or update student, compliance, hours, or visit records." />
             )
             return (
-              <div className="card p-0 overflow-hidden overflow-x-auto">
+              <div className="card p-0 overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-50 border-b border-gray-100">
+                  <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                     <tr>
                       {['Timestamp', 'User', 'Action', 'Record', 'Detail'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>
                       ))}
                     </tr>
                   </thead>
