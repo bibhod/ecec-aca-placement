@@ -40,7 +40,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
-  Plus, Upload, CheckCircle, AlertTriangle, XCircle, Mail,
+  Upload, CheckCircle, AlertTriangle, XCircle, Mail,
   FileText, Clock, Eye, BarChart2, Download,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -328,8 +328,7 @@ export default function CompliancePage() {
   const [reportSearch, setReportSearch]   = useState('')
   const [missingOnly, setMissingOnly]     = useState(false)
 
-  // ── Feature 2: Bulk Add Document modal ───────────────────────────────────
-  const [showModal, setShowModal]         = useState(false)
+  // ── Feature 2: Bulk Add Documents (inline in Bulk Upload tab) ──────────────
   const [bulkStudentId, setBulkStudentId] = useState('')
   const [bulkRows, setBulkRows]           = useState(() => buildInitialBulkRows())
   const [bulkSaving, setBulkSaving]       = useState(false)
@@ -695,14 +694,6 @@ export default function CompliancePage() {
       <PageHeader
         title="Compliance"
         subtitle="Manage student compliance documents"
-        actions={
-          <button
-            onClick={() => { resetBulkModal(); setShowModal(true) }}
-            className="btn-primary text-sm flex items-center gap-1"
-          >
-            <Plus size={15} /> Add Document
-          </button>
-        }
       />
 
       {/* Summary cards */}
@@ -1199,6 +1190,196 @@ export default function CompliancePage() {
       {activeTab === 'bulk_upload' && (
         <div className="max-w-3xl space-y-8">
 
+          {/* ── Add Documents inline form ────────────────────────────────────── */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-gray-900">Add Compliance Documents</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Select a student, attach files for the documents you want to upload, then click Add Documents.
+                </p>
+              </div>
+            </div>
+
+            {/* Post-submission results view */}
+            {bulkResults ? (
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <div className="flex-1 bg-green-50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-green-700">{bulkResults.success.length}</p>
+                    <p className="text-xs text-green-600 mt-0.5">Uploaded successfully</p>
+                  </div>
+                  {bulkResults.failed.length > 0 && (
+                    <div className="flex-1 bg-red-50 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-red-600">{bulkResults.failed.length}</p>
+                      <p className="text-xs text-red-500 mt-0.5">Failed</p>
+                    </div>
+                  )}
+                </div>
+
+                {bulkResults.success.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 mb-1">Uploaded:</p>
+                    <ul className="space-y-1">
+                      {bulkResults.success.map((label, i) => (
+                        <li key={i} className="flex items-center gap-2 text-sm text-green-700">
+                          <CheckCircle size={14} className="text-green-500 flex-shrink-0" />
+                          {label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {bulkResults.failed.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 mb-1">Errors:</p>
+                    <ul className="space-y-1">
+                      {bulkResults.failed.map((f, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-red-600">
+                          <XCircle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />
+                          <span><strong>{f.label}:</strong> {f.error}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-4 border-t border-gray-100">
+                  <button onClick={() => { resetBulkModal() }} className="btn-secondary">
+                    Add More Documents
+                  </button>
+                  <button onClick={() => { resetBulkModal(); loadDocs() }} className="btn-primary">
+                    Done
+                  </button>
+                </div>
+              </div>
+
+            ) : (
+              /* ── Upload form ──────────────────────────────────────────────── */
+              <>
+                {/* Student selector */}
+                <FormRow label="Student" required>
+                  <StudentSearchInput
+                    students={students}
+                    value={bulkStudentId}
+                    onChange={setBulkStudentId}
+                  />
+                </FormRow>
+
+                {/* Document rows table */}
+                <div className="mt-5">
+                  <p className="label mb-2">
+                    Documents
+                    <span className="text-xs font-normal text-gray-400 ml-2">
+                      Attach a file to any row you want to submit. Rows without a file are ignored.
+                    </span>
+                  </p>
+
+                  <div className="rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="grid grid-cols-[1fr_140px_1fr_120px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
+                      <p className="text-xs font-medium text-gray-500">Document Type</p>
+                      <p className="text-xs font-medium text-gray-500">Qualification</p>
+                      <p className="text-xs font-medium text-gray-500">File</p>
+                      <p className="text-xs font-medium text-gray-500">Expiry Date</p>
+                    </div>
+
+                    {bulkRows.map((row, idx) => (
+                      <div
+                        key={row.document_type}
+                        className={`grid grid-cols-[1fr_140px_1fr_120px] gap-3 items-center px-3 py-3
+                          border-b border-gray-100 last:border-0
+                          ${row.file ? 'bg-green-50/40' : 'bg-white hover:bg-gray-50/50'}
+                        `}
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{row.abbr}</p>
+                          <p className="text-xs text-gray-400 leading-tight">{row.label}</p>
+                        </div>
+
+                        <div>
+                          {row.qualSpecific ? (
+                            <select
+                              value={row.qualification}
+                              onChange={e => updateBulkRow(idx, 'qualification', e.target.value)}
+                              className="input text-xs py-1.5 bg-white"
+                              aria-label={`Qualification for ${row.abbr}`}
+                            >
+                              {QUAL_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-xs text-gray-300 px-1">N/A</span>
+                          )}
+                        </div>
+
+                        <div>
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            onChange={e => updateBulkRow(idx, 'file', e.target.files[0] || null)}
+                            className="block w-full text-xs text-gray-500
+                              file:mr-2 file:py-1 file:px-2 file:rounded-md file:border
+                              file:border-gray-300 file:text-xs file:bg-gray-50
+                              file:cursor-pointer hover:file:bg-gray-100"
+                            aria-label={`Upload file for ${row.abbr}`}
+                          />
+                          {row.file && (
+                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1 truncate">
+                              <CheckCircle size={11} className="flex-shrink-0" />
+                              <span className="truncate">{row.file.name}</span>
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <input
+                            type="date"
+                            value={row.expiry_date}
+                            onChange={e => updateBulkRow(idx, 'expiry_date', e.target.value)}
+                            className="input text-xs py-1.5"
+                            aria-label={`Expiry date for ${row.abbr}`}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
+                  <p className="text-xs text-gray-400">
+                    {bulkRows.filter(r => r.file).length} file{bulkRows.filter(r => r.file).length !== 1 ? 's' : ''} selected
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => resetBulkModal()}
+                      className="btn-secondary"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      onClick={saveBulk}
+                      disabled={bulkSaving || !bulkStudentId || bulkRows.every(r => !r.file)}
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      <Upload size={15} />
+                      {bulkSaving ? 'Uploading...' : 'Add Documents'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── Divider ──────────────────────────────────────────────────────── */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-gray-50 px-3 text-gray-400 font-medium">or upload via CSV</span>
+            </div>
+          </div>
+
           {/* ── Step 1: Download template ───────────────────────────────────── */}
           <div className="card">
             <div className="flex items-start justify-between gap-4 mb-3">
@@ -1658,200 +1839,6 @@ export default function CompliancePage() {
         )}
       </Modal>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          Feature 1 + 2: Add Compliance Documents (REDESIGNED)
-          - Searchable student combobox at top (Feature 1)
-          - One uploadable row per document type (Feature 2)
-          - WPA / MOU rows include Qualification dropdown (Feature 2)
-          - Only rows with a file attached are submitted (Feature 2)
-          - Results summary shown after submission (Feature 2)
-      ════════════════════════════════════════════════════════════════════════ */}
-      <Modal
-        open={showModal}
-        onClose={() => { setShowModal(false); resetBulkModal() }}
-        title="Add Compliance Documents"
-        size="lg"
-      >
-        {/* ── Post-submission results view ──────────────────────────────────── */}
-        {bulkResults ? (
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1 bg-green-50 rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-green-600">{bulkResults.success.length}</p>
-                <p className="text-sm text-green-700">Document{bulkResults.success.length !== 1 ? 's' : ''} uploaded</p>
-              </div>
-              <div className="flex-1 bg-red-50 rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-red-500">{bulkResults.failed.length}</p>
-                <p className="text-sm text-red-600">Failed</p>
-              </div>
-            </div>
-
-            {bulkResults.success.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-gray-700 mb-1">Uploaded successfully:</p>
-                <ul className="space-y-1">
-                  {bulkResults.success.map((label, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-green-700">
-                      <CheckCircle size={14} className="text-green-500 flex-shrink-0" /> {label}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {bulkResults.failed.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-gray-700 mb-1">Errors:</p>
-                <ul className="space-y-1">
-                  {bulkResults.failed.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-red-600">
-                      <XCircle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />
-                      <span><strong>{f.label}:</strong> {f.error}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="flex justify-between pt-4 border-t border-gray-100">
-              <button
-                onClick={() => { resetBulkModal() }}
-                className="btn-secondary"
-              >
-                Add More Documents
-              </button>
-              <button
-                onClick={() => { setShowModal(false); resetBulkModal() }}
-                className="btn-primary"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-
-        ) : (
-          /* ── Upload form view ─────────────────────────────────────────────── */
-          <>
-            {/* Feature 1: Searchable student selector */}
-            <FormRow label="Student" required>
-              <StudentSearchInput
-                students={students}
-                value={bulkStudentId}
-                onChange={setBulkStudentId}
-              />
-            </FormRow>
-
-            {/* Feature 2: Document rows table */}
-            <div className="mt-5">
-              <p className="label mb-2">
-                Documents
-                <span className="text-xs font-normal text-gray-400 ml-2">
-                  Attach a file to any row you want to submit. Rows without a file are ignored.
-                </span>
-              </p>
-
-              {/* Table header */}
-              <div className="rounded-xl border border-gray-200 overflow-hidden">
-                <div className="grid grid-cols-[1fr_140px_1fr_120px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
-                  <p className="text-xs font-medium text-gray-500">Document Type</p>
-                  <p className="text-xs font-medium text-gray-500">Qualification</p>
-                  <p className="text-xs font-medium text-gray-500">File</p>
-                  <p className="text-xs font-medium text-gray-500">Expiry Date</p>
-                </div>
-
-                {/* One row per document type */}
-                {bulkRows.map((row, idx) => (
-                  <div
-                    key={row.document_type}
-                    className={`grid grid-cols-[1fr_140px_1fr_120px] gap-3 items-center px-3 py-3
-                      border-b border-gray-100 last:border-0
-                      ${row.file ? 'bg-green-50/40' : 'bg-white hover:bg-gray-50/50'}
-                    `}
-                  >
-                    {/* Doc type label */}
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{row.abbr}</p>
-                      <p className="text-xs text-gray-400 leading-tight">{row.label}</p>
-                    </div>
-
-                    {/* Qualification dropdown (only for WPA / MOU) */}
-                    <div>
-                      {row.qualSpecific ? (
-                        <select
-                          value={row.qualification}
-                          onChange={e => updateBulkRow(idx, 'qualification', e.target.value)}
-                          className="input text-xs py-1.5 bg-white"
-                          aria-label={`Qualification for ${row.abbr}`}
-                        >
-                          {QUAL_OPTIONS.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-xs text-gray-300 px-1">N/A</span>
-                      )}
-                    </div>
-
-                    {/* File picker */}
-                    <div>
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                        onChange={e => updateBulkRow(idx, 'file', e.target.files[0] || null)}
-                        className="block w-full text-xs text-gray-500
-                          file:mr-2 file:py-1 file:px-2 file:rounded-md file:border
-                          file:border-gray-300 file:text-xs file:bg-gray-50
-                          file:cursor-pointer hover:file:bg-gray-100"
-                        aria-label={`Upload file for ${row.abbr}`}
-                      />
-                      {row.file && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1 truncate">
-                          <CheckCircle size={11} className="flex-shrink-0" />
-                          <span className="truncate">{row.file.name}</span>
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Expiry date */}
-                    <div>
-                      <input
-                        type="date"
-                        value={row.expiry_date}
-                        onChange={e => updateBulkRow(idx, 'expiry_date', e.target.value)}
-                        className="input text-xs py-1.5"
-                        aria-label={`Expiry date for ${row.abbr}`}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Submit row */}
-            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
-              <p className="text-xs text-gray-400">
-                {bulkRows.filter(r => r.file).length} file{bulkRows.filter(r => r.file).length !== 1 ? 's' : ''} selected
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setShowModal(false); resetBulkModal() }}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveBulk}
-                  disabled={bulkSaving || !bulkStudentId || bulkRows.every(r => !r.file)}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  <Upload size={15} />
-                  {bulkSaving ? 'Uploading...' : 'Add Documents'}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </Modal>
 
     </div>
   )
