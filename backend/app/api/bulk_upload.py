@@ -14,6 +14,7 @@ import logging
 from app.database import get_db
 from app.models import (
     Student, PlacementCentre, HoursLog, Appointment, User,
+    ComplianceDocument, COMPLIANCE_DOC_TYPE_CHOICES,
     QUALIFICATION_CHOICES, UNITS_CHC30125, UNITS_CHC50125,
 )
 from app.utils.auth import get_current_user
@@ -109,6 +110,21 @@ def template_units():
     rows += [["CHC50125", u] for u in UNITS_CHC50125]
     return _make_csv_response(
         ["qualification", "unit_name"], rows, "template_units_reference.csv",
+    )
+
+
+@router.get("/templates/compliance")
+def template_compliance():
+    """Download blank CSV template for compliance document bulk import."""
+    return _make_csv_response(
+        ["student_id", "student_name", "document_type", "qualification", "expiry_date", "notes"],
+        [
+            ["STU2025001", "Jane Smith", "working_with_children_check", "", "2027-06-30", "WWCC card scanned"],
+            ["STU2025001", "Jane Smith", "first_aid_certificate",       "", "2026-12-31", ""],
+            ["STU2025001", "Jane Smith", "work_placement_agreement",    "Certificate III", "", ""],
+            ["STU2025001", "Jane Smith", "memorandum_of_understanding", "Certificate III", "", ""],
+        ],
+        "template_compliance.csv",
     )
 
 
@@ -337,3 +353,76 @@ async def import_visits(
     db.commit()
     return {"message": f"{len(created)} visits created, {len(errors)} errors",
             "created": created, "errors": errors}
+
+
+@router.post("/import/compliance")
+async def import_compliance(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Bulk-import compliance documents from CSV/XLSX.
+    Columns: student_id, student_name (ignored), document_type,
+             qualification, expiry_date, notes
+    """
+    content = await file.read()
+    rows = _read_file(content, file.filename)
+    created, skipped, errors = [], [], []
+
+    for i, row in enumerate(rows, 2):
+        # Skip comment or blank lines
+        if not any(v for v in row.values()):
+            continue
+
+        sid       = (row.get("student_id")    or "").strip()
+        doc_type  = (row.get("document_type") or "").strip()
+        qual      = (row.get("qualification") or "").strip()
+        expiry    = (row.get("expiry_date")   or "").strip()
+        notes_raw = (row.get("notes")         or "").strip()
+
+        if not sid:
+            errors.append({"row": i, "error": 'Required field "student_id" is empty'}); continue
+        if not doc_type:
+            errors.append({"row": i, "error": 'Required field "document_type" is empty'}); continue
+        if doc_type not in COMPLIANCE_DOC_TYPE_CHOICES:
+            errors.append({"row": i, "error": f'Unknown document_type "{doc_type}". '
+                           f'Valid values: {", ".join(COMPLIANCE_DOC_TYPE_CHOICES)}'}); continue
+
+        student = db.query(Student).filter(Student.student_id == sid).first()
+        if not student:
+            errors.append({"row": i, "error": f'Student "{sid}" not found'}); continue
+
+        expiry_date = None
+        if expiry:
+            try:
+                expiry_date = date.fromisoformat(expiry)
+            except ValueError:
+                errors.append({"row": i, "error": f'Invalid expiry_date "{expiry}" — use YYYY-MM-DD'}); continue
+
+        # Compose notes: prepend qualification for WPA / MOU
+        note_parts = []
+        if qual:
+            note_parts.append(f"Qualification: {qual}")
+        if notes_raw:
+            note_parts.append(notes_raw)
+        final_notes = "\n".join(note_parts) or None
+
+        doc = ComplianceDocument(
+            student_id=student.id,
+            document_type=doc_type,
+            expiry_date=expiry_date,
+            notes=final_notes,
+            verified=False,
+        )
+        db.add(doc)
+        created.append(f"{sid} / {doc_type}")
+
+    db.commit()
+    total = len(rows)
+    return {
+        "message": f"{len(created)} of {total} rows imported successfully",
+        "created": created,
+        "skipped": skipped,
+        "errors":  errors,
+    }

@@ -51,6 +51,16 @@ const UPLOAD_TYPES = [
     icon: '📋',
   },
   {
+    key: 'compliance',
+    label: 'Compliance Documents',
+    description: 'Bulk-import compliance records. Includes: student ID, document type (WWCC, First Aid, WPA, MOU), qualification, expiry date, notes.',
+    template: '/bulk/templates/compliance',
+    import: '/bulk/import/compliance',
+    filename: 'template_compliance.csv',
+    color: 'bg-red-50 border-red-200',
+    icon: '🛡️',
+  },
+  {
     key: 'units',
     label: 'Unit/Competency Reference',
     description: 'Download the full list of available units for CHC30125 and CHC50125 for reference.',
