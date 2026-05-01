@@ -41,7 +41,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Plus, Upload, CheckCircle, AlertTriangle, XCircle, Mail,
-  FileText, Clock, Eye, BarChart2, Download, Table2,
+  FileText, Clock, Eye, BarChart2, Download,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
@@ -569,8 +569,8 @@ export default function CompliancePage() {
    * No backend call required; the template structure is static.
    */
   const downloadCsvTemplate = () => {
-    const headers   = 'student_id,student_name,document_type,qualification,file_name,expiry_date,notes'
-    const exampleRow = 'STU001,Jane Smith,working_with_children_check,,WWCC_JaneSmith.pdf,2027-06-30,WWCC card scanned'
+    const headers   = 'student_id,student_name,document_type,qualification,expiry_date,notes'
+    const exampleRow = 'STU001,Jane Smith,working_with_children_check,,2027-06-30,WWCC card scanned'
     const notesRow  = `# Valid document_type values: ${VALID_DOC_TYPE_VALUES.join(' | ')}`
     const qualNote  = '# Valid qualification values: Cert III | Diploma (leave blank for WWCC / First Aid)'
     const csv = [headers, exampleRow, notesRow, qualNote].join('\n')
@@ -649,16 +649,14 @@ export default function CompliancePage() {
           continue
         }
 
-        // Build the notes field: qualification prefix + user notes + file reference
+        // Build the notes field: qualification prefix + user notes
         const noteParts = []
         if (row.qualification) noteParts.push(`Qualification: ${row.qualification}`)
-        if (row.file_name)     noteParts.push(`File reference: ${row.file_name}`)
         if (row.notes)         noteParts.push(row.notes)
 
         await api.post('/compliance', {
           student_id:      student.id,
           document_type:   row.document_type,
-          document_number: row.file_name || null,     // store file ref in doc number field
           expiry_date:     row.expiry_date?.trim() || null,
           notes:           noteParts.join('\n') || null,
         })
@@ -1227,7 +1225,6 @@ export default function CompliancePage() {
                 ['student_name',   'Optional', 'For your reference only — not imported'],
                 ['document_type',  'Required', `One of: ${VALID_DOC_TYPE_VALUES.join(' | ')}`],
                 ['qualification',  'Optional', 'For WPA / MOU rows: use "Cert III" or "Diploma"'],
-                ['file_name',      'Optional', 'File name reference — stored in the Doc Number field (no actual upload)'],
                 ['expiry_date',    'Optional', 'YYYY-MM-DD format (e.g. 2027-06-30)'],
                 ['notes',          'Optional', 'Any additional notes'],
               ].map(([col, req, desc]) => (
@@ -1302,7 +1299,7 @@ export default function CompliancePage() {
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                     <tr>
-                      {['Row', 'Student ID', 'Document Type', 'Qualification', 'File Name', 'Expiry Date', 'Status'].map(h => (
+                      {['Row', 'Student ID', 'Document Type', 'Qualification', 'Expiry Date', 'Notes', 'Status'].map(h => (
                         <th key={h} className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">
                           {h}
                         </th>
@@ -1322,8 +1319,8 @@ export default function CompliancePage() {
                             </span>
                           </td>
                           <td className="px-3 py-2 text-gray-600">{row.qualification || '-'}</td>
-                          <td className="px-3 py-2 text-gray-500">{row.file_name || '-'}</td>
                           <td className="px-3 py-2 text-gray-500">{row.expiry_date || '-'}</td>
+                          <td className="px-3 py-2 text-gray-500 max-w-[160px] truncate" title={row.notes}>{row.notes || '-'}</td>
                           <td className="px-3 py-2">
                             {hasErrors ? (
                               <div>
