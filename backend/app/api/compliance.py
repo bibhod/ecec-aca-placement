@@ -178,6 +178,7 @@ async def create_document_with_upload(
     issue_date: str = Form(""),
     expiry_date: str = Form(""),
     notes: str = Form(""),
+    qualification: str = Form(""),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -185,6 +186,7 @@ async def create_document_with_upload(
     """
     Create a compliance document AND optionally attach a file in one request.
     Issue 8 — functional file upload within Add Document.
+    qualification — optional, for WPA/MOU rows; prepended to notes if provided.
     """
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
@@ -192,6 +194,10 @@ async def create_document_with_upload(
 
     if document_type not in COMPLIANCE_DOC_TYPE_CHOICES:
         raise HTTPException(status_code=400, detail=f"Invalid document type.")
+
+    # Prepend qualification to notes for WPA/MOU documents
+    if qualification:
+        notes = f"Qualification: {qualification}\n{notes}".strip() if notes else f"Qualification: {qualification}"
 
     doc = ComplianceDocument(
         student_id=student_id,

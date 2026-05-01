@@ -1,74 +1,410 @@
 /**
- * CompliancePage
- *  - Documents tab
- *  - Compliance Report tab
- *  - Email Log tab (view sent compliance reminder emails)
- *  - Send Reminders: preview first, then confirm-send
+ * CompliancePage — Compliance section of the ECEC Placement Portal
+ *
+ * Changes in this revision (all scoped to this file / compliance endpoints):
+ *
+ *  Feature 1 — Searchable student combobox in Add Document modal
+ *    - StudentSearchInput component: real-time filter, keyboard nav (↑↓ Enter Esc),
+ *      "No students found" fallback, submits correct student UUID.
+ *
+ *  Feature 2 — Bulk multi-document upload in Add Document modal
+ *    - One row per DOC_TYPE; each row has its own file picker.
+ *    - WPA and MOU rows include a Qualification dropdown (Certificate III / Diploma).
+ *    - Only rows with a file selected are submitted (parallel uploads).
+ *    - Qualification is prepended to the notes field before sending so no DB schema
+ *      changes are required.
+ *
+ *  Feature 3 — Sticky column headers on all scrollable tables
+ *    - Tables are wrapped in overflow-auto containers with max-height so they scroll
+ *      independently of the page.
+ *    - <thead> receives `sticky top-0 z-10` so headers remain visible during scroll.
+ *    - Visual design of headers is unchanged; only scroll behaviour differs.
+ *      NOTE: if your layout has a fixed top navbar, increase the `top-0` offset on
+ *      <thead> (e.g. `top-[64px]`) to match the navbar height and prevent overlap.
+ *
+ *  Feature 4 — Bulk Upload via CSV tab
+ *    - "Download CSV Template" generates a .csv client-side (no backend call needed).
+ *    - CSV upload parses the file in the browser and shows a validated preview table.
+ *    - Invalid rows are highlighted in red with a per-row error message.
+ *    - Valid rows are submitted via the existing POST /api/compliance endpoint.
+ *    - Summary result shown after submission.
+ *
+ * Assumptions / notes:
+ *  - The `qualification` value for WPA/MOU is stored as a "Qualification: X" prefix
+ *    in the `notes` field — no DB schema change required, fully backwards compatible.
+ *  - CSV `student_id` column contains the student reference number (e.g. "STU001"),
+ *    matched against the `student_id` field on the Student model (not the UUID).
+ *  - CSV rows create metadata-only documents (no file attachment); files can be
+ *    added later via the existing per-document upload endpoint.
  */
-import React, { useEffect, useState, useCallback } from 'react'
-import { Plus, Upload, CheckCircle, AlertTriangle, XCircle, Mail, FileText, Clock, Eye, BarChart2 } from 'lucide-react'
+
+import React, { useEffect, useState, useCallback, useRef } from 'react'
+import {
+  Plus, Upload, CheckCircle, AlertTriangle, XCircle, Mail,
+  FileText, Clock, Eye, BarChart2, Download, Table2,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
-import { PageHeader, Spinner, Badge, Modal, FormRow, Select, SearchInput, EmptyState } from '../components/ui/index'
+import {
+  PageHeader, Spinner, Badge, Modal, FormRow, Select,
+  SearchInput, EmptyState,
+} from '../components/ui/index'
 import { format } from 'date-fns'
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const DOC_TYPES = [
-  { value: 'working_with_children_check', label: 'Working with Children Check', abbr: 'WWCC' },
-  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid' },
-  { value: 'work_placement_agreement',     label: 'Work Placement Agreement', abbr: 'WPA' },
-  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding', abbr: 'MOU' },
+  { value: 'working_with_children_check', label: 'Working with Children Check', abbr: 'WWCC',       qualSpecific: false },
+  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid', qualSpecific: false },
+  { value: 'work_placement_agreement',     label: 'Work Placement Agreement',          abbr: 'WPA',       qualSpecific: true  },
+  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding',       abbr: 'MOU',       qualSpecific: true  },
 ]
 
+// Qualification options for WPA / MOU rows
+const QUAL_OPTIONS = [
+  { value: '',               label: 'Select qualification...' },
+  { value: 'Certificate III', label: 'Certificate III' },
+  { value: 'Diploma',         label: 'Diploma' },
+]
+
+// Valid document type values (used for CSV validation)
+const VALID_DOC_TYPE_VALUES = DOC_TYPES.map(t => t.value)
+
+// ─── CSV Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Parse a single CSV line, respecting double-quoted fields (RFC 4180).
+ * @param {string} line
+ * @returns {string[]}
+ */
+function parseCsvLine(line) {
+  const result = []
+  let current = ''
+  let inQuote = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      // Escaped quote inside a quoted field: ""
+      if (inQuote && line[i + 1] === '"') { current += '"'; i++ }
+      else { inQuote = !inQuote }
+    } else if (ch === ',' && !inQuote) {
+      result.push(current.trim())
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  result.push(current.trim())
+  return result
+}
+
+/**
+ * Parse full CSV text into an array of row objects keyed by the header row.
+ * @param {string} text  Raw CSV string
+ * @returns {object[]}   Each object has a `_rowNum` property (1-based, skipping header)
+ */
+function parseCsvText(text) {
+  const lines = text.trim().split(/\r?\n/)
+  if (lines.length < 1) return []
+  const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_'))
+  const rows = []
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+    const values = parseCsvLine(line)
+    const row = { _rowNum: i + 1 }
+    headers.forEach((h, j) => { row[h] = values[j] ?? '' })
+    rows.push(row)
+  }
+  return rows
+}
+
+/**
+ * Validate a single parsed CSV row.
+ * @param {object} row   Parsed row from parseCsvText
+ * @param {object[]} students  Loaded student list for reference-number lookup
+ * @returns {string[]}  Array of human-readable error strings (empty = valid)
+ */
+function validateCsvRow(row, students) {
+  const errors = []
+
+  // Required: student_id (reference number, not UUID)
+  if (!row.student_id) {
+    errors.push('student_id is required')
+  } else if (!students.some(s => s.student_id === row.student_id)) {
+    errors.push(`Student "${row.student_id}" not found in the system`)
+  }
+
+  // Required: document_type
+  if (!row.document_type) {
+    errors.push('document_type is required')
+  } else if (!VALID_DOC_TYPE_VALUES.includes(row.document_type)) {
+    errors.push(
+      `Invalid document_type "${row.document_type}". ` +
+      `Valid values: ${VALID_DOC_TYPE_VALUES.join(', ')}`
+    )
+  }
+
+  // Optional: qualification — only validated if present
+  if (row.qualification) {
+    const q = row.qualification.toLowerCase().trim()
+    if (!['cert iii', 'certificate iii', 'diploma'].includes(q)) {
+      errors.push(`Invalid qualification "${row.qualification}". Use "Cert III" or "Diploma"`)
+    }
+  }
+
+  // Optional: expiry_date — must be YYYY-MM-DD if provided
+  if (row.expiry_date && row.expiry_date.trim() !== '') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.expiry_date.trim())) {
+      errors.push('expiry_date must be YYYY-MM-DD format (e.g. 2027-06-30)')
+    }
+  }
+
+  return errors
+}
+
+// ─── Feature 1: Searchable Student Combobox ──────────────────────────────────
+
+/**
+ * StudentSearchInput
+ *
+ * A controlled combobox that lets the user type to filter students.
+ * Supports keyboard navigation (ArrowUp / ArrowDown / Enter / Escape).
+ * Submits the student's UUID (id) via onChange, not the display string.
+ *
+ * Props:
+ *   students  — array of student objects from /api/students
+ *   value     — currently selected student UUID (or '')
+ *   onChange  — (uuid: string) => void
+ */
+function StudentSearchInput({ students, value, onChange }) {
+  const [query, setQuery]           = useState('')
+  const [open, setOpen]             = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
+  const containerRef = useRef(null)
+
+  // When the parent clears value (e.g. modal reset), also clear the typed query
+  useEffect(() => {
+    if (!value) setQuery('')
+  }, [value])
+
+  // Derive what to display in the input field
+  const selectedStudent = students.find(s => s.id === value)
+  const displayValue = (selectedStudent && !open)
+    ? `${selectedStudent.full_name} (${selectedStudent.student_id})`
+    : query
+
+  // Filter list based on current query (cap at 15 results for performance)
+  const filteredStudents = query.trim().length >= 1
+    ? students
+        .filter(s =>
+          s.full_name.toLowerCase().includes(query.toLowerCase()) ||
+          (s.student_id || '').toLowerCase().includes(query.toLowerCase())
+        )
+        .slice(0, 15)
+    : []
+
+  // Reset highlight when results change
+  useEffect(() => { setHighlighted(0) }, [filteredStudents.length])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false)
+        // If nothing selected and user typed something, clear it
+        if (!value) setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [value])
+
+  const selectStudent = (s) => {
+    onChange(s.id)
+    setQuery('')
+    setOpen(false)
+  }
+
+  const handleInputChange = (e) => {
+    setQuery(e.target.value)
+    setOpen(true)
+    // Clear the current selection when the user starts typing again
+    if (value) onChange('')
+  }
+
+  const handleKeyDown = (e) => {
+    if (!open) return
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setHighlighted(h => Math.min(h + 1, filteredStudents.length - 1))
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setHighlighted(h => Math.max(h - 1, 0))
+        break
+      case 'Enter':
+        e.preventDefault()
+        if (filteredStudents[highlighted]) selectStudent(filteredStudents[highlighted])
+        break
+      case 'Escape':
+        setOpen(false)
+        break
+      default:
+        break
+    }
+  }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <input
+        className="input"
+        placeholder="Type student name or ID to search..."
+        value={displayValue}
+        onChange={handleInputChange}
+        onFocus={() => { if (query.trim().length >= 1) setOpen(true) }}
+        onKeyDown={handleKeyDown}
+        autoComplete="off"
+        aria-label="Search student"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      />
+
+      {/* Dropdown list */}
+      {open && query.trim().length >= 1 && (
+        <div
+          role="listbox"
+          className="absolute z-50 w-full mt-1 bg-white rounded-lg border border-gray-200 shadow-lg max-h-52 overflow-y-auto"
+        >
+          {filteredStudents.length > 0 ? (
+            filteredStudents.map((s, i) => (
+              <div
+                key={s.id}
+                role="option"
+                aria-selected={i === highlighted}
+                className={`
+                  px-3 py-2.5 cursor-pointer text-sm border-b border-gray-50 last:border-0
+                  ${i === highlighted ? 'bg-cyan/10 text-navy' : 'hover:bg-gray-50 text-gray-900'}
+                `}
+                // Use onMouseDown (not onClick) so it fires before onBlur
+                onMouseDown={(e) => { e.preventDefault(); selectStudent(s) }}
+                onMouseEnter={() => setHighlighted(i)}
+              >
+                <span className="font-medium">{s.full_name}</span>
+                <span className="text-gray-400 ml-2 text-xs">{s.student_id}</span>
+                {s.qualification && (
+                  <span className="text-gray-400 ml-1 text-xs">· {s.qualification}</span>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-3 text-sm text-gray-400 text-center">
+              No students found
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Page Component ──────────────────────────────────────────────────────
+
 export default function CompliancePage() {
-  const [activeTab, setActiveTab] = useState('documents')
-  const [docs, setDocs] = useState([])
-  const [students, setStudents] = useState([])
-  const [report, setReport] = useState([])
-  const [emailLog, setEmailLog] = useState([])
-  const [loading, setLoading] = useState(true)
+
+  // ── Tab & shared UI state ─────────────────────────────────────────────────
+  const [activeTab, setActiveTab]         = useState('documents')
+  const [docs, setDocs]                   = useState([])
+  const [students, setStudents]           = useState([])
+  const [report, setReport]               = useState([])
+  const [emailLog, setEmailLog]           = useState([])
+  const [loading, setLoading]             = useState(true)
   const [reportLoading, setReportLoading] = useState(false)
   const [emailLogLoading, setEmailLogLoading] = useState(false)
-  const [filterStatus, setFilterStatus] = useState('')
-  const [filterType, setFilterType] = useState('')
-  const [search, setSearch] = useState('')
-  const [reportSearch, setReportSearch] = useState('')
-  const [missingOnly, setMissingOnly] = useState(false)
-  const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({
-    student_id: '', document_type: 'working_with_children_check',
-    document_number: '', issue_date: '', expiry_date: '', notes: ''
-  })
-  const [uploadFile, setUploadFile] = useState(null)
-  const [saving, setSaving] = useState(false)
+  const [filterStatus, setFilterStatus]   = useState('')
+  const [filterType, setFilterType]       = useState('')
+  const [search, setSearch]               = useState('')
+  const [reportSearch, setReportSearch]   = useState('')
+  const [missingOnly, setMissingOnly]     = useState(false)
 
-  // ── Compliance reminder preview / send state ─────────────────────────────
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewData, setPreviewData] = useState(null)
+  // ── Feature 2: Bulk Add Document modal ───────────────────────────────────
+  const [showModal, setShowModal]         = useState(false)
+  const [bulkStudentId, setBulkStudentId] = useState('')
+  const [bulkRows, setBulkRows]           = useState(() => buildInitialBulkRows())
+  const [bulkSaving, setBulkSaving]       = useState(false)
+  const [bulkResults, setBulkResults]     = useState(null)
+  // null  = not submitted yet
+  // { success: string[], failed: {label, error}[] }
+
+  // ── Compliance reminder preview / send state ──────────────────────────────
+  const [previewLoading, setPreviewLoading]     = useState(false)
+  const [previewData, setPreviewData]           = useState(null)
   const [sendingReminders, setSendingReminders] = useState(false)
-  const [reminderResults, setReminderResults] = useState(null)
-  const [expandedPreview, setExpandedPreview] = useState(null)
+  const [reminderResults, setReminderResults]   = useState(null)
+  const [expandedPreview, setExpandedPreview]   = useState(null)
 
   // ── Hours Report / reminder state ─────────────────────────────────────────
-  const [hoursReport, setHoursReport] = useState([])
-  const [hoursReportLoading, setHoursReportLoading] = useState(false)
-  const [hoursSearch, setHoursSearch] = useState('')
-  const [hoursCampus, setHoursCampus] = useState('')
-  const [hoursPreviewLoading, setHoursPreviewLoading] = useState(false)
-  const [hoursPreviewData, setHoursPreviewData] = useState(null)
+  const [hoursReport, setHoursReport]                   = useState([])
+  const [hoursReportLoading, setHoursReportLoading]     = useState(false)
+  const [hoursSearch, setHoursSearch]                   = useState('')
+  const [hoursCampus, setHoursCampus]                   = useState('')
+  const [hoursPreviewLoading, setHoursPreviewLoading]   = useState(false)
+  const [hoursPreviewData, setHoursPreviewData]         = useState(null)
   const [sendingHoursReminders, setSendingHoursReminders] = useState(false)
   const [hoursReminderResults, setHoursReminderResults] = useState(null)
   const [expandedHoursPreview, setExpandedHoursPreview] = useState(null)
 
-  // ── Data loaders ─────────────────────────────────────────────────────────
+  // ── Feature 4: CSV Bulk Upload state ─────────────────────────────────────
+  const [csvFile, setCsvFile]         = useState(null)
+  const [csvPreview, setCsvPreview]   = useState(null)
+  // null | { rows: [{...rowData, _errors:[]}], validCount, errorCount }
+  const [csvParsing, setCsvParsing]   = useState(false)
+  const [csvImporting, setCsvImporting] = useState(false)
+  const [csvResults, setCsvResults]   = useState(null)
+  // null | { success: number, failed: number, failedDetails: [{rowNum, error}] }
+  const csvInputRef = useRef(null)
+
+  // ─── Bulk rows factory ────────────────────────────────────────────────────
+
+  function buildInitialBulkRows() {
+    return DOC_TYPES.map(t => ({
+      document_type:   t.value,
+      label:           t.label,
+      abbr:            t.abbr,
+      qualSpecific:    t.qualSpecific,
+      qualification:   '',
+      file:            null,
+      expiry_date:     '',
+      document_number: '',
+      notes:           '',
+    }))
+  }
+
+  const resetBulkModal = () => {
+    setBulkStudentId('')
+    setBulkRows(buildInitialBulkRows())
+    setBulkResults(null)
+  }
+
+  const updateBulkRow = (index, field, value) => {
+    setBulkRows(rows => rows.map((r, i) => i === index ? { ...r, [field]: value } : r))
+  }
+
+  // ─── Data loaders ─────────────────────────────────────────────────────────
+
   const load = useCallback(() => {
     Promise.all([api.get('/compliance'), api.get('/students')]).then(([d, s]) => {
-      setDocs(d.data); setStudents(s.data)
+      setDocs(d.data)
+      setStudents(s.data)
     }).finally(() => setLoading(false))
   }, [])
 
   const loadReport = useCallback(() => {
     setReportLoading(true)
-    api.get('/compliance/report').then(r => setReport(r.data)).finally(() => setReportLoading(false))
+    api.get('/compliance/report')
+      .then(r => setReport(r.data))
+      .finally(() => setReportLoading(false))
   }, [])
 
   const loadEmailLog = useCallback(() => {
@@ -87,21 +423,25 @@ export default function CompliancePage() {
 
   const loadHoursReport = useCallback(() => {
     setHoursReportLoading(true)
-    api.get('/hours/summary').then(r => setHoursReport(r.data)).finally(() => setHoursReportLoading(false))
+    api.get('/hours/summary')
+      .then(r => setHoursReport(r.data))
+      .finally(() => setHoursReportLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { if (activeTab === 'report') loadReport() }, [activeTab, loadReport])
-  useEffect(() => { if (activeTab === 'email_log') loadEmailLog() }, [activeTab, loadEmailLog])
+  useEffect(() => { if (activeTab === 'report')       loadReport()      }, [activeTab, loadReport])
+  useEffect(() => { if (activeTab === 'email_log')    loadEmailLog()    }, [activeTab, loadEmailLog])
   useEffect(() => { if (activeTab === 'hours_report') loadHoursReport() }, [activeTab, loadHoursReport])
 
-  // ── Filters ───────────────────────────────────────────────────────────────
+  // ─── Filters ──────────────────────────────────────────────────────────────
+
   const filtered = docs.filter(d => {
     const student = students.find(s => s.id === d.student_id)
-    const name = student?.full_name?.toLowerCase() || ''
-    if (search && !name.includes(search.toLowerCase()) && !d.document_number?.toLowerCase().includes(search.toLowerCase())) return false
+    const name    = student?.full_name?.toLowerCase() || ''
+    if (search && !name.includes(search.toLowerCase()) &&
+        !d.document_number?.toLowerCase().includes(search.toLowerCase())) return false
     if (filterStatus && d.status !== filterStatus) return false
-    if (filterType && d.document_type !== filterType) return false
+    if (filterType   && d.document_type !== filterType) return false
     return true
   })
 
@@ -111,33 +451,69 @@ export default function CompliancePage() {
     return true
   })
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  // ─── Actions ──────────────────────────────────────────────────────────────
+
   const verify = async id => {
     await api.put(`/compliance/${id}/verify`)
-    toast.success('Document verified'); load()
+    toast.success('Document verified')
+    load()
   }
 
-  const save = async () => {
-    if (!form.student_id || !form.document_type) return toast.error('Student and type required')
-    setSaving(true)
-    try {
-      if (uploadFile) {
+  /**
+   * Feature 2 — Submit all bulk rows that have a file selected.
+   * Each row is submitted as a separate POST /compliance/upload-with-doc call.
+   * If a row has a qualification set, it is prepended to the notes field.
+   */
+  const saveBulk = async () => {
+    if (!bulkStudentId) return toast.error('Please select a student first')
+
+    const activeRows = bulkRows.filter(r => r.file !== null)
+    if (activeRows.length === 0) return toast.error('Please attach at least one file to upload')
+
+    setBulkSaving(true)
+
+    const results = { success: [], failed: [] }
+
+    // Run all uploads in parallel for speed
+    await Promise.allSettled(
+      activeRows.map(async row => {
         const fd = new FormData()
-        Object.entries({ ...form }).forEach(([k, v]) => fd.append(k, v))
-        fd.append('file', uploadFile)
-        await api.post('/compliance/upload-with-doc', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      } else {
-        await api.post('/compliance', form)
-      }
-      toast.success('Document added')
-      setShowModal(false); setUploadFile(null)
-      setForm({ student_id: '', document_type: 'working_with_children_check', document_number: '', issue_date: '', expiry_date: '', notes: '' })
-      load()
-    } catch (err) { toast.error(err.response?.data?.detail || 'Failed') }
-    finally { setSaving(false) }
+        fd.append('student_id',      bulkStudentId)
+        fd.append('document_type',   row.document_type)
+        fd.append('document_number', row.document_number || '')
+        fd.append('expiry_date',     row.expiry_date || '')
+
+        // Compose notes: qualification prefix (for WPA/MOU) + optional user notes
+        const noteParts = []
+        if (row.qualSpecific && row.qualification) {
+          noteParts.push(`Qualification: ${row.qualification}`)
+        }
+        if (row.notes) noteParts.push(row.notes)
+        fd.append('notes', noteParts.join('\n'))
+
+        fd.append('file', row.file)
+
+        try {
+          await api.post('/compliance/upload-with-doc', fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+          results.success.push(row.label)
+        } catch (err) {
+          results.failed.push({
+            label: row.label,
+            error: err.response?.data?.detail || 'Upload failed',
+          })
+        }
+      })
+    )
+
+    setBulkSaving(false)
+    setBulkResults(results)
+    if (results.success.length > 0) load()
   }
 
-  /** Step 1: fetch preview (no emails sent) */
+  // ── Compliance reminder actions (unchanged) ───────────────────────────────
+
   const openReminderPreview = async () => {
     setPreviewLoading(true)
     try {
@@ -151,7 +527,6 @@ export default function CompliancePage() {
     finally { setPreviewLoading(false) }
   }
 
-  /** Hours Step 1: fetch preview (no emails sent) */
   const openHoursReminderPreview = async () => {
     setHoursPreviewLoading(true)
     try {
@@ -165,7 +540,6 @@ export default function CompliancePage() {
     finally { setHoursPreviewLoading(false) }
   }
 
-  /** Hours Step 2: confirmed — actually send */
   const sendHoursReminders = async () => {
     setSendingHoursReminders(true)
     try {
@@ -177,48 +551,175 @@ export default function CompliancePage() {
     finally { setSendingHoursReminders(false) }
   }
 
-  /** Step 2: confirmed — actually send */
   const sendReminders = async () => {
     setSendingReminders(true)
     try {
       const res = await api.post('/compliance/send-reminders')
       setPreviewData(null)
       setReminderResults(res.data)
-      // Refresh email log if that tab is active later
       if (activeTab === 'email_log') loadEmailLog()
     } catch { toast.error('Failed to send reminders') }
     finally { setSendingReminders(false) }
   }
 
-  // ── Summary cards ─────────────────────────────────────────────────────────
+  // ── Feature 4: CSV helpers ─────────────────────────────────────────────────
+
+  /**
+   * Generate and trigger download of the CSV template file entirely client-side.
+   * No backend call required; the template structure is static.
+   */
+  const downloadCsvTemplate = () => {
+    const headers   = 'student_id,student_name,document_type,qualification,file_name,expiry_date,notes'
+    const exampleRow = 'STU001,Jane Smith,working_with_children_check,,WWCC_JaneSmith.pdf,2027-06-30,WWCC card scanned'
+    const notesRow  = `# Valid document_type values: ${VALID_DOC_TYPE_VALUES.join(' | ')}`
+    const qualNote  = '# Valid qualification values: Cert III | Diploma (leave blank for WWCC / First Aid)'
+    const csv = [headers, exampleRow, notesRow, qualNote].join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href     = url
+    link.download = 'compliance_documents_template.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Parse the selected CSV file, validate each row, and populate the preview state.
+   * Called automatically when the user selects a file.
+   */
+  const handleCsvUpload = async (file) => {
+    if (!file) return
+    // Skip comment rows that start with #
+    setCsvFile(file)
+    setCsvPreview(null)
+    setCsvResults(null)
+    setCsvParsing(true)
+
+    try {
+      const text = await file.text()
+      // Filter out comment lines (starting with #) before parsing
+      const cleanedText = text
+        .split(/\r?\n/)
+        .filter(line => !line.trim().startsWith('#'))
+        .join('\n')
+
+      const rawRows = parseCsvText(cleanedText)
+
+      const annotated = rawRows.map(row => ({
+        ...row,
+        _errors: validateCsvRow(row, students),
+      }))
+
+      const validCount = annotated.filter(r => r._errors.length === 0).length
+      const errorCount = annotated.length - validCount
+
+      setCsvPreview({ rows: annotated, validCount, errorCount })
+    } catch (err) {
+      toast.error('Failed to parse CSV file. Ensure it is a valid .csv.')
+      console.error('CSV parse error:', err)
+    } finally {
+      setCsvParsing(false)
+    }
+  }
+
+  /**
+   * Submit all valid CSV rows to POST /api/compliance (metadata only — no files).
+   * The student_id column contains the reference number (e.g. "STU001"), which is
+   * resolved to the student UUID before sending.
+   */
+  const submitCsvImport = async () => {
+    const validRows = (csvPreview?.rows || []).filter(r => r._errors.length === 0)
+    if (validRows.length === 0) return toast.error('No valid rows to submit')
+
+    setCsvImporting(true)
+    let successCount  = 0
+    let failedCount   = 0
+    const failedDetails = []
+
+    for (const row of validRows) {
+      try {
+        // Resolve student reference number -> UUID
+        const student = students.find(s => s.student_id === row.student_id)
+        if (!student) {
+          failedCount++
+          failedDetails.push({ rowNum: row._rowNum, error: `Student "${row.student_id}" not found` })
+          continue
+        }
+
+        // Build the notes field: qualification prefix + user notes + file reference
+        const noteParts = []
+        if (row.qualification) noteParts.push(`Qualification: ${row.qualification}`)
+        if (row.file_name)     noteParts.push(`File reference: ${row.file_name}`)
+        if (row.notes)         noteParts.push(row.notes)
+
+        await api.post('/compliance', {
+          student_id:      student.id,
+          document_type:   row.document_type,
+          document_number: row.file_name || null,     // store file ref in doc number field
+          expiry_date:     row.expiry_date?.trim() || null,
+          notes:           noteParts.join('\n') || null,
+        })
+        successCount++
+      } catch (err) {
+        failedCount++
+        failedDetails.push({
+          rowNum: row._rowNum,
+          error:  err.response?.data?.detail || 'Submission failed',
+        })
+      }
+    }
+
+    setCsvImporting(false)
+    setCsvResults({ success: successCount, failed: failedCount, failedDetails })
+    if (successCount > 0) load()
+  }
+
+  // ─── Summary cards ────────────────────────────────────────────────────────
+
   const summary = {
-    valid: docs.filter(d => d.status === 'valid').length,
+    valid:    docs.filter(d => d.status === 'valid').length,
     expiring: docs.filter(d => d.status === 'expiring_soon').length,
-    expired: docs.filter(d => d.status === 'expired').length,
-    pending: docs.filter(d => d.status === 'pending').length,
+    expired:  docs.filter(d => d.status === 'expired').length,
+    pending:  docs.filter(d => d.status === 'pending').length,
   }
 
   if (loading) return <div className="p-8"><Spinner size="lg" /></div>
 
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <PageHeader title="Compliance" subtitle="Manage student compliance documents"
+
+      {/* Page header */}
+      <PageHeader
+        title="Compliance"
+        subtitle="Manage student compliance documents"
         actions={
-          <button onClick={() => setShowModal(true)} className="btn-primary text-sm flex items-center gap-1">
+          <button
+            onClick={() => { resetBulkModal(); setShowModal(true) }}
+            className="btn-primary text-sm flex items-center gap-1"
+          >
             <Plus size={15} /> Add Document
           </button>
-        } />
+        }
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Valid', count: summary.valid, icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50', filter: 'valid' },
-          { label: 'Expiring Soon', count: summary.expiring, icon: AlertTriangle, color: 'text-yellow-500', bg: 'bg-yellow-50', filter: 'expiring_soon' },
-          { label: 'Expired', count: summary.expired, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', filter: 'expired' },
-          { label: 'Pending Verification', count: summary.pending, icon: AlertTriangle, color: 'text-blue-500', bg: 'bg-blue-50', filter: 'pending' },
+          { label: 'Valid',                count: summary.valid,    icon: CheckCircle,   color: 'text-green-500',  bg: 'bg-green-50',  filter: 'valid'         },
+          { label: 'Expiring Soon',        count: summary.expiring, icon: AlertTriangle, color: 'text-yellow-500', bg: 'bg-yellow-50', filter: 'expiring_soon' },
+          { label: 'Expired',              count: summary.expired,  icon: XCircle,       color: 'text-red-500',    bg: 'bg-red-50',    filter: 'expired'       },
+          { label: 'Pending Verification', count: summary.pending,  icon: AlertTriangle, color: 'text-blue-500',   bg: 'bg-blue-50',   filter: 'pending'       },
         ].map(c => (
-          <div key={c.label} className="card flex items-center gap-3 cursor-pointer hover:shadow-md transition-all"
-            onClick={() => { setFilterStatus(f => f === c.filter ? '' : c.filter); setActiveTab('documents') }}>
+          <div
+            key={c.label}
+            className="card flex items-center gap-3 cursor-pointer hover:shadow-md transition-all"
+            onClick={() => { setFilterStatus(f => f === c.filter ? '' : c.filter); setActiveTab('documents') }}
+          >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.bg} flex-shrink-0`}>
               <c.icon size={20} className={c.color} />
             </div>
@@ -230,94 +731,166 @@ export default function CompliancePage() {
         ))}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
+      {/* Tabs — Feature 4 adds the "Bulk Upload" tab */}
+      <div className="flex flex-wrap gap-1 mb-6 border-b border-gray-200">
         {[
-          { key: 'documents',    label: 'Documents',              icon: FileText   },
-          { key: 'report',       label: 'Compliance Report',       icon: CheckCircle },
-          { key: 'hours_report', label: 'Placement Hours Report',  icon: BarChart2  },
-          { key: 'email_log',    label: 'Email Log',               icon: Mail       },
+          { key: 'documents',    label: 'Documents',             icon: FileText    },
+          { key: 'report',       label: 'Compliance Report',     icon: CheckCircle },
+          { key: 'hours_report', label: 'Placement Hours Report', icon: BarChart2  },
+          { key: 'email_log',    label: 'Email Log',             icon: Mail        },
+          { key: 'bulk_upload',  label: 'Bulk Upload',           icon: Upload      },
         ].map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? 'border-navy text-navy' : 'border-transparent text-gray-500 hover:text-navy'}`}>
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === t.key
+                ? 'border-navy text-navy'
+                : 'border-transparent text-gray-500 hover:text-navy'
+            }`}
+          >
             <t.icon size={15} /> {t.label}
           </button>
         ))}
       </div>
 
-      {/* ── Documents Tab ──────────────────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Documents Tab
+          Feature 3: thead is sticky within its own overflow-auto container
+      ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'documents' && (
         <>
           <div className="flex flex-wrap gap-3 mb-6">
             <SearchInput value={search} onChange={setSearch} placeholder="Search student or document #..." />
-            <Select value={filterStatus} onChange={setFilterStatus} placeholder="All Statuses"
-              options={['valid', 'expiring_soon', 'expired', 'pending'].map(s => ({ value: s, label: s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) }))} />
+            <Select
+              value={filterStatus}
+              onChange={setFilterStatus}
+              placeholder="All Statuses"
+              options={['valid', 'expiring_soon', 'expired', 'pending'].map(s => ({
+                value: s,
+                label: s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+              }))}
+            />
             <Select value={filterType} onChange={setFilterType} placeholder="All Types" options={DOC_TYPES} />
             {(filterStatus || filterType || search) && (
-              <button onClick={() => { setFilterStatus(''); setFilterType(''); setSearch('') }} className="text-sm text-gray-500 hover:text-navy underline">Clear filters</button>
+              <button
+                onClick={() => { setFilterStatus(''); setFilterType(''); setSearch('') }}
+                className="text-sm text-gray-500 hover:text-navy underline"
+              >
+                Clear filters
+              </button>
             )}
           </div>
+
           {filtered.length === 0 ? (
-            <EmptyState icon={CheckCircle} title="No documents found" message="Try adjusting your filters or add a new document." />
+            <EmptyState
+              icon={CheckCircle}
+              title="No documents found"
+              message="Try adjusting your filters or add a new document."
+            />
           ) : (
-            <div className="card p-0 overflow-hidden overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>{['Student', 'Document Type', 'Doc Number', 'Issue Date', 'Expiry Date', 'Status', 'File', 'Verified By', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
-                  ))}</tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filtered.map(d => {
-                    const student = students.find(s => s.id === d.student_id)
-                    const docLabel = DOC_TYPES.find(t => t.value === d.document_type)?.label || d.document_type.replace(/_/g, ' ')
-                    return (
-                      <tr key={d.id} className={`hover:bg-gray-50 ${d.status === 'expired' ? 'bg-red-50/30' : d.status === 'expiring_soon' ? 'bg-yellow-50/30' : ''}`}>
-                        <td className="px-4 py-3">
-                          <p className="text-sm font-medium text-gray-900">{student?.full_name || '—'}</p>
-                          <p className="text-xs text-gray-400">{student?.student_id}</p>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-600">{docLabel}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{d.document_number || '—'}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{d.issue_date ? format(new Date(d.issue_date), 'd MMM yyyy') : '—'}</td>
-                        <td className="px-4 py-3 text-xs">
-                          {d.expiry_date ? (
-                            <span className={d.status === 'expired' ? 'text-red-600 font-medium' : d.status === 'expiring_soon' ? 'text-yellow-600 font-medium' : 'text-gray-500'}>
-                              {format(new Date(d.expiry_date), 'd MMM yyyy')}
-                              {d.days_until_expiry != null && d.days_until_expiry <= 30 && ` (${d.days_until_expiry}d)`}
-                            </span>
-                          ) : '—'}
-                        </td>
-                        <td className="px-4 py-3"><Badge status={d.status} /></td>
-                        <td className="px-4 py-3">{d.file_url ? <a href={d.file_url} target="_blank" rel="noreferrer" className="text-xs text-cyan hover:underline">View</a> : '—'}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{d.verified_by || '—'}</td>
-                        <td className="px-4 py-3">
-                          {!d.verified && (
-                            <button onClick={() => verify(d.id)} className="text-xs text-cyan hover:underline flex items-center gap-1">
-                              <CheckCircle size={12} /> Verify
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className="card p-0 overflow-hidden">
+              {/*
+                Feature 3: overflow-auto + max-height creates a scroll context
+                so that `sticky top-0` on <thead> works correctly.
+                Adjust top-0 to top-[64px] if your navbar overlaps sticky headers.
+              */}
+              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                    <tr>
+                      {['Student', 'Document Type', 'Doc Number', 'Issue Date', 'Expiry Date', 'Status', 'File', 'Verified By', 'Actions'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filtered.map(d => {
+                      const student  = students.find(s => s.id === d.student_id)
+                      const docLabel = DOC_TYPES.find(t => t.value === d.document_type)?.label
+                                    || d.document_type.replace(/_/g, ' ')
+                      return (
+                        <tr
+                          key={d.id}
+                          className={`hover:bg-gray-50 ${
+                            d.status === 'expired'        ? 'bg-red-50/30'    :
+                            d.status === 'expiring_soon'  ? 'bg-yellow-50/30' : ''
+                          }`}
+                        >
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-medium text-gray-900">{student?.full_name || '-'}</p>
+                            <p className="text-xs text-gray-400">{student?.student_id}</p>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{docLabel}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500">{d.document_number || '-'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500">
+                            {d.issue_date ? format(new Date(d.issue_date), 'd MMM yyyy') : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            {d.expiry_date ? (
+                              <span className={
+                                d.status === 'expired'       ? 'text-red-600 font-medium' :
+                                d.status === 'expiring_soon' ? 'text-yellow-600 font-medium' :
+                                'text-gray-500'
+                              }>
+                                {format(new Date(d.expiry_date), 'd MMM yyyy')}
+                                {d.days_until_expiry != null && d.days_until_expiry <= 30 &&
+                                  ` (${d.days_until_expiry}d)`}
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="px-4 py-3"><Badge status={d.status} /></td>
+                          <td className="px-4 py-3">
+                            {d.file_url
+                              ? <a href={d.file_url} target="_blank" rel="noreferrer" className="text-xs text-cyan hover:underline">View</a>
+                              : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500">{d.verified_by || '-'}</td>
+                          <td className="px-4 py-3">
+                            {!d.verified && (
+                              <button
+                                onClick={() => verify(d.id)}
+                                className="text-xs text-cyan hover:underline flex items-center gap-1"
+                              >
+                                <CheckCircle size={12} /> Verify
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>
       )}
 
-      {/* ── Compliance Report Tab ──────────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Compliance Report Tab
+          Feature 3: sticky thead
+      ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'report' && (
         <>
           <div className="flex flex-wrap gap-3 mb-4 items-center">
             <SearchInput value={reportSearch} onChange={setReportSearch} placeholder="Search student..." />
             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={missingOnly} onChange={e => setMissingOnly(e.target.checked)} className="rounded" />
+              <input
+                type="checkbox"
+                checked={missingOnly}
+                onChange={e => setMissingOnly(e.target.checked)}
+                className="rounded"
+              />
               Show incomplete only
             </label>
-            <button onClick={openReminderPreview} disabled={previewLoading} className="btn-secondary text-sm flex items-center gap-1 ml-auto">
+            <button
+              onClick={openReminderPreview}
+              disabled={previewLoading}
+              className="btn-secondary text-sm flex items-center gap-1 ml-auto"
+            >
               <Mail size={15} /> {previewLoading ? 'Loading...' : 'Send Reminders to Incomplete Students'}
             </button>
           </div>
@@ -326,70 +899,105 @@ export default function CompliancePage() {
             <>
               <p className="text-xs text-gray-400 mb-3">
                 Showing {filteredReport.length} student{filteredReport.length !== 1 ? 's' : ''} ·{' '}
-                <span className="text-green-600 font-medium">{filteredReport.filter(r => r.fully_compliant).length} fully compliant</span> ·{' '}
-                <span className="text-red-500 font-medium">{filteredReport.filter(r => !r.fully_compliant).length} incomplete</span>
+                <span className="text-green-600 font-medium">
+                  {filteredReport.filter(r => r.fully_compliant).length} fully compliant
+                </span> ·{' '}
+                <span className="text-red-500 font-medium">
+                  {filteredReport.filter(r => !r.fully_compliant).length} incomplete
+                </span>
               </p>
-              <div className="card p-0 overflow-hidden overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Student</th>
-                      <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Campus</th>
-                      <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Qualification</th>
-                      <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap">Progress</th>
-                      {DOC_TYPES.map(t => (
-                        <th key={t.value} className="px-3 py-3 text-center font-medium text-gray-500 whitespace-nowrap" title={t.label}>{t.abbr}</th>
-                      ))}
-                      <th className="px-4 py-3 text-left font-medium text-gray-500">Outstanding</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filteredReport.map(r => {
-                      const ABBR_MAP = { 'Working with Children Check': 'WWCC', 'Valid First Aid Certificate (including CPR)': 'First Aid', 'First Aid Certificate (incl. CPR)': 'First Aid', 'Work Placement Agreement': 'WPA', 'Memorandum of Understanding (MOU)': 'MOU', 'Memorandum of Understanding': 'MOU' }
-                      const outstandingAbbr = r.outstanding.map(o => ABBR_MAP[o] || o)
-                      return (
-                        <tr key={r.student_id} className={r.fully_compliant ? 'bg-green-50/30' : 'hover:bg-red-50/20'}>
-                          <td className="px-4 py-3"><p className="font-medium text-gray-900">{r.student_name}</p><p className="text-gray-400">{r.student_ref}</p></td>
-                          <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '—'}</td>
-                          <td className="px-3 py-3 text-gray-500">{r.qualification || '—'}</td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-12 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
-                                <div className={`h-1.5 rounded-full ${r.fully_compliant ? 'bg-green-500' : r.submitted_count >= 2 ? 'bg-yellow-400' : 'bg-red-400'}`}
-                                  style={{ width: `${(r.submitted_count / r.required_count) * 100}%` }} />
+              <div className="card p-0 overflow-hidden">
+                <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">Student</th>
+                        <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">Campus</th>
+                        <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">Qualification</th>
+                        <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">Progress</th>
+                        {DOC_TYPES.map(t => (
+                          <th
+                            key={t.value}
+                            className="px-3 py-3 text-center font-medium text-gray-500 whitespace-nowrap bg-gray-50"
+                            title={t.label}
+                          >
+                            {t.abbr}
+                          </th>
+                        ))}
+                        <th className="px-4 py-3 text-left font-medium text-gray-500 bg-gray-50">Outstanding</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredReport.map(r => {
+                        const ABBR_MAP = {
+                          'Working with Children Check': 'WWCC',
+                          'Valid First Aid Certificate (including CPR)': 'First Aid',
+                          'First Aid Certificate (incl. CPR)': 'First Aid',
+                          'Work Placement Agreement': 'WPA',
+                          'Memorandum of Understanding (MOU)': 'MOU',
+                          'Memorandum of Understanding': 'MOU',
+                        }
+                        const outstandingAbbr = r.outstanding.map(o => ABBR_MAP[o] || o)
+                        return (
+                          <tr key={r.student_id} className={r.fully_compliant ? 'bg-green-50/30' : 'hover:bg-red-50/20'}>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-gray-900">{r.student_name}</p>
+                              <p className="text-gray-400">{r.student_ref}</p>
+                            </td>
+                            <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '-'}</td>
+                            <td className="px-3 py-3 text-gray-500">{r.qualification || '-'}</td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-12 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
+                                  <div
+                                    className={`h-1.5 rounded-full ${
+                                      r.fully_compliant     ? 'bg-green-500' :
+                                      r.submitted_count >= 2 ? 'bg-yellow-400' : 'bg-red-400'
+                                    }`}
+                                    style={{ width: `${(r.submitted_count / r.required_count) * 100}%` }}
+                                  />
+                                </div>
+                                <span className={`font-bold whitespace-nowrap ${r.fully_compliant ? 'text-green-600' : 'text-orange-500'}`}>
+                                  {r.submitted_count}/{r.required_count}
+                                </span>
                               </div>
-                              <span className={`font-bold whitespace-nowrap ${r.fully_compliant ? 'text-green-600' : 'text-orange-500'}`}>{r.submitted_count}/{r.required_count}</span>
-                            </div>
-                          </td>
-                          {DOC_TYPES.map(t => {
-                            const docInfo = r.documents?.[t.value]
-                            const statusColor = docInfo?.status === 'expired' ? 'text-red-400' : docInfo?.status === 'expiring_soon' ? 'text-yellow-500' : 'text-green-500'
-                            return (
-                              <td key={t.value} className="px-3 py-3 text-center">
-                                {docInfo?.submitted
-                                  ? <CheckCircle size={15} className={`${statusColor} mx-auto`} title={`${t.abbr}: ${docInfo.status}`} />
-                                  : <XCircle size={15} className="text-red-300 mx-auto" title={`${t.abbr}: not submitted`} />}
-                              </td>
-                            )
-                          })}
-                          <td className="px-4 py-3">
-                            {outstandingAbbr.length === 0
-                              ? <span className="text-green-600 font-medium">✓ Complete</span>
-                              : <span className="text-red-500 font-medium">{outstandingAbbr.join(', ')}</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                {filteredReport.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">No students found</p>}
+                            </td>
+                            {DOC_TYPES.map(t => {
+                              const docInfo   = r.documents?.[t.value]
+                              const statusColor = docInfo?.status === 'expired'       ? 'text-red-400'    :
+                                                  docInfo?.status === 'expiring_soon' ? 'text-yellow-500' :
+                                                  'text-green-500'
+                              return (
+                                <td key={t.value} className="px-3 py-3 text-center">
+                                  {docInfo?.submitted
+                                    ? <CheckCircle size={15} className={`${statusColor} mx-auto`} title={`${t.abbr}: ${docInfo.status}`} />
+                                    : <XCircle size={15} className="text-red-300 mx-auto" title={`${t.abbr}: not submitted`} />}
+                                </td>
+                              )
+                            })}
+                            <td className="px-4 py-3">
+                              {outstandingAbbr.length === 0
+                                ? <span className="text-green-600 font-medium">Complete</span>
+                                : <span className="text-red-500 font-medium">{outstandingAbbr.join(', ')}</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  {filteredReport.length === 0 && (
+                    <p className="text-center text-gray-400 py-8 text-sm">No students found</p>
+                  )}
+                </div>
               </div>
             </>
           )}
         </>
       )}
 
-      {/* ── Email Log Tab ──────────────────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Email Log Tab (unchanged)
+      ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'email_log' && (
         <>
           <div className="flex items-center justify-between mb-4">
@@ -397,8 +1005,11 @@ export default function CompliancePage() {
             <button onClick={loadEmailLog} className="btn-secondary text-sm">Refresh</button>
           </div>
           {emailLogLoading ? <Spinner size="lg" /> : emailLog.length === 0 ? (
-            <EmptyState icon={Mail} title="No emails sent yet"
-              message="Click 'Send Reminders' to send compliance reminder emails. They will appear here." />
+            <EmptyState
+              icon={Mail}
+              title="No emails sent yet"
+              message="Click 'Send Reminders' to send compliance reminder emails. They will appear here."
+            />
           ) : (
             <div className="space-y-3">
               {emailLog.map(c => (
@@ -420,16 +1031,20 @@ export default function CompliancePage() {
                           <summary className="text-xs text-cyan cursor-pointer hover:underline flex items-center gap-1">
                             <Eye size={11} /> View email content
                           </summary>
-                          <pre className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100 max-h-48 overflow-y-auto">{c.body}</pre>
+                          <pre className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100 max-h-48 overflow-y-auto">
+                            {c.body}
+                          </pre>
                         </details>
                       )}
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-xs text-gray-400 flex items-center gap-1 justify-end">
                         <Clock size={11} />
-                        {c.sent_at ? format(new Date(c.sent_at), 'd MMM yyyy, h:mm a') : '—'}
+                        {c.sent_at ? format(new Date(c.sent_at), 'd MMM yyyy, h:mm a') : '-'}
                       </p>
-                      <span className={`mt-1 inline-block text-xs font-medium px-2 py-0.5 rounded-full ${c.sent_successfully ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                      <span className={`mt-1 inline-block text-xs font-medium px-2 py-0.5 rounded-full ${
+                        c.sent_successfully ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                      }`}>
                         {c.sent_successfully ? 'Sent' : 'Failed'}
                       </span>
                     </div>
@@ -441,20 +1056,23 @@ export default function CompliancePage() {
         </>
       )}
 
-      {/* ── Placement Hours Report Tab ────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Placement Hours Report Tab
+          Feature 3: sticky thead
+      ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'hours_report' && (() => {
-        const campuses = [...new Set(hoursReport.map(r => r.campus).filter(Boolean))]
-        const filtered = hoursReport.filter(r => {
+        const campuses        = [...new Set(hoursReport.map(r => r.campus).filter(Boolean))]
+        const filteredHours   = hoursReport.filter(r => {
           if (hoursSearch && !r.student_name?.toLowerCase().includes(hoursSearch.toLowerCase()) &&
               !r.student_ref?.toLowerCase().includes(hoursSearch.toLowerCase())) return false
           if (hoursCampus && (r.campus || '').toLowerCase() !== hoursCampus) return false
           return true
         })
-        const metCount     = filtered.filter(r => (r.completed_hours || 0) >= (r.required_hours || 1)).length
-        const pendingCount = filtered.length - metCount
+        const metCount     = filteredHours.filter(r => (r.completed_hours || 0) >= (r.required_hours || 1)).length
+        const pendingCount = filteredHours.length - metCount
+
         return (
           <>
-            {/* Controls */}
             <div className="flex flex-wrap gap-3 mb-4 items-center">
               <input
                 className="input text-sm py-2 w-56"
@@ -471,23 +1089,27 @@ export default function CompliancePage() {
                 {campuses.map(c => <option key={c} value={c.toLowerCase()}>{c}</option>)}
               </select>
               {(hoursSearch || hoursCampus) && (
-                <button onClick={() => { setHoursSearch(''); setHoursCampus('') }}
-                  className="text-sm text-gray-500 hover:text-navy underline">Clear</button>
+                <button
+                  onClick={() => { setHoursSearch(''); setHoursCampus('') }}
+                  className="text-sm text-gray-500 hover:text-navy underline"
+                >
+                  Clear
+                </button>
               )}
               <button
                 onClick={openHoursReminderPreview}
                 disabled={hoursPreviewLoading}
-                className="btn-secondary text-sm flex items-center gap-1 ml-auto">
+                className="btn-secondary text-sm flex items-center gap-1 ml-auto"
+              >
                 <Mail size={15} />
                 {hoursPreviewLoading ? 'Loading...' : 'Send Reminders to Submit Placement Hours Log'}
               </button>
             </div>
 
-            {/* Summary cards */}
             {!hoursReportLoading && (
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <div className="card text-center py-3">
-                  <p className="text-xl font-bold text-gray-800">{filtered.length}</p>
+                  <p className="text-xl font-bold text-gray-800">{filteredHours.length}</p>
                   <p className="text-xs text-gray-500">Active Students</p>
                 </div>
                 <div className="card text-center py-3">
@@ -502,74 +1124,300 @@ export default function CompliancePage() {
             )}
 
             {hoursReportLoading ? <Spinner size="lg" /> : (
-              <div className="card p-0 overflow-hidden overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      {['Student', 'Campus', 'Qualification', 'Required', 'Completed', 'Unapproved', 'Remaining', 'Progress', 'Status'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filtered.map(r => {
-                      const required  = r.required_hours  || 0
-                      const completed = r.completed_hours || 0
-                      const pending   = r.pending_hours   || 0
-                      const remaining = Math.max(0, required - completed)
-                      const pct       = required > 0 ? Math.min(100, Math.round(completed / required * 100)) : 0
-                      const met       = required > 0 && completed >= required
-                      return (
-                        <tr key={r.student_id} className={met ? 'bg-green-50/30' : 'hover:bg-orange-50/20'}>
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-gray-900">{r.student_name}</p>
-                            <p className="text-gray-400">{r.student_ref}</p>
-                          </td>
-                          <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '—'}</td>
-                          <td className="px-3 py-3 text-gray-500">{r.qualification || '—'}</td>
-                          <td className="px-3 py-3 font-medium text-gray-700">{required}h</td>
-                          <td className="px-3 py-3 font-semibold text-blue-700">{completed}h</td>
-                          <td className="px-3 py-3 text-gray-500">{pending > 0 ? `${pending}h` : '—'}</td>
-                          <td className={`px-3 py-3 font-semibold ${met ? 'text-green-600' : remaining > required * 0.5 ? 'text-red-500' : 'text-orange-500'}`}>
-                            {met ? '—' : `${remaining}h`}
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-16 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
-                                <div
-                                  className={`h-1.5 rounded-full ${met ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}
-                                  style={{ width: `${pct}%` }}
-                                />
+              <div className="card p-0 overflow-hidden">
+                <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                      <tr>
+                        {['Student', 'Campus', 'Qualification', 'Required', 'Completed', 'Unapproved', 'Remaining', 'Progress', 'Status'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredHours.map(r => {
+                        const required  = r.required_hours  || 0
+                        const completed = r.completed_hours || 0
+                        const pending   = r.pending_hours   || 0
+                        const remaining = Math.max(0, required - completed)
+                        const pct       = required > 0 ? Math.min(100, Math.round(completed / required * 100)) : 0
+                        const met       = required > 0 && completed >= required
+                        return (
+                          <tr key={r.student_id} className={met ? 'bg-green-50/30' : 'hover:bg-orange-50/20'}>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-gray-900">{r.student_name}</p>
+                              <p className="text-gray-400">{r.student_ref}</p>
+                            </td>
+                            <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '-'}</td>
+                            <td className="px-3 py-3 text-gray-500">{r.qualification || '-'}</td>
+                            <td className="px-3 py-3 font-medium text-gray-700">{required}h</td>
+                            <td className="px-3 py-3 font-semibold text-blue-700">{completed}h</td>
+                            <td className="px-3 py-3 text-gray-500">{pending > 0 ? `${pending}h` : '-'}</td>
+                            <td className={`px-3 py-3 font-semibold ${
+                              met ? 'text-green-600' : remaining > required * 0.5 ? 'text-red-500' : 'text-orange-500'
+                            }`}>
+                              {met ? '-' : `${remaining}h`}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-16 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
+                                  <div
+                                    className={`h-1.5 rounded-full ${
+                                      met ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-400'
+                                    }`}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <span className={`font-bold whitespace-nowrap ${met ? 'text-green-600' : 'text-orange-500'}`}>
+                                  {pct}%
+                                </span>
                               </div>
-                              <span className={`font-bold whitespace-nowrap ${met ? 'text-green-600' : 'text-orange-500'}`}>{pct}%</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            {met
-                              ? <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">✓ Met</span>
-                              : <span className="text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full">Pending</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                {filtered.length === 0 && (
-                  <p className="text-center text-gray-400 py-8 text-sm">No students found</p>
-                )}
+                            </td>
+                            <td className="px-3 py-3">
+                              {met
+                                ? <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Met</span>
+                                : <span className="text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full">Pending</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  {filteredHours.length === 0 && (
+                    <p className="text-center text-gray-400 py-8 text-sm">No students found</p>
+                  )}
+                </div>
               </div>
             )}
           </>
         )
       })()}
 
-      {/* ════════════ MODALS ════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Feature 4: Bulk Upload Tab
+      ════════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'bulk_upload' && (
+        <div className="max-w-3xl space-y-8">
 
-      {/* Hours Preview Modal — shown BEFORE sending */}
+          {/* ── Step 1: Download template ───────────────────────────────────── */}
+          <div className="card">
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">Step 1 — Download the CSV Template</h3>
+                <p className="text-sm text-gray-500">
+                  Download the template, fill in one row per compliance document, then upload
+                  the completed file in Step 2.
+                </p>
+              </div>
+              <button
+                onClick={downloadCsvTemplate}
+                className="btn-secondary text-sm flex items-center gap-2 flex-shrink-0"
+              >
+                <Download size={15} /> Download CSV Template
+              </button>
+            </div>
+
+            {/* Column reference */}
+            <div className="bg-gray-50 rounded-lg p-4 text-xs text-gray-600 space-y-1.5">
+              <p className="font-semibold text-gray-700 mb-2">Column reference:</p>
+              {[
+                ['student_id',     'Required', 'Student reference number (e.g. STU001) — must match a student in the system'],
+                ['student_name',   'Optional', 'For your reference only — not imported'],
+                ['document_type',  'Required', `One of: ${VALID_DOC_TYPE_VALUES.join(' | ')}`],
+                ['qualification',  'Optional', 'For WPA / MOU rows: use "Cert III" or "Diploma"'],
+                ['file_name',      'Optional', 'File name reference — stored in the Doc Number field (no actual upload)'],
+                ['expiry_date',    'Optional', 'YYYY-MM-DD format (e.g. 2027-06-30)'],
+                ['notes',          'Optional', 'Any additional notes'],
+              ].map(([col, req, desc]) => (
+                <div key={col} className="flex items-start gap-2">
+                  <code className="font-mono font-bold text-navy w-32 flex-shrink-0">{col}</code>
+                  <span className={`w-16 flex-shrink-0 font-medium ${req === 'Required' ? 'text-red-500' : 'text-gray-400'}`}>
+                    {req}
+                  </span>
+                  <span className="text-gray-500">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Step 2: Upload & preview ────────────────────────────────────── */}
+          <div className="card">
+            <h3 className="font-semibold text-gray-900 mb-1">Step 2 — Upload Your CSV File</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Select your completed CSV file. The rows will be validated and shown as a
+              preview before anything is submitted.
+            </p>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className="flex-1">
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={e => handleCsvUpload(e.target.files[0])}
+                  className="block w-full text-sm text-gray-500
+                    file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border
+                    file:border-gray-300 file:text-sm file:bg-gray-50
+                    file:cursor-pointer hover:file:bg-gray-100"
+                />
+              </div>
+              <Upload size={16} className="text-gray-400 flex-shrink-0" />
+            </label>
+
+            {csvParsing && (
+              <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                <Spinner size="sm" /> Parsing file...
+              </div>
+            )}
+          </div>
+
+          {/* ── Preview table (shown after parse) ───────────────────────────── */}
+          {csvPreview && !csvParsing && (
+            <div className="card p-0 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    Preview — {csvPreview.rows.length} row{csvPreview.rows.length !== 1 ? 's' : ''} parsed
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    <span className="text-green-600 font-medium">{csvPreview.validCount} valid</span>
+                    {csvPreview.errorCount > 0 && (
+                      <> · <span className="text-red-500 font-medium">{csvPreview.errorCount} with errors</span></>
+                    )}
+                    {' '}- only valid rows will be submitted.
+                  </p>
+                </div>
+                {/* Allow re-selecting a different file */}
+                <button
+                  onClick={() => { setCsvFile(null); setCsvPreview(null); setCsvResults(null); if (csvInputRef.current) csvInputRef.current.value = '' }}
+                  className="text-xs text-gray-400 hover:text-gray-600 underline"
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div className="overflow-auto" style={{ maxHeight: '400px' }}>
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                    <tr>
+                      {['Row', 'Student ID', 'Document Type', 'Qualification', 'File Name', 'Expiry Date', 'Status'].map(h => (
+                        <th key={h} className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {csvPreview.rows.map((row, i) => {
+                      const hasErrors = row._errors.length > 0
+                      return (
+                        <tr key={i} className={hasErrors ? 'bg-red-50' : 'bg-white hover:bg-green-50/30'}>
+                          <td className="px-3 py-2 font-mono text-gray-400">{row._rowNum}</td>
+                          <td className="px-3 py-2 font-medium text-gray-800">{row.student_id || '-'}</td>
+                          <td className="px-3 py-2 text-gray-700">
+                            <span className="font-mono">
+                              {DOC_TYPES.find(t => t.value === row.document_type)?.abbr || row.document_type || '-'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{row.qualification || '-'}</td>
+                          <td className="px-3 py-2 text-gray-500">{row.file_name || '-'}</td>
+                          <td className="px-3 py-2 text-gray-500">{row.expiry_date || '-'}</td>
+                          <td className="px-3 py-2">
+                            {hasErrors ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 text-red-600 font-medium">
+                                  <XCircle size={12} /> Error
+                                </span>
+                                <ul className="mt-1 list-disc list-inside text-red-500 space-y-0.5">
+                                  {row._errors.map((e, j) => <li key={j}>{e}</li>)}
+                                </ul>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-green-600 font-medium">
+                                <CheckCircle size={12} /> Valid
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Submit button */}
+              {csvPreview.validCount > 0 && !csvResults && (
+                <div className="px-4 py-3 border-t border-gray-100 flex justify-end">
+                  <button
+                    onClick={submitCsvImport}
+                    disabled={csvImporting}
+                    className="btn-primary text-sm flex items-center gap-2"
+                  >
+                    <Upload size={15} />
+                    {csvImporting
+                      ? 'Uploading...'
+                      : `Submit ${csvPreview.validCount} Valid Row${csvPreview.validCount !== 1 ? 's' : ''}`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Results (shown after submission) ────────────────────────────── */}
+          {csvResults && (
+            <div className="card border border-gray-100">
+              <h3 className="font-semibold text-gray-900 mb-3">Upload Results</h3>
+              <div className="flex gap-4 mb-4">
+                <div className="flex-1 bg-green-50 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-green-600">{csvResults.success}</p>
+                  <p className="text-sm text-green-700">Uploaded successfully</p>
+                </div>
+                <div className="flex-1 bg-red-50 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-red-500">{csvResults.failed}</p>
+                  <p className="text-sm text-red-600">Failed</p>
+                </div>
+              </div>
+              {csvResults.failedDetails.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Failed rows:</p>
+                  <div className="border border-red-100 rounded-lg overflow-hidden divide-y divide-red-50">
+                    {csvResults.failedDetails.map((f, i) => (
+                      <div key={i} className="px-3 py-2 text-xs">
+                        <span className="font-medium text-gray-700">Row {f.rowNum}:</span>{' '}
+                        <span className="text-red-500">{f.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-3">
+                Successfully uploaded documents are now visible in the Documents tab.
+              </p>
+              <button
+                onClick={() => {
+                  setCsvFile(null); setCsvPreview(null); setCsvResults(null)
+                  if (csvInputRef.current) csvInputRef.current.value = ''
+                  setActiveTab('documents')
+                }}
+                className="btn-secondary text-sm mt-3"
+              >
+                View Documents
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+                                    MODALS
+      ════════════════════════════════════════════════════════════════════════ */}
+
+      {/* Hours Preview Modal */}
       <Modal open={!!hoursPreviewData} onClose={() => setHoursPreviewData(null)} title="Preview: Placement Hours Log Reminder" size="lg">
         {hoursPreviewData && (
           <div className="space-y-5">
-            {/* Summary */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-blue-50 rounded-xl p-3 text-center">
                 <p className="text-2xl font-bold text-blue-600">{hoursPreviewData.recipient_count}</p>
@@ -584,8 +1432,6 @@ export default function CompliancePage() {
                 <p className="text-xs text-gray-500 font-medium">No email on file (skipped)</p>
               </div>
             </div>
-
-            {/* Subject */}
             <div className="bg-gray-50 rounded-lg px-4 py-3 flex items-center gap-2">
               <Mail size={14} className="text-gray-400 flex-shrink-0" />
               <div>
@@ -593,8 +1439,6 @@ export default function CompliancePage() {
                 <p className="text-sm font-semibold text-gray-800">{hoursPreviewData.subject}</p>
               </div>
             </div>
-
-            {/* Recipients */}
             <div>
               <p className="text-sm font-semibold text-gray-700 mb-2">
                 Recipients ({hoursPreviewData.recipient_count} students):
@@ -605,7 +1449,7 @@ export default function CompliancePage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{r.student_name}</p>
-                        <p className="text-xs text-gray-400">{r.email} · {r.campus || '—'}</p>
+                        <p className="text-xs text-gray-400">{r.email} · {r.campus || '-'}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{r.qualification}</p>
                       </div>
                       <div className="text-right flex-shrink-0 space-y-1">
@@ -613,42 +1457,44 @@ export default function CompliancePage() {
                         <p className="text-xs font-semibold text-red-500">{r.remaining_hours}h remaining</p>
                         <button
                           onClick={() => setExpandedHoursPreview(expandedHoursPreview === r.student_id ? null : r.student_id)}
-                          className="text-xs text-cyan hover:underline flex items-center gap-1 ml-auto">
+                          className="text-xs text-cyan hover:underline flex items-center gap-1 ml-auto"
+                        >
                           <Eye size={11} /> {expandedHoursPreview === r.student_id ? 'Hide' : 'Preview email'}
                         </button>
                       </div>
                     </div>
                     {expandedHoursPreview === r.student_id && (
-                      <pre className="mt-3 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100">{r.email_preview}</pre>
+                      <pre className="mt-3 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100">
+                        {r.email_preview}
+                      </pre>
                     )}
                   </div>
                 ))}
               </div>
             </div>
-
             <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg p-3">
-              ⚠️ Emails will be sent immediately when you click the button below. All emails will be recorded in the <strong>Email Log</strong> tab.
+              Emails will be sent immediately when you click the button below. All emails will be recorded in the <strong>Email Log</strong> tab.
             </p>
-
             <div className="flex justify-between items-center pt-2 border-t border-gray-100">
               <button onClick={() => { setHoursPreviewData(null); setExpandedHoursPreview(null) }} className="btn-secondary">
                 Cancel
               </button>
               <button onClick={sendHoursReminders} disabled={sendingHoursReminders} className="btn-primary flex items-center gap-2">
                 <Mail size={15} />
-                {sendingHoursReminders ? 'Sending…' : `Send to ${hoursPreviewData.recipient_count} Students`}
+                {sendingHoursReminders ? 'Sending...' : `Send to ${hoursPreviewData.recipient_count} Students`}
               </button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Hours Results Modal — shown AFTER sending */}
+      {/* Hours Results Modal */}
       <Modal
         open={!!hoursReminderResults}
         onClose={() => { setHoursReminderResults(null); setActiveTab('email_log') }}
         title="Hours Reminder Emails Sent"
-        size="lg">
+        size="lg"
+      >
         {hoursReminderResults && (
           <div className="space-y-4">
             <div className="flex gap-4">
@@ -691,12 +1537,10 @@ export default function CompliancePage() {
         )}
       </Modal>
 
-      {/* Preview Modal — shown BEFORE sending */}
+      {/* Compliance Reminder Preview Modal */}
       <Modal open={!!previewData} onClose={() => setPreviewData(null)} title="Preview: Compliance Reminder Email" size="lg">
         {previewData && (
           <div className="space-y-5">
-
-            {/* Summary row */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-blue-50 rounded-xl p-3 text-center">
                 <p className="text-2xl font-bold text-blue-600">{previewData.recipient_count}</p>
@@ -711,8 +1555,6 @@ export default function CompliancePage() {
                 <p className="text-xs text-gray-500 font-medium">No email on file (skipped)</p>
               </div>
             </div>
-
-            {/* Email subject */}
             <div className="bg-gray-50 rounded-lg px-4 py-3 flex items-center gap-2">
               <Mail size={14} className="text-gray-400 flex-shrink-0" />
               <div>
@@ -720,19 +1562,17 @@ export default function CompliancePage() {
                 <p className="text-sm font-semibold text-gray-800">{previewData.subject}</p>
               </div>
             </div>
-
-            {/* Recipients list */}
             <div>
               <p className="text-sm font-semibold text-gray-700 mb-2">
                 Recipients ({previewData.recipient_count} students):
               </p>
               <div className="border border-gray-100 rounded-xl overflow-hidden max-h-72 overflow-y-auto divide-y divide-gray-50">
-                {previewData.recipients.map((r, i) => (
+                {previewData.recipients.map(r => (
                   <div key={r.student_id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{r.student_name}</p>
-                        <p className="text-xs text-gray-400">{r.email} · {r.campus || '—'}</p>
+                        <p className="text-xs text-gray-400">{r.email} · {r.campus || '-'}</p>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {r.outstanding.map(o => (
                             <span key={o} className="text-xs bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-full font-medium">{o}</span>
@@ -743,38 +1583,44 @@ export default function CompliancePage() {
                         <span className="text-xs text-orange-500 font-semibold">{r.submitted_count}/4 submitted</span>
                         <button
                           onClick={() => setExpandedPreview(expandedPreview === r.student_id ? null : r.student_id)}
-                          className="block text-xs text-cyan hover:underline mt-1 ml-auto flex items-center gap-1">
+                          className="block text-xs text-cyan hover:underline mt-1 ml-auto flex items-center gap-1"
+                        >
                           <Eye size={11} /> {expandedPreview === r.student_id ? 'Hide' : 'Preview email'}
                         </button>
                       </div>
                     </div>
                     {expandedPreview === r.student_id && (
-                      <pre className="mt-3 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100">{r.email_preview}</pre>
+                      <pre className="mt-3 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100">
+                        {r.email_preview}
+                      </pre>
                     )}
                   </div>
                 ))}
               </div>
             </div>
-
             <p className="text-xs text-gray-400 bg-amber-50 border border-amber-100 rounded-lg p-3">
-              ⚠️ Emails will be sent immediately when you click the button below. All emails will be recorded in the <strong>Email Log</strong> tab for compliance purposes.
+              Emails will be sent immediately when you click the button below. All emails will be recorded in the <strong>Email Log</strong> tab for compliance purposes.
             </p>
-
             <div className="flex justify-between items-center pt-2 border-t border-gray-100">
               <button onClick={() => { setPreviewData(null); setExpandedPreview(null) }} className="btn-secondary">
                 Cancel
               </button>
               <button onClick={sendReminders} disabled={sendingReminders} className="btn-primary flex items-center gap-2">
                 <Mail size={15} />
-                {sendingReminders ? 'Sending…' : `Send to ${previewData.recipient_count} Students`}
+                {sendingReminders ? 'Sending...' : `Send to ${previewData.recipient_count} Students`}
               </button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Results Modal — shown AFTER sending */}
-      <Modal open={!!reminderResults} onClose={() => { setReminderResults(null); if (activeTab !== 'email_log') setActiveTab('email_log') }} title="Reminder Emails Sent" size="lg">
+      {/* Compliance Reminder Results Modal */}
+      <Modal
+        open={!!reminderResults}
+        onClose={() => { setReminderResults(null); if (activeTab !== 'email_log') setActiveTab('email_log') }}
+        title="Reminder Emails Sent"
+        size="lg"
+      >
         {reminderResults && (
           <div className="space-y-4">
             <div className="flex gap-4">
@@ -787,7 +1633,6 @@ export default function CompliancePage() {
                 <p className="text-sm text-gray-500">Skipped</p>
               </div>
             </div>
-
             {reminderResults.sent?.length > 0 && (
               <div>
                 <p className="text-sm font-semibold text-gray-700 mb-2">Sent to:</p>
@@ -804,11 +1649,9 @@ export default function CompliancePage() {
                 </div>
               </div>
             )}
-
             <p className="text-xs bg-blue-50 text-blue-700 rounded-lg p-3">
-              All sent emails are recorded in the <strong>Email Log</strong> tab. Click Close to view them now.
+              All sent emails are recorded in the <strong>Email Log</strong> tab. Click below to view them.
             </p>
-
             <div className="flex justify-end pt-2">
               <button onClick={() => { setReminderResults(null); setActiveTab('email_log') }} className="btn-primary">
                 View Email Log
@@ -818,41 +1661,201 @@ export default function CompliancePage() {
         )}
       </Modal>
 
-      {/* Add Document Modal */}
-      <Modal open={showModal} onClose={() => { setShowModal(false); setUploadFile(null) }} title="Add Compliance Document" size="md">
-        <div className="space-y-4">
-          <FormRow label="Student" required>
-            <Select value={form.student_id} onChange={v => setForm(f => ({ ...f, student_id: v }))}
-              options={students.map(s => ({ value: s.id, label: `${s.full_name} (${s.student_id})` }))} placeholder="Select student..." />
-          </FormRow>
-          <FormRow label="Document Type" required>
-            <Select value={form.document_type} onChange={v => setForm(f => ({ ...f, document_type: v }))} options={DOC_TYPES} placeholder="" />
-          </FormRow>
-          <FormRow label="Document Number">
-            <input className="input" value={form.document_number} onChange={e => setForm(f => ({ ...f, document_number: e.target.value }))} placeholder="e.g. WWC-NSW-123456" />
-          </FormRow>
-          <div className="grid grid-cols-2 gap-4">
-            <FormRow label="Issue Date"><input className="input" type="date" value={form.issue_date} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))} /></FormRow>
-            <FormRow label="Expiry Date"><input className="input" type="date" value={form.expiry_date} onChange={e => setForm(f => ({ ...f, expiry_date: e.target.value }))} /></FormRow>
-          </div>
-          <FormRow label="Upload Document">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div className="flex-1">
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  onChange={e => setUploadFile(e.target.files[0])}
-                  className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-300 file:text-sm file:bg-gray-50 file:cursor-pointer hover:file:bg-gray-100" />
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Feature 1 + 2: Add Compliance Documents (REDESIGNED)
+          - Searchable student combobox at top (Feature 1)
+          - One uploadable row per document type (Feature 2)
+          - WPA / MOU rows include Qualification dropdown (Feature 2)
+          - Only rows with a file attached are submitted (Feature 2)
+          - Results summary shown after submission (Feature 2)
+      ════════════════════════════════════════════════════════════════════════ */}
+      <Modal
+        open={showModal}
+        onClose={() => { setShowModal(false); resetBulkModal() }}
+        title="Add Compliance Documents"
+        size="lg"
+      >
+        {/* ── Post-submission results view ──────────────────────────────────── */}
+        {bulkResults ? (
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              <div className="flex-1 bg-green-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-green-600">{bulkResults.success.length}</p>
+                <p className="text-sm text-green-700">Document{bulkResults.success.length !== 1 ? 's' : ''} uploaded</p>
               </div>
-              <Upload size={16} className="text-gray-400 flex-shrink-0" />
-            </label>
-            {uploadFile && <p className="text-xs text-green-600 mt-1 flex items-center gap-1"><CheckCircle size={12} /> {uploadFile.name}</p>}
-          </FormRow>
-          <FormRow label="Notes"><textarea className="input h-20 resize-none" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></FormRow>
-        </div>
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
-          <button onClick={() => { setShowModal(false); setUploadFile(null) }} className="btn-secondary">Cancel</button>
-          <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Adding...' : 'Add Document'}</button>
-        </div>
+              <div className="flex-1 bg-red-50 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-red-500">{bulkResults.failed.length}</p>
+                <p className="text-sm text-red-600">Failed</p>
+              </div>
+            </div>
+
+            {bulkResults.success.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-gray-700 mb-1">Uploaded successfully:</p>
+                <ul className="space-y-1">
+                  {bulkResults.success.map((label, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-green-700">
+                      <CheckCircle size={14} className="text-green-500 flex-shrink-0" /> {label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {bulkResults.failed.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-gray-700 mb-1">Errors:</p>
+                <ul className="space-y-1">
+                  {bulkResults.failed.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-red-600">
+                      <XCircle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />
+                      <span><strong>{f.label}:</strong> {f.error}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex justify-between pt-4 border-t border-gray-100">
+              <button
+                onClick={() => { resetBulkModal() }}
+                className="btn-secondary"
+              >
+                Add More Documents
+              </button>
+              <button
+                onClick={() => { setShowModal(false); resetBulkModal() }}
+                className="btn-primary"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+
+        ) : (
+          /* ── Upload form view ─────────────────────────────────────────────── */
+          <>
+            {/* Feature 1: Searchable student selector */}
+            <FormRow label="Student" required>
+              <StudentSearchInput
+                students={students}
+                value={bulkStudentId}
+                onChange={setBulkStudentId}
+              />
+            </FormRow>
+
+            {/* Feature 2: Document rows table */}
+            <div className="mt-5">
+              <p className="label mb-2">
+                Documents
+                <span className="text-xs font-normal text-gray-400 ml-2">
+                  Attach a file to any row you want to submit. Rows without a file are ignored.
+                </span>
+              </p>
+
+              {/* Table header */}
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="grid grid-cols-[1fr_140px_1fr_120px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
+                  <p className="text-xs font-medium text-gray-500">Document Type</p>
+                  <p className="text-xs font-medium text-gray-500">Qualification</p>
+                  <p className="text-xs font-medium text-gray-500">File</p>
+                  <p className="text-xs font-medium text-gray-500">Expiry Date</p>
+                </div>
+
+                {/* One row per document type */}
+                {bulkRows.map((row, idx) => (
+                  <div
+                    key={row.document_type}
+                    className={`grid grid-cols-[1fr_140px_1fr_120px] gap-3 items-center px-3 py-3
+                      border-b border-gray-100 last:border-0
+                      ${row.file ? 'bg-green-50/40' : 'bg-white hover:bg-gray-50/50'}
+                    `}
+                  >
+                    {/* Doc type label */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{row.abbr}</p>
+                      <p className="text-xs text-gray-400 leading-tight">{row.label}</p>
+                    </div>
+
+                    {/* Qualification dropdown (only for WPA / MOU) */}
+                    <div>
+                      {row.qualSpecific ? (
+                        <select
+                          value={row.qualification}
+                          onChange={e => updateBulkRow(idx, 'qualification', e.target.value)}
+                          className="input text-xs py-1.5 bg-white"
+                          aria-label={`Qualification for ${row.abbr}`}
+                        >
+                          {QUAL_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-gray-300 px-1">N/A</span>
+                      )}
+                    </div>
+
+                    {/* File picker */}
+                    <div>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        onChange={e => updateBulkRow(idx, 'file', e.target.files[0] || null)}
+                        className="block w-full text-xs text-gray-500
+                          file:mr-2 file:py-1 file:px-2 file:rounded-md file:border
+                          file:border-gray-300 file:text-xs file:bg-gray-50
+                          file:cursor-pointer hover:file:bg-gray-100"
+                        aria-label={`Upload file for ${row.abbr}`}
+                      />
+                      {row.file && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1 truncate">
+                          <CheckCircle size={11} className="flex-shrink-0" />
+                          <span className="truncate">{row.file.name}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Expiry date */}
+                    <div>
+                      <input
+                        type="date"
+                        value={row.expiry_date}
+                        onChange={e => updateBulkRow(idx, 'expiry_date', e.target.value)}
+                        className="input text-xs py-1.5"
+                        aria-label={`Expiry date for ${row.abbr}`}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Submit row */}
+            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
+              <p className="text-xs text-gray-400">
+                {bulkRows.filter(r => r.file).length} file{bulkRows.filter(r => r.file).length !== 1 ? 's' : ''} selected
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowModal(false); resetBulkModal() }}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveBulk}
+                  disabled={bulkSaving || !bulkStudentId || bulkRows.every(r => !r.file)}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Upload size={15} />
+                  {bulkSaving ? 'Uploading...' : 'Add Documents'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </Modal>
+
     </div>
   )
 }
