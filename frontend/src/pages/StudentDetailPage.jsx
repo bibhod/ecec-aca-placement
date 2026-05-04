@@ -16,11 +16,25 @@ import { useAuth } from '../contexts/AuthContext'
 
 // Issue 4 — five required compliance document types
 const COMPLIANCE_DOC_TYPES = [
-  { value: 'working_with_children_check',   label: 'Working with Children Check' },
-  { value: 'first_aid_certificate',          label: 'Valid First Aid Certificate (including CPR)' },
-  { value: 'work_placement_agreement',       label: 'Work Placement Agreement' },
-  { value: 'memorandum_of_understanding',    label: 'Memorandum of Understanding (MOU)' },
+  { value: 'working_with_children_check',   label: 'Working with Children Check',              qualSpecific: false },
+  { value: 'first_aid_certificate',          label: 'Valid First Aid Certificate (including CPR)', qualSpecific: false },
+  { value: 'work_placement_agreement',       label: 'Work Placement Agreement',                 qualSpecific: true  },
+  { value: 'memorandum_of_understanding',    label: 'Memorandum of Understanding (MOU)',         qualSpecific: true  },
 ]
+
+const QUAL_SPECIFIC_SET = new Set(
+  COMPLIANCE_DOC_TYPES.filter(t => t.qualSpecific).map(t => t.value)
+)
+
+const COMP_QUAL_OPTIONS = [
+  { value: 'Cert III', label: 'Cert III' },
+  { value: 'Diploma',  label: 'Diploma'  },
+]
+
+/** Return default qualification value based on document type */
+function defaultQual(docType) {
+  return QUAL_SPECIFIC_SET.has(docType) ? '' : 'N/A'
+}
 
 const ISSUE_TYPES = ['attendance', 'behaviour', 'performance', 'compliance', 'other']
 
@@ -45,6 +59,7 @@ export default function StudentDetailPage() {
   const [showComplianceModal, setShowComplianceModal] = useState(false)
   const [compForm, setCompForm] = useState({
     document_type: 'working_with_children_check',
+    qualification: 'N/A',   // N/A for WWCC/First Aid; Cert III|Diploma for WPA/MOU
     entry_date: new Date().toISOString().split('T')[0],
     issue_date: '', expiry_date: '', notes: ''
   })
@@ -127,16 +142,25 @@ export default function StudentDetailPage() {
   // ── Compliance add (Issue 4, 8) ──────────────────────────────────────────
   const addComplianceDoc = async () => {
     if (!compForm.document_type) return toast.error('Document type required')
+    if (QUAL_SPECIFIC_SET.has(compForm.document_type) && !compForm.qualification)
+      return toast.error('Please select a qualification for this document type')
     try {
-      // Prepend entry_date to notes; issue_date goes to its own field
+      // Build notes: Qualification prefix (for WPA/MOU), then Entry Date, then free-text notes
       const noteParts = []
+      if (QUAL_SPECIFIC_SET.has(compForm.document_type) && compForm.qualification)
+        noteParts.push(`Qualification: ${compForm.qualification}`)
       if (compForm.entry_date) noteParts.push(`Entry Date: ${compForm.entry_date}`)
       if (compForm.notes)      noteParts.push(compForm.notes)
-      const { entry_date, ...rest } = compForm
+      const { entry_date, qualification, ...rest } = compForm
       await api.post('/compliance', { ...rest, student_id: id, notes: noteParts.join('\n') || null })
       toast.success('Document added')
       setShowComplianceModal(false)
-      setCompForm({ document_type: 'working_with_children_check', entry_date: new Date().toISOString().split('T')[0], issue_date: '', expiry_date: '', notes: '' })
+      setCompForm({
+        document_type: 'working_with_children_check',
+        qualification: 'N/A',
+        entry_date: new Date().toISOString().split('T')[0],
+        issue_date: '', expiry_date: '', notes: ''
+      })
       load()
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to add document') }
   }
@@ -727,9 +751,28 @@ export default function StudentDetailPage() {
       <Modal open={showComplianceModal} onClose={() => setShowComplianceModal(false)} title="Add Compliance Document" size="md">
         <div className="space-y-4">
           <FormRow label="Document Type" required>
-            <Select value={compForm.document_type} onChange={v => setCompForm(f => ({ ...f, document_type: v }))}
-              options={COMPLIANCE_DOC_TYPES} placeholder="" />
+            <Select
+              value={compForm.document_type}
+              onChange={v => setCompForm(f => ({ ...f, document_type: v, qualification: defaultQual(v) }))}
+              options={COMPLIANCE_DOC_TYPES}
+              placeholder=""
+            />
           </FormRow>
+
+          {/* Qualification — N/A for WWCC/First Aid; dropdown for WPA/MOU */}
+          <FormRow label="Qualification">
+            {QUAL_SPECIFIC_SET.has(compForm.document_type) ? (
+              <Select
+                value={compForm.qualification}
+                onChange={v => setCompForm(f => ({ ...f, qualification: v }))}
+                options={COMP_QUAL_OPTIONS}
+                placeholder="Select qualification…"
+              />
+            ) : (
+              <input className="input bg-gray-50 text-gray-400 cursor-not-allowed" value="N/A" readOnly />
+            )}
+          </FormRow>
+
           <div className="grid grid-cols-3 gap-4">
             <FormRow label="Entry Date">
               <input className="input" type="date" value={compForm.entry_date} onChange={e => setCompForm(f => ({ ...f, entry_date: e.target.value }))} />

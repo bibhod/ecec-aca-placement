@@ -54,10 +54,15 @@ import { format } from 'date-fns'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DOC_TYPES = [
-  { value: 'working_with_children_check', label: 'Working with Children Check',       abbr: 'WWCC'      },
-  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid' },
-  { value: 'work_placement_agreement',     label: 'Work Placement Agreement',          abbr: 'WPA'       },
-  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding',       abbr: 'MOU'       },
+  { value: 'working_with_children_check', label: 'Working with Children Check',       abbr: 'WWCC',      qualSpecific: false },
+  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid', qualSpecific: false },
+  { value: 'work_placement_agreement',     label: 'Work Placement Agreement',          abbr: 'WPA',       qualSpecific: true  },
+  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding',       abbr: 'MOU',       qualSpecific: true  },
+]
+
+const QUAL_OPTIONS = [
+  { value: 'Cert III', label: 'Cert III' },
+  { value: 'Diploma',  label: 'Diploma'  },
 ]
 
 // Valid document type values (used for CSV validation)
@@ -365,6 +370,8 @@ export default function CompliancePage() {
       document_type:   t.value,
       label:           t.label,
       abbr:            t.abbr,
+      qualSpecific:    t.qualSpecific,
+      qualification:   t.qualSpecific ? '' : 'N/A',
       entry_date:      today,   // date the record is being entered (defaults to today)
       issue_date:      '',      // date printed on the physical document
       expiry_date:     '',
@@ -471,6 +478,7 @@ export default function CompliancePage() {
       activeRows.map(async row => {
         // Prepend Entry Date to notes so it's preserved
         const noteParts = []
+        if (row.qualSpecific && row.qualification) noteParts.push(`Qualification: ${row.qualification}`)
         if (row.entry_date) noteParts.push(`Entry Date: ${row.entry_date}`)
         if (row.notes)      noteParts.push(row.notes)
 
@@ -1265,8 +1273,9 @@ export default function CompliancePage() {
 
                   <div className="rounded-xl border border-gray-200 overflow-hidden">
                     {/* Header */}
-                    <div className="grid grid-cols-[1fr_110px_110px_110px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
+                    <div className="grid grid-cols-[1fr_120px_110px_110px_110px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
                       <p className="text-xs font-medium text-gray-500">Document Type</p>
+                      <p className="text-xs font-medium text-gray-500">Qualification</p>
                       <p className="text-xs font-medium text-gray-500">Entry Date</p>
                       <p className="text-xs font-medium text-gray-500">Issue Date</p>
                       <p className="text-xs font-medium text-gray-500">Expiry Date</p>
@@ -1275,7 +1284,7 @@ export default function CompliancePage() {
                     {bulkRows.map((row, idx) => (
                       <div
                         key={row.document_type}
-                        className={`grid grid-cols-[1fr_110px_110px_110px] gap-3 items-center px-3 py-3
+                        className={`grid grid-cols-[1fr_120px_110px_110px_110px] gap-3 items-center px-3 py-3
                           border-b border-gray-100 last:border-0
                           ${(row.issue_date || row.expiry_date) ? 'bg-green-50/40' : 'bg-white hover:bg-gray-50/50'}
                         `}
@@ -1284,6 +1293,25 @@ export default function CompliancePage() {
                         <div>
                           <p className="text-sm font-medium text-gray-800">{row.abbr}</p>
                           <p className="text-xs text-gray-400 leading-tight">{row.label}</p>
+                        </div>
+
+                        {/* Qualification — N/A for WWCC/First Aid; dropdown for WPA/MOU */}
+                        <div>
+                          {row.qualSpecific ? (
+                            <select
+                              value={row.qualification}
+                              onChange={e => updateBulkRow(idx, 'qualification', e.target.value)}
+                              className="input text-xs py-1.5"
+                              aria-label={`Qualification for ${row.abbr}`}
+                            >
+                              <option value="">Select…</option>
+                              {QUAL_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-xs text-gray-400 px-1">N/A</span>
+                          )}
                         </div>
 
                         {/* Entry Date — defaults to today */}

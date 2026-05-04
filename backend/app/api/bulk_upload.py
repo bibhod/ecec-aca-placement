@@ -119,12 +119,12 @@ def template_compliance():
     from datetime import date as _date
     today = _date.today().isoformat()
     return _make_csv_response(
-        ["student_id", "student_name", "document_type", "entry_date", "issue_date", "expiry_date", "notes"],
+        ["student_id", "student_name", "document_type", "qualification", "entry_date", "issue_date", "expiry_date", "notes"],
         [
-            ["STU2025001", "Jane Smith", "working_with_children_check", today, "", "2027-06-30", "WWCC card scanned"],
-            ["STU2025001", "Jane Smith", "first_aid_certificate",       today, "", "2026-12-31", ""],
-            ["STU2025001", "Jane Smith", "work_placement_agreement",    today, "", "",            ""],
-            ["STU2025001", "Jane Smith", "memorandum_of_understanding", today, "", "",            ""],
+            ["STU2025001", "Jane Smith", "working_with_children_check", "N/A",      today, "", "2027-06-30", "WWCC card scanned"],
+            ["STU2025001", "Jane Smith", "first_aid_certificate",       "N/A",      today, "", "2026-12-31", ""],
+            ["STU2025001", "Jane Smith", "work_placement_agreement",    "Cert III", today, "", "",            ""],
+            ["STU2025001", "Jane Smith", "memorandum_of_understanding", "Cert III", today, "", "",            ""],
         ],
         "template_compliance.csv",
     )
@@ -365,9 +365,14 @@ async def import_compliance(
 ):
     """
     Bulk-import compliance documents from CSV/XLSX.
-    Columns: student_id, student_name (ignored), document_type,
+    Columns: student_id, student_name (ignored), document_type, qualification,
              entry_date, issue_date, expiry_date, notes
+    qualification is required for work_placement_agreement and memorandum_of_understanding;
+    it should be "N/A" (or blank) for working_with_children_check and first_aid_certificate.
     """
+    # Document types that require a qualification value
+    QUAL_SPECIFIC = {"work_placement_agreement", "memorandum_of_understanding"}
+
     content = await file.read()
     rows = _read_file(content, file.filename)
     created, skipped, errors = [], [], []
@@ -379,6 +384,7 @@ async def import_compliance(
 
         sid        = (row.get("student_id")    or "").strip()
         doc_type   = (row.get("document_type") or "").strip()
+        qual_raw   = (row.get("qualification") or "").strip()
         entry_raw  = (row.get("entry_date")    or "").strip()
         issue_raw  = (row.get("issue_date")    or "").strip()
         expiry_raw = (row.get("expiry_date")   or "").strip()
@@ -409,8 +415,10 @@ async def import_compliance(
         expiry_date, err = _parse_date(expiry_raw, "expiry_date")
         if err: errors.append(err); continue
 
-        # Store entry_date in notes for traceability
+        # Build notes: Qualification prefix for WPA/MOU, then Entry Date, then free-text notes
         note_parts = []
+        if doc_type in QUAL_SPECIFIC and qual_raw and qual_raw.upper() != "N/A":
+            note_parts.append(f"Qualification: {qual_raw}")
         if entry_raw:
             note_parts.append(f"Entry Date: {entry_raw}")
         if notes_raw:
