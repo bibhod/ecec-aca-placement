@@ -47,8 +47,6 @@ export default function StudentDetailPage() {
     document_type: 'working_with_children_check',
     document_number: '', issue_date: '', expiry_date: '', notes: ''
   })
-  const [compFile, setCompFile] = useState(null)
-
   // Appointment modal
   const [showApptModal, setShowApptModal] = useState(false)
   const [centres, setCentres] = useState([])
@@ -129,25 +127,9 @@ export default function StudentDetailPage() {
   const addComplianceDoc = async () => {
     if (!compForm.document_type) return toast.error('Document type required')
     try {
-      if (compFile) {
-        // Use the multipart endpoint when a file is attached (Issue 8)
-        const fd = new FormData()
-        fd.append('student_id', id)
-        fd.append('document_type', compForm.document_type)
-        fd.append('document_number', compForm.document_number)
-        fd.append('issue_date', compForm.issue_date)
-        fd.append('expiry_date', compForm.expiry_date)
-        fd.append('notes', compForm.notes)
-        fd.append('file', compFile)
-        await api.post('/compliance/upload-with-doc', fd, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
-      } else {
-        await api.post('/compliance', { ...compForm, student_id: id })
-      }
+      await api.post('/compliance', { ...compForm, student_id: id })
       toast.success('Document added')
       setShowComplianceModal(false)
-      setCompFile(null)
       setCompForm({ document_type: 'working_with_children_check', document_number: '', issue_date: '', expiry_date: '', notes: '' })
       load()
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to add document') }
@@ -749,13 +731,6 @@ export default function StudentDetailPage() {
             <FormRow label="Issue Date"><input className="input" type="date" value={compForm.issue_date} onChange={e => setCompForm(f => ({ ...f, issue_date: e.target.value }))} /></FormRow>
             <FormRow label="Expiry Date"><input className="input" type="date" value={compForm.expiry_date} onChange={e => setCompForm(f => ({ ...f, expiry_date: e.target.value }))} /></FormRow>
           </div>
-          {/* Issue 8 — file upload */}
-          <FormRow label="Upload Document">
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-              onChange={e => setCompFile(e.target.files[0])}
-              className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-300 file:text-sm file:bg-gray-50 file:cursor-pointer" />
-            {compFile && <p className="text-xs text-gray-400 mt-1">Selected: {compFile.name}</p>}
-          </FormRow>
           <FormRow label="Notes"><textarea className="input h-16 resize-none" value={compForm.notes} onChange={e => setCompForm(f => ({ ...f, notes: e.target.value }))} /></FormRow>
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">

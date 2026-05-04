@@ -54,17 +54,10 @@ import { format } from 'date-fns'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DOC_TYPES = [
-  { value: 'working_with_children_check', label: 'Working with Children Check', abbr: 'WWCC',       qualSpecific: false },
-  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid', qualSpecific: false },
-  { value: 'work_placement_agreement',     label: 'Work Placement Agreement',          abbr: 'WPA',       qualSpecific: true  },
-  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding',       abbr: 'MOU',       qualSpecific: true  },
-]
-
-// Qualification options for WPA / MOU rows
-const QUAL_OPTIONS = [
-  { value: '',               label: 'Select qualification...' },
-  { value: 'Certificate III', label: 'Certificate III' },
-  { value: 'Diploma',         label: 'Diploma' },
+  { value: 'working_with_children_check', label: 'Working with Children Check',       abbr: 'WWCC'      },
+  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid' },
+  { value: 'work_placement_agreement',     label: 'Work Placement Agreement',          abbr: 'WPA'       },
+  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding',       abbr: 'MOU'       },
 ]
 
 // Valid document type values (used for CSV validation)
@@ -367,13 +360,13 @@ export default function CompliancePage() {
   // ─── Bulk rows factory ────────────────────────────────────────────────────
 
   function buildInitialBulkRows() {
+    const today = new Date().toISOString().split('T')[0]   // YYYY-MM-DD
     return DOC_TYPES.map(t => ({
       document_type:   t.value,
       label:           t.label,
       abbr:            t.abbr,
-      qualSpecific:    t.qualSpecific,
-      qualification:   '',
-      file:            null,
+      entry_date:      today,   // date the record is being entered (defaults to today)
+      issue_date:      '',      // date printed on the physical document
       expiry_date:     '',
       document_number: '',
       notes:           '',
@@ -459,48 +452,42 @@ export default function CompliancePage() {
   }
 
   /**
-   * Feature 2 — Submit all bulk rows that have a file selected.
-   * Each row is submitted as a separate POST /compliance/upload-with-doc call.
-   * If a row has a qualification set, it is prepended to the notes field.
+   * Feature 2 — Submit all bulk rows that have at least one date filled.
+   * Uses JSON POST /compliance (no file upload).
+   * Entry Date is stored in notes; Issue Date maps to the issue_date field.
    */
   const saveBulk = async () => {
     if (!bulkStudentId) return toast.error('Please select a student first')
 
-    const activeRows = bulkRows.filter(r => r.file !== null)
-    if (activeRows.length === 0) return toast.error('Please attach at least one file to upload')
+    // A row is "active" if the user filled in any date field
+    const activeRows = bulkRows.filter(r => r.entry_date || r.issue_date || r.expiry_date)
+    if (activeRows.length === 0) return toast.error('Please fill in at least one date to add a document')
 
     setBulkSaving(true)
 
     const results = { success: [], failed: [] }
 
-    // Run all uploads in parallel for speed
     await Promise.allSettled(
       activeRows.map(async row => {
-        const fd = new FormData()
-        fd.append('student_id',      bulkStudentId)
-        fd.append('document_type',   row.document_type)
-        fd.append('document_number', row.document_number || '')
-        fd.append('expiry_date',     row.expiry_date || '')
-
-        // Compose notes: qualification prefix (for WPA/MOU) + optional user notes
+        // Prepend Entry Date to notes so it's preserved
         const noteParts = []
-        if (row.qualSpecific && row.qualification) {
-          noteParts.push(`Qualification: ${row.qualification}`)
-        }
-        if (row.notes) noteParts.push(row.notes)
-        fd.append('notes', noteParts.join('\n'))
-
-        fd.append('file', row.file)
+        if (row.entry_date) noteParts.push(`Entry Date: ${row.entry_date}`)
+        if (row.notes)      noteParts.push(row.notes)
 
         try {
-          await api.post('/compliance/upload-with-doc', fd, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+          await api.post('/compliance', {
+            student_id:      bulkStudentId,
+            document_type:   row.document_type,
+            document_number: row.document_number || null,
+            issue_date:      row.issue_date      || null,
+            expiry_date:     row.expiry_date     || null,
+            notes:           noteParts.join('\n') || null,
           })
           results.success.push(row.label)
         } catch (err) {
           results.failed.push({
             label: row.label,
-            error: err.response?.data?.detail || 'Upload failed',
+            error: err.response?.data?.detail || 'Failed to save',
           })
         }
       })
@@ -1196,7 +1183,7 @@ export default function CompliancePage() {
               <div>
                 <h3 className="font-semibold text-gray-900">Add Compliance Documents</h3>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  Select a student, attach files for the documents you want to upload, then click Add Documents.
+                  Select a student, fill in the dates for each document, then click Add Documents.
                 </p>
               </div>
             </div>
@@ -1277,62 +1264,51 @@ export default function CompliancePage() {
                   </p>
 
                   <div className="rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="grid grid-cols-[1fr_140px_1fr_120px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
+                    {/* Header */}
+                    <div className="grid grid-cols-[1fr_110px_110px_110px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
                       <p className="text-xs font-medium text-gray-500">Document Type</p>
-                      <p className="text-xs font-medium text-gray-500">Qualification</p>
-                      <p className="text-xs font-medium text-gray-500">File</p>
+                      <p className="text-xs font-medium text-gray-500">Entry Date</p>
+                      <p className="text-xs font-medium text-gray-500">Issue Date</p>
                       <p className="text-xs font-medium text-gray-500">Expiry Date</p>
                     </div>
 
                     {bulkRows.map((row, idx) => (
                       <div
                         key={row.document_type}
-                        className={`grid grid-cols-[1fr_140px_1fr_120px] gap-3 items-center px-3 py-3
+                        className={`grid grid-cols-[1fr_110px_110px_110px] gap-3 items-center px-3 py-3
                           border-b border-gray-100 last:border-0
-                          ${row.file ? 'bg-green-50/40' : 'bg-white hover:bg-gray-50/50'}
+                          ${(row.issue_date || row.expiry_date) ? 'bg-green-50/40' : 'bg-white hover:bg-gray-50/50'}
                         `}
                       >
+                        {/* Doc type label */}
                         <div>
                           <p className="text-sm font-medium text-gray-800">{row.abbr}</p>
                           <p className="text-xs text-gray-400 leading-tight">{row.label}</p>
                         </div>
 
-                        <div>
-                          {row.qualSpecific ? (
-                            <select
-                              value={row.qualification}
-                              onChange={e => updateBulkRow(idx, 'qualification', e.target.value)}
-                              className="input text-xs py-1.5 bg-white"
-                              aria-label={`Qualification for ${row.abbr}`}
-                            >
-                              {QUAL_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="text-xs text-gray-300 px-1">N/A</span>
-                          )}
-                        </div>
-
+                        {/* Entry Date — defaults to today */}
                         <div>
                           <input
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                            onChange={e => updateBulkRow(idx, 'file', e.target.files[0] || null)}
-                            className="block w-full text-xs text-gray-500
-                              file:mr-2 file:py-1 file:px-2 file:rounded-md file:border
-                              file:border-gray-300 file:text-xs file:bg-gray-50
-                              file:cursor-pointer hover:file:bg-gray-100"
-                            aria-label={`Upload file for ${row.abbr}`}
+                            type="date"
+                            value={row.entry_date}
+                            onChange={e => updateBulkRow(idx, 'entry_date', e.target.value)}
+                            className="input text-xs py-1.5"
+                            aria-label={`Entry date for ${row.abbr}`}
                           />
-                          {row.file && (
-                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1 truncate">
-                              <CheckCircle size={11} className="flex-shrink-0" />
-                              <span className="truncate">{row.file.name}</span>
-                            </p>
-                          )}
                         </div>
 
+                        {/* Issue Date */}
+                        <div>
+                          <input
+                            type="date"
+                            value={row.issue_date}
+                            onChange={e => updateBulkRow(idx, 'issue_date', e.target.value)}
+                            className="input text-xs py-1.5"
+                            aria-label={`Issue date for ${row.abbr}`}
+                          />
+                        </div>
+
+                        {/* Expiry Date */}
                         <div>
                           <input
                             type="date"
@@ -1347,26 +1323,21 @@ export default function CompliancePage() {
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
-                  <p className="text-xs text-gray-400">
-                    {bulkRows.filter(r => r.file).length} file{bulkRows.filter(r => r.file).length !== 1 ? 's' : ''} selected
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => resetBulkModal()}
-                      className="btn-secondary"
-                    >
-                      Reset
-                    </button>
-                    <button
-                      onClick={saveBulk}
-                      disabled={bulkSaving || !bulkStudentId || bulkRows.every(r => !r.file)}
-                      className="btn-primary flex items-center gap-2"
-                    >
-                      <Upload size={15} />
-                      {bulkSaving ? 'Uploading...' : 'Add Documents'}
-                    </button>
-                  </div>
+                <div className="flex justify-end items-center mt-6 pt-4 border-t border-gray-100 gap-3">
+                  <button
+                    onClick={() => resetBulkModal()}
+                    className="btn-secondary"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={saveBulk}
+                    disabled={bulkSaving || !bulkStudentId}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <Upload size={15} />
+                    {bulkSaving ? 'Saving...' : 'Add Documents'}
+                  </button>
                 </div>
               </>
             )}
