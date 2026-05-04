@@ -45,7 +45,8 @@ export default function StudentDetailPage() {
   const [showComplianceModal, setShowComplianceModal] = useState(false)
   const [compForm, setCompForm] = useState({
     document_type: 'working_with_children_check',
-    document_number: '', issue_date: '', expiry_date: '', notes: ''
+    entry_date: new Date().toISOString().split('T')[0],
+    issue_date: '', expiry_date: '', notes: ''
   })
   // Appointment modal
   const [showApptModal, setShowApptModal] = useState(false)
@@ -127,10 +128,15 @@ export default function StudentDetailPage() {
   const addComplianceDoc = async () => {
     if (!compForm.document_type) return toast.error('Document type required')
     try {
-      await api.post('/compliance', { ...compForm, student_id: id })
+      // Prepend entry_date to notes; issue_date goes to its own field
+      const noteParts = []
+      if (compForm.entry_date) noteParts.push(`Entry Date: ${compForm.entry_date}`)
+      if (compForm.notes)      noteParts.push(compForm.notes)
+      const { entry_date, ...rest } = compForm
+      await api.post('/compliance', { ...rest, student_id: id, notes: noteParts.join('\n') || null })
       toast.success('Document added')
       setShowComplianceModal(false)
-      setCompForm({ document_type: 'working_with_children_check', document_number: '', issue_date: '', expiry_date: '', notes: '' })
+      setCompForm({ document_type: 'working_with_children_check', entry_date: new Date().toISOString().split('T')[0], issue_date: '', expiry_date: '', notes: '' })
       load()
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to add document') }
   }
@@ -724,12 +730,16 @@ export default function StudentDetailPage() {
             <Select value={compForm.document_type} onChange={v => setCompForm(f => ({ ...f, document_type: v }))}
               options={COMPLIANCE_DOC_TYPES} placeholder="" />
           </FormRow>
-          <FormRow label="Document Number">
-            <input className="input" value={compForm.document_number} onChange={e => setCompForm(f => ({ ...f, document_number: e.target.value }))} placeholder="e.g. WWC-NSW-123456" />
-          </FormRow>
-          <div className="grid grid-cols-2 gap-4">
-            <FormRow label="Issue Date"><input className="input" type="date" value={compForm.issue_date} onChange={e => setCompForm(f => ({ ...f, issue_date: e.target.value }))} /></FormRow>
-            <FormRow label="Expiry Date"><input className="input" type="date" value={compForm.expiry_date} onChange={e => setCompForm(f => ({ ...f, expiry_date: e.target.value }))} /></FormRow>
+          <div className="grid grid-cols-3 gap-4">
+            <FormRow label="Entry Date">
+              <input className="input" type="date" value={compForm.entry_date} onChange={e => setCompForm(f => ({ ...f, entry_date: e.target.value }))} />
+            </FormRow>
+            <FormRow label="Issue Date">
+              <input className="input" type="date" value={compForm.issue_date} onChange={e => setCompForm(f => ({ ...f, issue_date: e.target.value }))} />
+            </FormRow>
+            <FormRow label="Expiry Date">
+              <input className="input" type="date" value={compForm.expiry_date} onChange={e => setCompForm(f => ({ ...f, expiry_date: e.target.value }))} />
+            </FormRow>
           </div>
           <FormRow label="Notes"><textarea className="input h-16 resize-none" value={compForm.notes} onChange={e => setCompForm(f => ({ ...f, notes: e.target.value }))} /></FormRow>
         </div>
