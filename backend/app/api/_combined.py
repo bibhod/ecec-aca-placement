@@ -6,7 +6,7 @@ Fixes:
   Issue 17 — bulk import for centres
 """
 import csv, io
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
@@ -15,6 +15,7 @@ from datetime import date
 from app.database import get_db
 from app.models import PlacementCentre, Student, Notification, User, HoursLog, ComplianceDocument, Appointment
 from app.utils.auth import get_current_user
+from app.api.audit import write_audit
 
 # ─── CENTRES ────────────────────────────────────────────────────────────────
 centres_router = APIRouter()
@@ -96,6 +97,14 @@ def create_centre(data: CentreCreate, db: Session = Depends(get_db), current_use
     db.add(c)
     db.commit()
     db.refresh(c)
+
+    write_audit(
+        db, current_user, "centre.create", "placement_centre",
+        resource_id=c.id, resource_label=c.centre_name,
+        details={"suburb": c.suburb, "state": c.state},
+    )
+    db.commit()
+
     return centre_to_dict(c)
 
 
@@ -104,11 +113,20 @@ def update_centre(centre_id: str, data: CentreCreate, db: Session = Depends(get_
     c = db.query(PlacementCentre).filter(PlacementCentre.id == centre_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Centre not found")
+    updated_fields = list(data.dict(exclude_none=True).keys())
     for k, v in data.dict(exclude_none=True).items():
         if hasattr(c, k):
             setattr(c, k, v)
     db.commit()
     db.refresh(c)
+
+    write_audit(
+        db, current_user, "centre.update", "placement_centre",
+        resource_id=c.id, resource_label=c.centre_name,
+        details={"updated_fields": updated_fields},
+    )
+    db.commit()
+
     return centre_to_dict(c)
 
 
@@ -117,69 +135,16 @@ def delete_centre(centre_id: str, db: Session = Depends(get_db), current_user: U
     c = db.query(PlacementCentre).filter(PlacementCentre.id == centre_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Centre not found")
+
+    write_audit(
+        db, current_user, "centre.delete", "placement_centre",
+        resource_id=c.id, resource_label=c.centre_name,
+        details={"suburb": c.suburb, "state": c.state},
+    )
+
     db.delete(c)
     db.commit()
     return {"message": "Centre deleted"}
-
-
-@centres_router.post("/bulk-import")
-async def bulk_import_centres(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Bulk-import placement centres from CSV (Issue 17).
-    Expected CSV headers: centre_name, address, suburb, state, postcode,
-    phone, email, director_name, supervisor_name, supervisor_email,
-    supervisor_phone, nqs_rating
-    """
-    content = await file.read()
-    if file.filename.lower().endswith(".csv"):
-        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-        rows = list(reader)
-    elif file.filename.lower().endswith((".xlsx", ".xls")):
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(content))
-        ws = wb.active
-        headers = [str(c.value).strip() for c in next(ws.iter_rows(min_row=1, max_row=1))]
-        rows = [dict(zip(headers, [str(v).strip() if v is not None else "" for v in row])) for row in ws.iter_rows(min_row=2, values_only=True)]
-    else:
-        raise HTTPException(status_code=400, detail="Only .csv and .xlsx files are supported")
-
-    created, errors = [], []
-    for i, row in enumerate(rows, start=2):
-        name = row.get("centre_name", "").strip()
-        if not name:
-            errors.append({"row": i, "error": "centre_name is required"})
-            continue
-        try:
-            c = PlacementCentre(
-                centre_name=name,
-                address=row.get("address") or None,
-                suburb=row.get("suburb") or None,
-                state=row.get("state") or None,
-                postcode=row.get("postcode") or None,
-                phone=row.get("phone") or None,
-                email=row.get("email") or None,
-                director_name=row.get("director_name") or None,
-                supervisor_name=row.get("supervisor_name") or None,
-                supervisor_email=row.get("supervisor_email") or None,
-                supervisor_phone=row.get("supervisor_phone") or None,
-                nqs_rating=row.get("nqs_rating") or None,
-                approved=True,
-            )
-            db.add(c)
-            created.append(name)
-        except Exception as e:
-            errors.append({"row": i, "name": name, "error": str(e)})
-
-    db.commit()
-    return {
-        "message": f"Import complete: {len(created)} created, {len(errors)} errors",
-        "created": created,
-        "errors": errors,
-    }
 
 
 # ─── NOTIFICATIONS ──────────────────────────────────────────────────────────

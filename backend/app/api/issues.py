@@ -7,6 +7,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models import Issue, Student, User
 from app.utils.auth import get_current_user
+from app.api.audit import write_audit
 from app.services.email_service import email_issue_notification
 from app.config import settings
 
@@ -97,6 +98,14 @@ def create_issue(
     db.commit()
     db.refresh(issue)
 
+    # Audit: record issue creation
+    write_audit(
+        db, current_user, "issue.create", "issue",
+        resource_id=issue.id, resource_label=issue.title,
+        details={"student_id": issue.student_id, "issue_type": issue.issue_type, "priority": issue.priority},
+    )
+    db.commit()
+
     # Notify coordinator via email
     coordinator = None
     if student.coordinator_id:
@@ -154,6 +163,16 @@ def update_issue(
 
     db.commit()
     db.refresh(issue)
+
+    # Audit: record issue update (use issue.resolve action when it's a resolution/closure)
+    action = "issue.resolve" if data.status in ("resolved", "closed") else "issue.update"
+    write_audit(
+        db, current_user, action, "issue",
+        resource_id=issue.id, resource_label=issue.title,
+        details={"updated_fields": list(data.dict(exclude_none=True).keys()), "status": issue.status},
+    )
+    db.commit()
+
     return issue_to_dict(issue, db)
 
 
@@ -166,6 +185,14 @@ def delete_issue(
     issue = db.query(Issue).filter(Issue.id == issue_id).first()
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
+
+    # Audit: record issue deletion (before delete, so we can still read fields)
+    write_audit(
+        db, current_user, "issue.delete", "issue",
+        resource_id=issue.id, resource_label=issue.title,
+        details={"student_id": issue.student_id, "issue_type": issue.issue_type},
+    )
+
     db.delete(issue)
     db.commit()
     return {"message": "Issue deleted"}

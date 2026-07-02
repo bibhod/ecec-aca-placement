@@ -23,6 +23,41 @@ logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
 
 
+# ─── Shared dedup helper ──────────────────────────────────────────────────────
+# check_appointment_reminders() (48h/24h, flag-based) and
+# check_visit_advance_reminders() (14/7/3/1-day, Communication-log-based) both
+# cover the "1 day before" case — 24 hours == 1 day — and would otherwise each
+# independently email the student/trainer for the same appointment. Both jobs
+# consult this helper before sending, and both record their send the same way,
+# so whichever job runs first "claims" that appointment + day and the other
+# skips it.
+def _visit_reminder_already_sent(db, appointment, days_ahead: int) -> bool:
+    from app.models import Communication
+    dedup_key = f"visit_reminder_{appointment.id}_{days_ahead}d"
+    if db.query(Communication).filter(Communication.template_used == dedup_key).first():
+        return True
+    if days_ahead == 2 and getattr(appointment, "email_sent_48h", False):
+        return True
+    if days_ahead == 1 and getattr(appointment, "email_sent_24h", False):
+        return True
+    return False
+
+
+def _mark_visit_reminder_sent(db, appointment, days_ahead: int):
+    from app.models import Communication
+    dedup_key = f"visit_reminder_{appointment.id}_{days_ahead}d"
+    db.add(Communication(
+        student_id=appointment.student_id,
+        recipient_email="",
+        recipient_name="system",
+        message_type="email",
+        subject=f"{days_ahead}-day advance reminder — {appointment.title}",
+        body=f"Automated {days_ahead}-day reminder sent for appointment {appointment.id} on {appointment.scheduled_date}.",
+        template_used=dedup_key,
+        sent_successfully=True,
+    ))
+
+
 # ─── Issue 2 / 16.3 — Appointment reminder (48h and 24h) ────────────────────
 def check_appointment_reminders():
     """Send 48h and 24h email + optional SMS reminders for upcoming appointments."""
@@ -38,7 +73,17 @@ def check_appointment_reminders():
                 getattr(Appointment, flag_field) == False,
             ).all()
 
+            days_ahead = hours_ahead // 24
+
             for appt in appointments:
+                if _visit_reminder_already_sent(db, appt, days_ahead):
+                    # Already covered by the other reminder job (or a previous
+                    # run) — just clear this job's own flag so it doesn't keep
+                    # re-checking, without sending a second email.
+                    setattr(appt, flag_field, True)
+                    db.commit()
+                    continue
+
                 student = db.query(Student).filter(Student.id == appt.student_id).first()
                 if not student:
                     continue
@@ -84,6 +129,7 @@ def check_appointment_reminders():
                         "onsite", location_detail, appt.preparation_notes or "", hours_ahead, settings.FRONTEND_URL,
                     )
 
+                _mark_visit_reminder_sent(db, appt, days_ahead)
                 setattr(appt, flag_field, True)
                 db.commit()
                 logger.info(f"Sent {hours_ahead}h reminder for appointment {appt.id}")
@@ -280,7 +326,7 @@ def check_visit_advance_reminders():
     db = SessionLocal()
     try:
         today = date.today()
-        from app.models import Communication, PlacementCentre
+        from app.models import PlacementCentre
         from app.services.email_service import email_appointment_reminder
 
         for days_ahead in [14, 7, 3, 1]:
@@ -292,14 +338,10 @@ def check_visit_advance_reminders():
             ).all()
 
             for appt in appointments:
-                # Unique dedup key per appointment + interval — stored as template_used
-                dedup_key = f"visit_reminder_{appt.id}_{days_ahead}d"
-
-                # Skip if already sent for this appointment + interval
-                already_sent = db.query(Communication).filter(
-                    Communication.template_used == dedup_key
-                ).first()
-                if already_sent:
+                # Skip if already sent for this appointment + interval — by this
+                # job, a previous run, or the 48h/24h job for the 1-day/2-day
+                # overlap case.
+                if _visit_reminder_already_sent(db, appt, days_ahead):
                     continue
 
                 student = db.query(Student).filter(Student.id == appt.student_id).first()
@@ -326,19 +368,13 @@ def check_visit_advance_reminders():
                 hours_ahead_equiv = days_ahead * 24  # pass to email template for label
 
                 # --- Write dedup sentinel BEFORE sending to prevent double-send on restart ---
-                db.add(Communication(
-                    student_id=student.id,
-                    recipient_email="",
-                    recipient_name="system",
-                    message_type="email",
-                    subject=f"{days_ahead}-day advance reminder — {appt.title}",
-                    body=(
-                        f"Automated {days_ahead}-day reminder sent for appointment {appt.id} "
-                        f"({appt.title}) on {appt.scheduled_date}."
-                    ),
-                    template_used=dedup_key,
-                    sent_successfully=True,
-                ))
+                _mark_visit_reminder_sent(db, appt, days_ahead)
+                # Also set the 48h/24h job's own flags for the overlapping days,
+                # so it recognises this appointment+interval as already handled.
+                if days_ahead == 2:
+                    appt.email_sent_48h = True
+                elif days_ahead == 1:
+                    appt.email_sent_24h = True
                 db.commit()
 
                 # --- Send to trainer/assessor ---

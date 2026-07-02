@@ -39,15 +39,17 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Upload, CheckCircle, AlertTriangle, XCircle, Mail,
   FileText, Clock, Eye, BarChart2, Download,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
+import { useAuth } from '../contexts/AuthContext'
 import {
   PageHeader, Spinner, Badge, Modal, FormRow, Select,
-  SearchInput, EmptyState,
+  SearchInput, EmptyState, StatCard,
 } from '../components/ui/index'
 import { format } from 'date-fns'
 
@@ -64,102 +66,6 @@ const QUAL_OPTIONS = [
   { value: 'Cert III', label: 'Cert III' },
   { value: 'Diploma',  label: 'Diploma'  },
 ]
-
-// Valid document type values (used for CSV validation)
-const VALID_DOC_TYPE_VALUES = DOC_TYPES.map(t => t.value)
-
-// ─── CSV Helpers ──────────────────────────────────────────────────────────────
-
-/**
- * Parse a single CSV line, respecting double-quoted fields (RFC 4180).
- * @param {string} line
- * @returns {string[]}
- */
-function parseCsvLine(line) {
-  const result = []
-  let current = ''
-  let inQuote = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      // Escaped quote inside a quoted field: ""
-      if (inQuote && line[i + 1] === '"') { current += '"'; i++ }
-      else { inQuote = !inQuote }
-    } else if (ch === ',' && !inQuote) {
-      result.push(current.trim())
-      current = ''
-    } else {
-      current += ch
-    }
-  }
-  result.push(current.trim())
-  return result
-}
-
-/**
- * Parse full CSV text into an array of row objects keyed by the header row.
- * @param {string} text  Raw CSV string
- * @returns {object[]}   Each object has a `_rowNum` property (1-based, skipping header)
- */
-function parseCsvText(text) {
-  const lines = text.trim().split(/\r?\n/)
-  if (lines.length < 1) return []
-  const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_'))
-  const rows = []
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (!line) continue
-    const values = parseCsvLine(line)
-    const row = { _rowNum: i + 1 }
-    headers.forEach((h, j) => { row[h] = values[j] ?? '' })
-    rows.push(row)
-  }
-  return rows
-}
-
-/**
- * Validate a single parsed CSV row.
- * @param {object} row   Parsed row from parseCsvText
- * @param {object[]} students  Loaded student list for reference-number lookup
- * @returns {string[]}  Array of human-readable error strings (empty = valid)
- */
-function validateCsvRow(row, students) {
-  const errors = []
-
-  // Required: student_id (reference number, not UUID)
-  if (!row.student_id) {
-    errors.push('student_id is required')
-  } else if (!students.some(s => s.student_id === row.student_id)) {
-    errors.push(`Student "${row.student_id}" not found in the system`)
-  }
-
-  // Required: document_type
-  if (!row.document_type) {
-    errors.push('document_type is required')
-  } else if (!VALID_DOC_TYPE_VALUES.includes(row.document_type)) {
-    errors.push(
-      `Invalid document_type "${row.document_type}". ` +
-      `Valid values: ${VALID_DOC_TYPE_VALUES.join(', ')}`
-    )
-  }
-
-  // Optional: qualification — only validated if present
-  if (row.qualification) {
-    const q = row.qualification.toLowerCase().trim()
-    if (!['cert iii', 'certificate iii', 'diploma'].includes(q)) {
-      errors.push(`Invalid qualification "${row.qualification}". Use "Cert III" or "Diploma"`)
-    }
-  }
-
-  // Optional: expiry_date — must be YYYY-MM-DD if provided
-  if (row.expiry_date && row.expiry_date.trim() !== '') {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.expiry_date.trim())) {
-      errors.push('expiry_date must be YYYY-MM-DD format (e.g. 2027-06-30)')
-    }
-  }
-
-  return errors
-}
 
 // ─── Feature 1: Searchable Student Combobox ──────────────────────────────────
 
@@ -310,16 +216,17 @@ function StudentSearchInput({ students, value, onChange }) {
 // ─── Main Page Component ──────────────────────────────────────────────────────
 
 export default function CompliancePage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
 
   // ── Tab & shared UI state ─────────────────────────────────────────────────
   const [activeTab, setActiveTab]         = useState('documents')
   const [docs, setDocs]                   = useState([])
   const [students, setStudents]           = useState([])
   const [report, setReport]               = useState([])
-  const [emailLog, setEmailLog]           = useState([])
+
   const [loading, setLoading]             = useState(true)
   const [reportLoading, setReportLoading] = useState(false)
-  const [emailLogLoading, setEmailLogLoading] = useState(false)
   const [filterStatus, setFilterStatus]   = useState('')
   const [filterType, setFilterType]       = useState('')
   const [filterLevel, setFilterLevel]     = useState('')
@@ -351,23 +258,11 @@ export default function CompliancePage() {
   // ── Hours Report / reminder state ─────────────────────────────────────────
   const [hoursReport, setHoursReport]                   = useState([])
   const [hoursReportLoading, setHoursReportLoading]     = useState(false)
-  const [hoursSearch, setHoursSearch]                   = useState('')
-  const [hoursCampus, setHoursCampus]                   = useState('')
   const [hoursPreviewLoading, setHoursPreviewLoading]   = useState(false)
   const [hoursPreviewData, setHoursPreviewData]         = useState(null)
   const [sendingHoursReminders, setSendingHoursReminders] = useState(false)
   const [hoursReminderResults, setHoursReminderResults] = useState(null)
   const [expandedHoursPreview, setExpandedHoursPreview] = useState(null)
-
-  // ── Feature 4: CSV Bulk Upload state ─────────────────────────────────────
-  const [csvFile, setCsvFile]         = useState(null)
-  const [csvPreview, setCsvPreview]   = useState(null)
-  // null | { rows: [{...rowData, _errors:[]}], validCount, errorCount }
-  const [csvParsing, setCsvParsing]   = useState(false)
-  const [csvImporting, setCsvImporting] = useState(false)
-  const [csvResults, setCsvResults]   = useState(null)
-  // null | { success: number, failed: number, failedDetails: [{rowNum, error}] }
-  const csvInputRef = useRef(null)
 
   // ─── Bulk rows factory ────────────────────────────────────────────────────
 
@@ -413,20 +308,6 @@ export default function CompliancePage() {
       .finally(() => setReportLoading(false))
   }, [])
 
-  const loadEmailLog = useCallback(() => {
-    setEmailLogLoading(true)
-    api.get('/communications').then(r => {
-      const filtered = r.data.filter(c =>
-        c.template_used === 'compliance_reminder_bulk' ||
-        c.template_used === 'hours_log_reminder' ||
-        c.subject?.toLowerCase().includes('compliance') ||
-        c.subject?.toLowerCase().includes('outstanding') ||
-        c.subject?.toLowerCase().includes('hours log')
-      )
-      setEmailLog(filtered)
-    }).finally(() => setEmailLogLoading(false))
-  }, [])
-
   const loadHoursReport = useCallback(() => {
     setHoursReportLoading(true)
     api.get('/hours/summary')
@@ -443,7 +324,6 @@ export default function CompliancePage() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (activeTab === 'report')       loadReport()      }, [activeTab, loadReport])
-  useEffect(() => { if (activeTab === 'email_log')    loadEmailLog()    }, [activeTab, loadEmailLog])
   useEffect(() => { if (activeTab === 'hours_report') loadHoursReport() }, [activeTab, loadHoursReport])
   useEffect(() => { if (activeTab === 'wpa_mou')      loadWpaMouStatus() }, [activeTab, loadWpaMouStatus])
 
@@ -556,7 +436,6 @@ export default function CompliancePage() {
       const res = await api.post('/compliance/send-hours-reminders')
       setHoursPreviewData(null)
       setHoursReminderResults(res.data)
-      if (activeTab === 'email_log') loadEmailLog()
     } catch { toast.error('Failed to send reminders') }
     finally { setSendingHoursReminders(false) }
   }
@@ -567,122 +446,8 @@ export default function CompliancePage() {
       const res = await api.post('/compliance/send-reminders')
       setPreviewData(null)
       setReminderResults(res.data)
-      if (activeTab === 'email_log') loadEmailLog()
     } catch { toast.error('Failed to send reminders') }
     finally { setSendingReminders(false) }
-  }
-
-  // ── Feature 4: CSV helpers ─────────────────────────────────────────────────
-
-  /**
-   * Generate and trigger download of the CSV template file entirely client-side.
-   * No backend call required; the template structure is static.
-   */
-  const downloadCsvTemplate = () => {
-    const headers   = 'student_id,student_name,document_type,qualification,expiry_date,notes'
-    const exampleRow = 'STU001,Jane Smith,working_with_children_check,,2027-06-30,WWCC card scanned'
-    const notesRow  = `# Valid document_type values: ${VALID_DOC_TYPE_VALUES.join(' | ')}`
-    const qualNote  = '# Valid qualification values: Cert III | Diploma (leave blank for WWCC / First Aid)'
-    const csv = [headers, exampleRow, notesRow, qualNote].join('\n')
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href     = url
-    link.download = 'compliance_documents_template.csv'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }
-
-  /**
-   * Parse the selected CSV file, validate each row, and populate the preview state.
-   * Called automatically when the user selects a file.
-   */
-  const handleCsvUpload = async (file) => {
-    if (!file) return
-    // Skip comment rows that start with #
-    setCsvFile(file)
-    setCsvPreview(null)
-    setCsvResults(null)
-    setCsvParsing(true)
-
-    try {
-      const text = await file.text()
-      // Filter out comment lines (starting with #) before parsing
-      const cleanedText = text
-        .split(/\r?\n/)
-        .filter(line => !line.trim().startsWith('#'))
-        .join('\n')
-
-      const rawRows = parseCsvText(cleanedText)
-
-      const annotated = rawRows.map(row => ({
-        ...row,
-        _errors: validateCsvRow(row, students),
-      }))
-
-      const validCount = annotated.filter(r => r._errors.length === 0).length
-      const errorCount = annotated.length - validCount
-
-      setCsvPreview({ rows: annotated, validCount, errorCount })
-    } catch (err) {
-      toast.error('Failed to parse CSV file. Ensure it is a valid .csv.')
-      console.error('CSV parse error:', err)
-    } finally {
-      setCsvParsing(false)
-    }
-  }
-
-  /**
-   * Submit all valid CSV rows to POST /api/compliance (metadata only — no files).
-   * The student_id column contains the reference number (e.g. "STU001"), which is
-   * resolved to the student UUID before sending.
-   */
-  const submitCsvImport = async () => {
-    const validRows = (csvPreview?.rows || []).filter(r => r._errors.length === 0)
-    if (validRows.length === 0) return toast.error('No valid rows to submit')
-
-    setCsvImporting(true)
-    let successCount  = 0
-    let failedCount   = 0
-    const failedDetails = []
-
-    for (const row of validRows) {
-      try {
-        // Resolve student reference number -> UUID
-        const student = students.find(s => s.student_id === row.student_id)
-        if (!student) {
-          failedCount++
-          failedDetails.push({ rowNum: row._rowNum, error: `Student "${row.student_id}" not found` })
-          continue
-        }
-
-        // Build the notes field: qualification prefix + user notes
-        const noteParts = []
-        if (row.qualification) noteParts.push(`Qualification: ${row.qualification}`)
-        if (row.notes)         noteParts.push(row.notes)
-
-        await api.post('/compliance', {
-          student_id:      student.id,
-          document_type:   row.document_type,
-          expiry_date:     row.expiry_date?.trim() || null,
-          notes:           noteParts.join('\n') || null,
-        })
-        successCount++
-      } catch (err) {
-        failedCount++
-        failedDetails.push({
-          rowNum: row._rowNum,
-          error:  err.response?.data?.detail || 'Submission failed',
-        })
-      }
-    }
-
-    setCsvImporting(false)
-    setCsvResults({ success: successCount, failed: failedCount, failedDetails })
-    if (successCount > 0) load()
   }
 
   // ─── Summary cards ────────────────────────────────────────────────────────
@@ -710,24 +475,13 @@ export default function CompliancePage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Valid',                count: summary.valid,    icon: CheckCircle,   color: 'text-green-500',  bg: 'bg-green-50',  filter: 'valid'         },
-          { label: 'Expiring Soon',        count: summary.expiring, icon: AlertTriangle, color: 'text-yellow-500', bg: 'bg-yellow-50', filter: 'expiring_soon' },
-          { label: 'Expired',              count: summary.expired,  icon: XCircle,       color: 'text-red-500',    bg: 'bg-red-50',    filter: 'expired'       },
-          { label: 'Pending Verification', count: summary.pending,  icon: AlertTriangle, color: 'text-blue-500',   bg: 'bg-blue-50',   filter: 'pending'       },
+          { label: 'Valid',                value: summary.valid,    icon: CheckCircle,   color: 'green',  filter: 'valid'         },
+          { label: 'Expiring Soon',        value: summary.expiring, icon: AlertTriangle, color: 'yellow', filter: 'expiring_soon' },
+          { label: 'Expired',              value: summary.expired,  icon: XCircle,       color: 'red',    filter: 'expired'       },
+          { label: 'Pending Verification', value: summary.pending,  icon: AlertTriangle, color: 'cyan',   filter: 'pending'       },
         ].map(c => (
-          <div
-            key={c.label}
-            className="card flex items-center gap-3 cursor-pointer hover:shadow-md transition-all"
-            onClick={() => { setFilterStatus(f => f === c.filter ? '' : c.filter); setActiveTab('documents') }}
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.bg} flex-shrink-0`}>
-              <c.icon size={20} className={c.color} />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-gray-900">{c.count}</p>
-              <p className="text-xs text-gray-500">{c.label}</p>
-            </div>
-          </div>
+          <StatCard key={c.label} label={c.label} value={c.value} icon={c.icon} color={c.color}
+            onClick={() => { setFilterStatus(f => f === c.filter ? '' : c.filter); setActiveTab('documents') }} />
         ))}
       </div>
 
@@ -737,9 +491,7 @@ export default function CompliancePage() {
           { key: 'documents',    label: 'Documents',             icon: FileText    },
           { key: 'report',       label: 'Compliance Report',     icon: CheckCircle },
           { key: 'wpa_mou',      label: 'WPA/MOU by Level',       icon: CheckCircle },
-          { key: 'hours_report', label: 'Placement Hours Report', icon: BarChart2  },
-          { key: 'email_log',    label: 'Email Log',             icon: Mail        },
-          { key: 'bulk_upload',  label: 'Bulk Upload',           icon: Upload      },
+          { key: 'hours_report', label: 'Hours Reminders',       icon: BarChart2  },
         ].map(t => (
           <button
             key={t.key}
@@ -857,12 +609,16 @@ export default function CompliancePage() {
                           <td className="px-4 py-3 text-xs text-gray-500">{d.verified_by || '-'}</td>
                           <td className="px-4 py-3">
                             {!d.verified && (
-                              <button
-                                onClick={() => verify(d.id)}
-                                className="text-xs text-cyan hover:underline flex items-center gap-1"
-                              >
-                                <CheckCircle size={12} /> Verify
-                              </button>
+                              isAdmin ? (
+                                <button
+                                  onClick={() => verify(d.id)}
+                                  className="text-xs text-cyan hover:underline flex items-center gap-1"
+                                >
+                                  <CheckCircle size={12} /> Verify
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400">Admin only</span>
+                              )
                             )}
                           </td>
                         </tr>
@@ -1003,67 +759,6 @@ export default function CompliancePage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          Email Log Tab (unchanged)
-      ════════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'email_log' && (
-        <>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-gray-500">All compliance-related emails sent via this system</p>
-            <button onClick={loadEmailLog} className="btn-secondary text-sm">Refresh</button>
-          </div>
-          {emailLogLoading ? <Spinner size="lg" /> : emailLog.length === 0 ? (
-            <EmptyState
-              icon={Mail}
-              title="No emails sent yet"
-              message="Click 'Send Reminders' to send compliance reminder emails. They will appear here."
-            />
-          ) : (
-            <div className="space-y-3">
-              {emailLog.map(c => (
-                <div key={c.id} className={`card border ${c.sent_successfully ? 'border-gray-100' : 'border-red-200 bg-red-50/20'}`}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {c.sent_successfully
-                          ? <CheckCircle size={14} className="text-green-500 flex-shrink-0" />
-                          : <XCircle size={14} className="text-red-400 flex-shrink-0" />}
-                        <p className="text-sm font-semibold text-gray-900 truncate">{c.subject || '(No subject)'}</p>
-                      </div>
-                      <p className="text-xs text-gray-500 mb-1">
-                        To: <span className="font-medium text-gray-700">{c.recipient_name}</span>
-                        {c.recipient_email && <span className="text-gray-400"> &lt;{c.recipient_email}&gt;</span>}
-                      </p>
-                      {c.body && (
-                        <details className="mt-2">
-                          <summary className="text-xs text-cyan cursor-pointer hover:underline flex items-center gap-1">
-                            <Eye size={11} /> View email content
-                          </summary>
-                          <pre className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap font-sans border border-gray-100 max-h-48 overflow-y-auto">
-                            {c.body}
-                          </pre>
-                        </details>
-                      )}
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xs text-gray-400 flex items-center gap-1 justify-end">
-                        <Clock size={11} />
-                        {c.sent_at ? format(new Date(c.sent_at), 'd MMM yyyy, h:mm a') : '-'}
-                      </p>
-                      <span className={`mt-1 inline-block text-xs font-medium px-2 py-0.5 rounded-full ${
-                        c.sent_successfully ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-                      }`}>
-                        {c.sent_successfully ? 'Sent' : 'Failed'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════
           WPA / MOU Submission Status by Qualification Level
       ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'wpa_mou' && (() => {
@@ -1072,11 +767,9 @@ export default function CompliancePage() {
           if (wpaMouMissingOnly && r.fully_submitted) return false
           return true
         })
-        const StatusChip = ({ item }) => {
-          if (!item.submitted) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-600">Missing</span>
-          if (!item.verified)  return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Submitted</span>
-          return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Verified</span>
-        }
+        const StatusChip = ({ item }) => (
+          <Badge status={!item.submitted ? 'missing' : !item.verified ? 'submitted' : 'verified'} />
+        )
         return (
           <>
             <p className="text-xs text-gray-500 mb-3">
@@ -1136,45 +829,24 @@ export default function CompliancePage() {
           Feature 3: sticky thead
       ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'hours_report' && (() => {
-        const campuses        = [...new Set(hoursReport.map(r => r.campus).filter(Boolean))]
-        const filteredHours   = hoursReport.filter(r => {
-          if (hoursSearch && !r.student_name?.toLowerCase().includes(hoursSearch.toLowerCase()) &&
-              !r.student_ref?.toLowerCase().includes(hoursSearch.toLowerCase())) return false
-          if (hoursCampus && (r.campus || '').toLowerCase() !== hoursCampus) return false
-          return true
-        })
-        const metCount     = filteredHours.filter(r => (r.completed_hours || 0) >= (r.required_hours || 1)).length
-        const pendingCount = filteredHours.length - metCount
+        const metCount     = hoursReport.filter(r => (r.completed_hours || 0) >= (r.required_hours || 1)).length
+        const pendingCount = hoursReport.length - metCount
 
         return (
           <>
-            <div className="flex flex-wrap gap-3 mb-4 items-center">
-              <input
-                className="input text-sm py-2 w-56"
-                placeholder="Search student name or ID..."
-                value={hoursSearch}
-                onChange={e => setHoursSearch(e.target.value)}
-              />
-              <select
-                className="input text-sm py-2 w-44"
-                value={hoursCampus}
-                onChange={e => setHoursCampus(e.target.value)}
-              >
-                <option value="">All Campuses</option>
-                {campuses.map(c => <option key={c} value={c.toLowerCase()}>{c}</option>)}
-              </select>
-              {(hoursSearch || hoursCampus) && (
-                <button
-                  onClick={() => { setHoursSearch(''); setHoursCampus('') }}
-                  className="text-sm text-gray-500 hover:text-navy underline"
-                >
-                  Clear
-                </button>
-              )}
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-4 text-sm text-blue-800 flex flex-wrap items-center gap-2">
+              <span>
+                The full per-student, per-qualification-level hours breakdown now lives on the{' '}
+                <Link to="/hours" className="font-medium underline hover:no-underline">Hours Tracking</Link> page.
+                This tab is for sending reminders to students with outstanding placement hours.
+              </span>
+            </div>
+
+            <div className="flex justify-end mb-4">
               <button
                 onClick={openHoursReminderPreview}
                 disabled={hoursPreviewLoading}
-                className="btn-secondary text-sm flex items-center gap-1 ml-auto"
+                className="btn-secondary text-sm flex items-center gap-1"
               >
                 <Mail size={15} />
                 {hoursPreviewLoading ? 'Loading...' : 'Send Reminders to Submit Placement Hours Log'}
@@ -1182,87 +854,14 @@ export default function CompliancePage() {
             </div>
 
             {!hoursReportLoading && (
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="card text-center py-3">
-                  <p className="text-xl font-bold text-gray-800">{filteredHours.length}</p>
-                  <p className="text-xs text-gray-500">Active Students</p>
-                </div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="card text-center py-3">
                   <p className="text-xl font-bold text-green-600">{metCount}</p>
-                  <p className="text-xs text-gray-500">Hours Requirement Met</p>
+                  <p className="text-xs text-gray-500">Students — Hours Requirement Met</p>
                 </div>
                 <div className="card text-center py-3">
                   <p className="text-xl font-bold text-orange-500">{pendingCount}</p>
-                  <p className="text-xs text-gray-500">Hours Still Pending</p>
-                </div>
-              </div>
-            )}
-
-            {hoursReportLoading ? <Spinner size="lg" /> : (
-              <div className="card p-0 overflow-hidden">
-                <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
-                      <tr>
-                        {['Student', 'Campus', 'Qualification', 'Required', 'Completed', 'Unapproved', 'Remaining', 'Progress', 'Status'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {filteredHours.map(r => {
-                        const required  = r.required_hours  || 0
-                        const completed = r.completed_hours || 0
-                        const pending   = r.pending_hours   || 0
-                        const remaining = Math.max(0, required - completed)
-                        const pct       = required > 0 ? Math.min(100, Math.round(completed / required * 100)) : 0
-                        const met       = required > 0 && completed >= required
-                        return (
-                          <tr key={r.student_id} className={met ? 'bg-green-50/30' : 'hover:bg-orange-50/20'}>
-                            <td className="px-4 py-3">
-                              <p className="font-medium text-gray-900">{r.student_name}</p>
-                              <p className="text-gray-400">{r.student_ref}</p>
-                            </td>
-                            <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '-'}</td>
-                            <td className="px-3 py-3 text-gray-500">{r.qualification || '-'}</td>
-                            <td className="px-3 py-3 font-medium text-gray-700">{required}h</td>
-                            <td className="px-3 py-3 font-semibold text-blue-700">{completed}h</td>
-                            <td className="px-3 py-3 text-gray-500">{pending > 0 ? `${pending}h` : '-'}</td>
-                            <td className={`px-3 py-3 font-semibold ${
-                              met ? 'text-green-600' : remaining > required * 0.5 ? 'text-red-500' : 'text-orange-500'
-                            }`}>
-                              {met ? '-' : `${remaining}h`}
-                            </td>
-                            <td className="px-3 py-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-16 bg-gray-200 rounded-full h-1.5 flex-shrink-0">
-                                  <div
-                                    className={`h-1.5 rounded-full ${
-                                      met ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-400'
-                                    }`}
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                                <span className={`font-bold whitespace-nowrap ${met ? 'text-green-600' : 'text-orange-500'}`}>
-                                  {pct}%
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">
-                              {met
-                                ? <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Met</span>
-                                : <span className="text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full">Pending</span>}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                  {filteredHours.length === 0 && (
-                    <p className="text-center text-gray-400 py-8 text-sm">No students found</p>
-                  )}
+                  <p className="text-xs text-gray-500">Students — Hours Still Pending</p>
                 </div>
               </div>
             )}

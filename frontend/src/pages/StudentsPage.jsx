@@ -157,7 +157,10 @@ export default function StudentsPage() {
     try {
       const fd = new FormData()
       fd.append('file', importFile)
-      const r = await api.post('/students/bulk-import', fd, {
+      // Consolidated onto the same canonical import endpoint used by the
+      // site-wide Bulk Upload page, so there's one validated code path for
+      // student CSV/Excel imports instead of two with different rules.
+      const r = await api.post('/bulk/import/students', fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setImportResult(r.data)
@@ -303,7 +306,7 @@ export default function StudentsPage() {
           <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-800">
             <p className="font-semibold mb-2">CSV/Excel format requirements:</p>
             <p className="text-xs font-mono bg-blue-100 p-2 rounded overflow-x-auto">
-              student_id, full_name, email, phone, qualification, campus, status, required_hours, course_start_date, course_end_date
+              student_id, full_name, email, phone, qualification, campus, status, required_hours, course_start_date, course_end_date, placement_start_date, placement_end_date, notes
             </p>
             <p className="text-xs mt-2">Qualifications: CHC30121, CHC50121, CHC30125, CHC50125</p>
             <p className="text-xs">Date format: YYYY-MM-DD (e.g. 2025-03-01)</p>
@@ -325,7 +328,7 @@ export default function StudentsPage() {
               {importResult.skipped.length > 0 && (
                 <div className="mt-2">
                   <p className="text-xs font-medium text-yellow-700 mb-1">Skipped (already exist):</p>
-                  {importResult.skipped.map((s, i) => <p key={i} className="text-xs text-yellow-600">{s.student_id}</p>)}
+                  <p className="text-xs text-yellow-600">{importResult.skipped.map(s => s?.student_id || s).join(', ')}</p>
                 </div>
               )}
             </div>

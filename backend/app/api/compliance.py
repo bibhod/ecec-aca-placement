@@ -15,9 +15,9 @@ from datetime import date, datetime
 from app.database import get_db
 from app.models import (
     ComplianceDocument, Student, User, COMPLIANCE_DOC_TYPE_CHOICES,
-    QUALIFICATION_LEVEL_CHOICES, qualification_level_for_code,
+    QUALIFICATION_LEVEL_CHOICES, qualification_level_for_code, required_hours_for_level,
 )
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
 
 router = APIRouter()
@@ -55,6 +55,25 @@ def _extract_qualification_level(d: ComplianceDocument) -> Optional[str]:
 
 
 WPA_MOU_DOC_TYPES = ("work_placement_agreement", "memorandum_of_understanding")
+
+
+# ─── Required-hours helper (single source of truth) ──────────────────────────
+# Previously duplicated (with copy-pasted qualification-substring logic) in two
+# separate reminder functions below. Now both defer to the same models.py
+# mapping used everywhere else (Hours Tracking, WPA/MOU status, etc.) so a
+# student's "required hours" figure can't drift between screens/emails.
+def _required_hours_for_student(student) -> float:
+    level = qualification_level_for_code(student.qualification)
+    return required_hours_for_level(level) or float(student.required_hours or 0)
+
+
+def _qualification_label(student) -> str:
+    level = qualification_level_for_code(student.qualification)
+    if level == "Cert III":
+        return f"Certificate III in ECEC ({student.qualification})"
+    if level == "Diploma":
+        return f"Diploma of ECEC ({student.qualification})"
+    return student.qualification or "Unknown"
 
 
 def doc_to_dict(d: ComplianceDocument, default_level: Optional[str] = None) -> dict:
@@ -299,7 +318,7 @@ async def upload_document_file(
 def verify_document(
     doc_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     doc = db.query(ComplianceDocument).filter(ComplianceDocument.id == doc_id).first()
     if not doc:
@@ -691,22 +710,6 @@ def get_hours_reminder_preview(
     Cert III (qualification contains '30') = 160 h required.
     Diploma  (qualification contains '50') = 288 h required.
     """
-    def _required(student) -> float:
-        qual = (student.qualification or "").lower()
-        if "30" in qual:
-            return 160.0
-        if "50" in qual:
-            return 288.0
-        return float(student.required_hours or 0)
-
-    def _qual_label(student) -> str:
-        qual = (student.qualification or "").lower()
-        if "30" in qual:
-            return f"Certificate III in ECEC ({student.qualification})"
-        if "50" in qual:
-            return f"Diploma of ECEC ({student.qualification})"
-        return student.qualification or "Unknown"
-
     students_list = db.query(Student).filter(Student.status == "current").all()
     recipients, met_count, no_email_count = [], 0, 0
 
@@ -714,10 +717,10 @@ def get_hours_reminder_preview(
         if not s.email:
             no_email_count += 1
             continue
-        required  = _required(s)
+        required  = _required_hours_for_student(s)
         completed = float(s.completed_hours or 0)
         remaining = max(0.0, required - completed)
-        qual_label = _qual_label(s)
+        qual_label = _qualification_label(s)
 
         if required > 0 and completed >= required:
             met_count += 1
@@ -766,22 +769,6 @@ def send_hours_reminders(
     from app.services.email_service import send_email, _base_template
     from app.models import Communication
 
-    def _required(student) -> float:
-        qual = (student.qualification or "").lower()
-        if "30" in qual:
-            return 160.0
-        if "50" in qual:
-            return 288.0
-        return float(student.required_hours or 0)
-
-    def _qual_label(student) -> str:
-        qual = (student.qualification or "").lower()
-        if "30" in qual:
-            return f"Certificate III in ECEC ({student.qualification})"
-        if "50" in qual:
-            return f"Diploma of ECEC ({student.qualification})"
-        return student.qualification or "Unknown"
-
     students_list = db.query(Student).filter(Student.status == "current").all()
     sent, skipped = [], []
 
@@ -790,10 +777,10 @@ def send_hours_reminders(
             skipped.append({"student": s.full_name, "reason": "No email address"})
             continue
 
-        required  = _required(s)
+        required  = _required_hours_for_student(s)
         completed = float(s.completed_hours or 0)
         remaining = max(0.0, required - completed)
-        qual_label = _qual_label(s)
+        qual_label = _qualification_label(s)
 
         if required > 0 and completed >= required:
             skipped.append({"student": s.full_name, "reason": "Hours requirement met"})

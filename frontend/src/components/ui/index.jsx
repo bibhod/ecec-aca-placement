@@ -91,6 +91,8 @@ export function Badge({ status, label }) {
     critical: 'badge-red', high: 'badge-yellow', medium: 'badge-blue', low: 'badge-green',
     // Location
     online: 'badge-blue', onsite: 'badge-green', phone: 'badge-gray',
+    // Document / hours submission status
+    missing: 'badge-red', submitted: 'badge-yellow', verified: 'badge-green',
   }
   const cls = map[status] || 'badge-gray'
   return <span className={cls}>{label || status?.replace(/_/g, ' ')}</span>

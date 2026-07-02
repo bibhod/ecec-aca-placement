@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models import User
 from app.utils.auth import get_current_user, get_password_hash, require_admin
+from app.api.audit import write_audit
 
 router = APIRouter()
 
@@ -78,6 +79,15 @@ def create_user(
     db.add(u)
     db.commit()
     db.refresh(u)
+
+    # Audit: record user creation
+    write_audit(
+        db, current_user, "user.create", "user",
+        resource_id=u.id, resource_label=f"{u.full_name} ({u.email})",
+        details={"role": u.role, "campus": u.campus},
+    )
+    db.commit()
+
     return user_to_dict(u)
 
 
@@ -116,6 +126,15 @@ def update_user(
 
     db.commit()
     db.refresh(u)
+
+    # Audit: record user update
+    write_audit(
+        db, current_user, "user.update", "user",
+        resource_id=u.id, resource_label=f"{u.full_name} ({u.email})",
+        details={"updated_fields": list(data.dict(exclude_none=True).keys())},
+    )
+    db.commit()
+
     return user_to_dict(u)
 
 
@@ -132,4 +151,13 @@ def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     u.is_active = False
     db.commit()
+
+    # Audit: record user deactivation
+    write_audit(
+        db, current_user, "user.deactivate", "user",
+        resource_id=u.id, resource_label=f"{u.full_name} ({u.email})",
+        details={"role": u.role},
+    )
+    db.commit()
+
     return {"message": "User deactivated"}

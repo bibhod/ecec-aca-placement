@@ -16,6 +16,7 @@ import logging
 from app.database import get_db
 from app.models import Communication, Student, User, EmailTemplate
 from app.utils.auth import get_current_user
+from app.api.audit import write_audit
 from app.services.email_service import send_email, base_template as _base_template
 from app.services.sms_service import send_sms
 
@@ -183,6 +184,15 @@ def update_template(
         t.is_active = data.is_active
     db.commit()
     db.refresh(t)
+
+    # Audit: record template update
+    write_audit(
+        db, current_user, "communication.template_update", "communication_template",
+        resource_id=t.id, resource_label=t.label,
+        details={"updated_fields": list(data.dict(exclude_none=True).keys())},
+    )
+    db.commit()
+
     return {
         "id": t.id, "name": t.name, "label": t.label,
         "subject_template": t.subject_template,
@@ -212,6 +222,15 @@ def create_template(
     db.add(t)
     db.commit()
     db.refresh(t)
+
+    # Audit: record template creation
+    write_audit(
+        db, current_user, "communication.template_create", "communication_template",
+        resource_id=t.id, resource_label=t.label,
+        details={"name": t.name},
+    )
+    db.commit()
+
     return {"id": t.id, "name": t.name, "label": t.label}
 
 
@@ -255,6 +274,15 @@ def send_communication(
     )
     db.add(comm)
     db.commit()
+
+    # Audit: record communication send
+    write_audit(
+        db, current_user, "communication.send", "communication",
+        resource_id=comm.id, resource_label=f"Email to {comm.recipient_name} ({comm.recipient_email})",
+        details={"student_id": comm.student_id, "subject": comm.subject, "message_type": comm.message_type, "sent_successfully": comm.sent_successfully},
+    )
+    db.commit()
+
     return {"message": "Email sent" if success else "Email failed", "success": success, "error": error_msg}
 
 
@@ -292,6 +320,15 @@ def send_sms_message(
     )
     db.add(comm)
     db.commit()
+
+    # Audit: record communication send
+    write_audit(
+        db, current_user, "communication.send", "communication",
+        resource_id=comm.id, resource_label=f"SMS to {comm.recipient_name} ({comm.recipient_phone})",
+        details={"student_id": comm.student_id, "message_type": comm.message_type, "sent_successfully": comm.sent_successfully},
+    )
+    db.commit()
+
     return {"message": "SMS sent" if success else "SMS failed", "success": success, "error": error_msg}
 
 
@@ -355,6 +392,15 @@ def send_template_email(
     )
     db.add(comm)
     db.commit()
+
+    # Audit: record communication send
+    write_audit(
+        db, current_user, "communication.send", "communication",
+        resource_id=comm.id, resource_label=f"Template email to {comm.recipient_name} ({comm.recipient_email})",
+        details={"student_id": comm.student_id, "template_used": comm.template_used, "subject": comm.subject, "sent_successfully": comm.sent_successfully},
+    )
+    db.commit()
+
     return {
         "message": "Template email sent" if success else "Template email failed",
         "success": success,

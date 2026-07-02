@@ -4,7 +4,7 @@ Fixes:
   Issue 3  — bulk create endpoint so UI can submit multiple rows in one session
   Issue 19 — smart validation: flag shifts >10h and duplicate dates per student
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional, List
@@ -16,7 +16,7 @@ from app.models import (
     HoursLog, Student, User,
     QUALIFICATION_LEVEL_CHOICES, qualification_level_for_code, required_hours_for_level,
 )
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
 
 router = APIRouter()
@@ -298,7 +298,7 @@ def create_hours_bulk(
 def approve_hours(
     log_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     log = db.query(HoursLog).filter(HoursLog.id == log_id).first()
     if not log:
@@ -323,7 +323,7 @@ def approve_hours(
 def reject_hours(
     log_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     log = db.query(HoursLog).filter(HoursLog.id == log_id).first()
     if not log:
@@ -340,7 +340,7 @@ def reject_hours(
 def delete_hours_log(
     log_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     log = db.query(HoursLog).filter(HoursLog.id == log_id).first()
     if not log:
@@ -351,63 +351,3 @@ def delete_hours_log(
     db.delete(log)
     db.commit()
     return {"message": "Hours log deleted"}
-
-
-# ─── Issue 17 — Bulk import hours from CSV/Excel ─────────────────────────────
-@router.post("/bulk-import-file")
-async def bulk_import_hours_file(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Import hours logs from CSV or Excel.
-    Expected columns: student_id (ref), log_date (YYYY-MM-DD), hours, activity_description
-    """
-    import csv, io as _io
-    from fastapi import UploadFile, File
-
-    content = await file.read()
-    rows = []
-    if file.filename.lower().endswith(".csv"):
-        rows = list(csv.DictReader(_io.StringIO(content.decode("utf-8-sig"))))
-    elif file.filename.lower().endswith((".xlsx", ".xls")):
-        import openpyxl
-        wb = openpyxl.load_workbook(_io.BytesIO(content))
-        ws = wb.active
-        headers = [str(c.value).strip() for c in next(ws.iter_rows(min_row=1, max_row=1))]
-        rows = [dict(zip(headers, [str(v).strip() if v is not None else "" for v in row]))
-                for row in ws.iter_rows(min_row=2, values_only=True)]
-    else:
-        raise HTTPException(status_code=400, detail="Only .csv and .xlsx supported")
-
-    created, errors = [], []
-    for i, row in enumerate(rows, start=2):
-        sid = row.get("student_id", "").strip()
-        log_date = row.get("log_date", "").strip()
-        hours_val = row.get("hours", "").strip()
-        if not sid or not log_date or not hours_val:
-            errors.append({"row": i, "error": "Missing student_id, log_date or hours"}); continue
-        student = db.query(Student).filter(Student.student_id == sid).first()
-        if not student:
-            errors.append({"row": i, "error": f"Student '{sid}' not found"}); continue
-        try:
-            hrs = float(hours_val)
-            qual_level = (row.get("qualification_level") or "").strip() or qualification_level_for_code(student.qualification)
-            log = HoursLog(
-                student_id=student.id,
-                log_date=date.fromisoformat(log_date),
-                hours=hrs,
-                qualification_level=qual_level,
-                activity_description=row.get("activity_description") or None,
-                approved=False,
-                flagged_unrealistic=hrs > 10,
-                created_by=current_user.id,
-            )
-            db.add(log)
-            student.completed_hours = (student.completed_hours or 0) + hrs
-            created.append(f"{sid}/{log_date}")
-        except Exception as e:
-            errors.append({"row": i, "error": str(e)})
-    db.commit()
-    return {"message": f"{len(created)} entries imported, {len(errors)} errors", "created": created, "errors": errors}

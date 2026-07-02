@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState } from 'react'
 import api from '../utils/api'
+import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { CheckCircle, XCircle, Clock, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { PageHeader, Spinner, ProgressBar, Badge, Modal, FormRow, Select } from '../components/ui/index'
@@ -26,6 +27,8 @@ function levelForQualification(code) {
 }
 
 export function HoursPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [summary, setSummary] = useState([])
   const [logs, setLogs] = useState([])
   const [students, setStudents] = useState([])
@@ -170,10 +173,14 @@ export function HoursPage() {
                   <td className="px-4 py-3"><Badge status={l.approved ? 'approved' : 'pending'} /></td>
                   <td className="px-4 py-3">
                     {!l.approved && (
-                      <div className="flex gap-2">
-                        <button onClick={() => approve(l.id)} className="text-xs text-green-600 hover:underline flex items-center gap-1"><CheckCircle size={12} /> Approve</button>
-                        <button onClick={() => reject(l.id)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><XCircle size={12} /> Reject</button>
-                      </div>
+                      isAdmin ? (
+                        <div className="flex gap-2">
+                          <button onClick={() => approve(l.id)} className="text-xs text-green-600 hover:underline flex items-center gap-1"><CheckCircle size={12} /> Approve</button>
+                          <button onClick={() => reject(l.id)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><XCircle size={12} /> Reject</button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">Admin approval required</span>
+                      )
                     )}
                   </td>
                 </tr>

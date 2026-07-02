@@ -5,8 +5,8 @@ Fixes:
   Issue 13 — bulk import from CSV/Excel
   Issue 17 — bulk upload endpoint
 """
-import csv, io, uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional, List
@@ -16,8 +16,11 @@ from datetime import date
 from sqlalchemy import func as sqlfunc
 
 from app.database import get_db
-from app.models import Student, PlacementCentre, ComplianceDocument, HoursLog, User, QUALIFICATION_CHOICES
-from app.utils.auth import get_current_user
+from app.models import (
+    Student, PlacementCentre, ComplianceDocument, HoursLog, User, QUALIFICATION_CHOICES,
+    qualification_level_for_code, required_hours_for_level,
+)
+from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
 
 router = APIRouter()
@@ -191,10 +194,14 @@ def create_student(
     if data.qualification not in QUALIFICATION_CHOICES:
         raise HTTPException(status_code=400, detail=f"Invalid qualification. Valid: {QUALIFICATION_CHOICES}")
 
-    # Auto-set hours based on qualification
+    # Auto-set hours based on qualification level (single source of truth —
+    # same mapping used by Hours Tracking / WPA-MOU status / reminder emails).
+    # Only overrides the client-sent default (160), so an explicit custom
+    # required_hours value from the caller is still respected.
     required_hours = data.required_hours
-    if data.qualification in ("CHC50121", "CHC50125") and required_hours == 160:
-        required_hours = 288
+    default_for_level = required_hours_for_level(qualification_level_for_code(data.qualification))
+    if default_for_level and required_hours == 160:
+        required_hours = default_for_level
 
     s = Student(
         student_id=data.student_id,
@@ -542,94 +549,19 @@ def generate_placement_completion(
 def delete_student(
     student_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     s = db.query(Student).filter(Student.id == student_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Student not found")
+
+    # Audit: record student deletion (before delete, so fields are still readable)
+    write_audit(
+        db, current_user, "student.delete", "student",
+        resource_id=s.id, resource_label=f"{s.full_name} ({s.student_id})",
+        details={"student_id": s.student_id, "qualification": s.qualification, "campus": s.campus},
+    )
+
     db.delete(s)
     db.commit()
     return {"message": "Student deleted"}
-
-
-# ─── Issue 13 / 17 — Bulk Import from CSV/Excel ──────────────────────────────
-@router.post("/bulk-import")
-async def bulk_import_students(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Import students from a CSV or Excel (.xlsx) file.
-    Expected CSV columns (header row required):
-      student_id, full_name, email, phone, qualification, campus,
-      status, required_hours, course_start_date, course_end_date
-    Issue 13 — fixes broken Bulk Import.
-    """
-    filename = file.filename.lower()
-    content = await file.read()
-
-    rows = []
-    if filename.endswith(".csv"):
-        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-        rows = list(reader)
-    elif filename.endswith((".xlsx", ".xls")):
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(content))
-        ws = wb.active
-        headers = [str(c.value).strip() for c in next(ws.iter_rows(min_row=1, max_row=1))]
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            rows.append(dict(zip(headers, [str(v).strip() if v is not None else "" for v in row])))
-    else:
-        raise HTTPException(status_code=400, detail="Only .csv and .xlsx files are supported")
-
-    created, skipped, errors = [], [], []
-    for i, row in enumerate(rows, start=2):
-        sid = row.get("student_id", "").strip()
-        name = row.get("full_name", "").strip()
-        qual = row.get("qualification", "").strip()
-        campus = row.get("campus", "sydney").strip()
-
-        if not sid or not name or not qual:
-            errors.append({"row": i, "error": "Missing required fields: student_id, full_name, qualification"})
-            continue
-
-        if qual not in QUALIFICATION_CHOICES:
-            errors.append({"row": i, "error": f"Invalid qualification '{qual}'"})
-            continue
-
-        existing = db.query(Student).filter(Student.student_id == sid).first()
-        if existing:
-            skipped.append({"row": i, "student_id": sid, "reason": "Already exists"})
-            continue
-
-        try:
-            req_hours = float(row.get("required_hours", 0) or 0)
-            if req_hours == 0:
-                req_hours = 288 if qual in ("CHC50121", "CHC50125") else 160
-
-            s = Student(
-                student_id=sid,
-                full_name=name,
-                email=row.get("email") or None,
-                phone=row.get("phone") or None,
-                qualification=qual,
-                campus=campus,
-                status=row.get("status", "current"),
-                required_hours=req_hours,
-                completed_hours=0,
-                course_start_date=date.fromisoformat(row["course_start_date"]) if row.get("course_start_date") else None,
-                course_end_date=date.fromisoformat(row["course_end_date"]) if row.get("course_end_date") else None,
-            )
-            db.add(s)
-            created.append(sid)
-        except Exception as e:
-            errors.append({"row": i, "student_id": sid, "error": str(e)})
-
-    db.commit()
-    return {
-        "message": f"Import complete: {len(created)} created, {len(skipped)} skipped, {len(errors)} errors",
-        "created": created,
-        "skipped": skipped,
-        "errors": errors,
-    }

@@ -21,6 +21,7 @@ from app.models import (
     UNITS_CHC30125, UNITS_CHC50125, VISIT_LIMITS,
 )
 from app.utils.auth import get_current_user
+from app.api.audit import write_audit
 from app.services.email_service import email_appointment_reminder
 from app.services.sms_service import sms_appointment_reminder
 
@@ -264,6 +265,14 @@ def create_appointment(
     )
     db.add(a); db.commit(); db.refresh(a)
 
+    # Audit: record appointment creation
+    write_audit(
+        db, current_user, "appointment.create", "appointment",
+        resource_id=a.id, resource_label=f"{a.title} ({a.visit_reference})",
+        details={"student_id": a.student_id, "appointment_type": a.appointment_type, "scheduled_date": str(a.scheduled_date)},
+    )
+    db.commit()
+
     # ── Notifications ─────────────────────────────────────────────────────
     centre = db.query(PlacementCentre).filter(PlacementCentre.id == data.placement_centre_id).first() if data.placement_centre_id else None
     location = (
@@ -335,6 +344,15 @@ def update_appointment(
         if f == "scheduled_date": a.scheduled_date = date.fromisoformat(v)
         elif hasattr(a, f): setattr(a, f, v)
     db.commit(); db.refresh(a)
+
+    # Audit: record appointment update
+    write_audit(
+        db, current_user, "appointment.update", "appointment",
+        resource_id=a.id, resource_label=f"{a.title} ({a.visit_reference})",
+        details={"updated_fields": list(data.dict(exclude_none=True).keys())},
+    )
+    db.commit()
+
     return appt_to_dict(a, db)
 
 
@@ -342,6 +360,14 @@ def update_appointment(
 def delete_appointment(appt_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: raise HTTPException(404, "Not found")
+
+    # Audit: record appointment deletion (before delete, so we can still read fields)
+    write_audit(
+        db, current_user, "appointment.delete", "appointment",
+        resource_id=a.id, resource_label=f"{a.title} ({a.visit_reference})",
+        details={"student_id": a.student_id, "appointment_type": a.appointment_type, "scheduled_date": str(a.scheduled_date)},
+    )
+
     db.delete(a); db.commit()
     return {"message": "Deleted"}
 

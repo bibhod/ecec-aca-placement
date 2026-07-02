@@ -16,6 +16,7 @@ from app.models import (
     Student, PlacementCentre, HoursLog, Appointment, User,
     ComplianceDocument, COMPLIANCE_DOC_TYPE_CHOICES,
     QUALIFICATION_CHOICES, UNITS_CHC30125, UNITS_CHC50125,
+    qualification_level_for_code, required_hours_for_level,
 )
 from app.utils.auth import get_current_user
 
@@ -180,7 +181,7 @@ async def import_students(
             errors.append(date_error); continue
 
         try:
-            hrs = float(row.get("required_hours") or 0) or (288 if "50" in qual else 160)
+            hrs = float(row.get("required_hours") or 0) or required_hours_for_level(qualification_level_for_code(qual)) or 160
             s = Student(
                 student_id=sid, full_name=name,
                 email=row.get("email") or None,
