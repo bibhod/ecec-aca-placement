@@ -322,6 +322,7 @@ export default function CompliancePage() {
   const [emailLogLoading, setEmailLogLoading] = useState(false)
   const [filterStatus, setFilterStatus]   = useState('')
   const [filterType, setFilterType]       = useState('')
+  const [filterLevel, setFilterLevel]     = useState('')
   const [search, setSearch]               = useState('')
   const [reportSearch, setReportSearch]   = useState('')
   const [missingOnly, setMissingOnly]     = useState(false)
@@ -455,6 +456,7 @@ export default function CompliancePage() {
         !d.document_number?.toLowerCase().includes(search.toLowerCase())) return false
     if (filterStatus && d.status !== filterStatus) return false
     if (filterType   && d.document_type !== filterType) return false
+    if (filterLevel  && d.qualification_level !== filterLevel) return false
     return true
   })
 
@@ -771,9 +773,10 @@ export default function CompliancePage() {
               }))}
             />
             <Select value={filterType} onChange={setFilterType} placeholder="All Types" options={DOC_TYPES} />
-            {(filterStatus || filterType || search) && (
+            <Select value={filterLevel} onChange={setFilterLevel} placeholder="All Levels" options={QUAL_OPTIONS} />
+            {(filterStatus || filterType || filterLevel || search) && (
               <button
-                onClick={() => { setFilterStatus(''); setFilterType(''); setSearch('') }}
+                onClick={() => { setFilterStatus(''); setFilterType(''); setFilterLevel(''); setSearch('') }}
                 className="text-sm text-gray-500 hover:text-navy underline"
               >
                 Clear filters
@@ -798,7 +801,7 @@ export default function CompliancePage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                     <tr>
-                      {['Student', 'Document Type', 'Doc Number', 'Issue Date', 'Expiry Date', 'Status', 'File', 'Verified By', 'Actions'].map(h => (
+                      {['Student', 'Document Type', 'Level', 'Doc Number', 'Issue Date', 'Expiry Date', 'Status', 'File', 'Verified By', 'Actions'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">
                           {h}
                         </th>
@@ -823,6 +826,11 @@ export default function CompliancePage() {
                             <p className="text-xs text-gray-400">{student?.student_id}</p>
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-600">{docLabel}</td>
+                          <td className="px-4 py-3 text-xs">
+                            {d.qualification_level
+                              ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-cyan/10 text-cyan-700">{d.qualification_level}</span>
+                              : <span className="text-gray-400">-</span>}
+                          </td>
                           <td className="px-4 py-3 text-xs text-gray-500">{d.document_number || '-'}</td>
                           <td className="px-4 py-3 text-xs text-gray-500">
                             {d.issue_date ? format(new Date(d.issue_date), 'd MMM yyyy') : '-'}
