@@ -54,7 +54,16 @@ def _extract_qualification_level(d: ComplianceDocument) -> Optional[str]:
     return None
 
 
-def doc_to_dict(d: ComplianceDocument) -> dict:
+WPA_MOU_DOC_TYPES = ("work_placement_agreement", "memorandum_of_understanding")
+
+
+def doc_to_dict(d: ComplianceDocument, default_level: Optional[str] = None) -> dict:
+    """
+    default_level — the student's own qualification level (Cert III / Diploma),
+    used as a fallback for WPA/MOU documents that predate qualification-level
+    tagging and have no level recorded on the document itself. Non-WPA/MOU
+    document types never show a level.
+    """
     today = date.today()
     status = "pending"
     if d.expiry_date:
@@ -67,12 +76,16 @@ def doc_to_dict(d: ComplianceDocument) -> dict:
     elif d.verified:
         status = "valid"
 
+    level = _extract_qualification_level(d)
+    if not level and default_level and d.document_type in WPA_MOU_DOC_TYPES:
+        level = default_level
+
     return {
         "id": d.id,
         "student_id": d.student_id,
         "document_type": d.document_type,
         "document_type_label": DOC_TYPE_LABELS.get(d.document_type, d.document_type.replace("_", " ").title()),
-        "qualification_level": _extract_qualification_level(d),
+        "qualification_level": level,
         "document_number": d.document_number,
         "issue_date": str(d.issue_date) if d.issue_date else None,
         "expiry_date": str(d.expiry_date) if d.expiry_date else None,
@@ -105,7 +118,16 @@ def list_compliance(
     if document_type:
         q = q.filter(ComplianceDocument.document_type == document_type)
     docs = q.all()
-    result = [doc_to_dict(d) for d in docs]
+
+    # Map each student to their enrolled qualification level, used as a
+    # fallback level for WPA/MOU documents that predate level tagging.
+    student_ids = {d.student_id for d in docs}
+    level_by_student = {
+        s.id: qualification_level_for_code(s.qualification)
+        for s in db.query(Student).filter(Student.id.in_(student_ids)).all()
+    } if student_ids else {}
+
+    result = [doc_to_dict(d, default_level=level_by_student.get(d.student_id)) for d in docs]
     if status:
         result = [d for d in result if d["status"] == status]
     return result
@@ -132,7 +154,7 @@ def expiring_docs(
     result = []
     for d in docs:
         student = db.query(Student).filter(Student.id == d.student_id).first()
-        dd = doc_to_dict(d)
+        dd = doc_to_dict(d, default_level=qualification_level_for_code(student.qualification) if student else None)
         dd["student_name"] = student.full_name if student else "Unknown"
         dd["campus"] = student.campus if student else None
         result.append(dd)
