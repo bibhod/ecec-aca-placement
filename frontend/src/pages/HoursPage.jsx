@@ -9,7 +9,21 @@ import { CheckCircle, XCircle, Clock, Plus, Trash2, AlertTriangle } from 'lucide
 import { PageHeader, Spinner, ProgressBar, Badge, Modal, FormRow, Select } from '../components/ui/index'
 import { format } from 'date-fns'
 
-const emptyEntry = { log_date: '', hours: '', activity_description: '' }
+const emptyEntry = { log_date: '', hours: '', qualification_level: '', activity_description: '' }
+
+// Matches backend app.models.qualification_level_for_code — CHC301xx codes are
+// "Cert III", CHC501xx codes are "Diploma".
+const QUAL_LEVEL_OPTIONS = [
+  { value: 'Cert III', label: 'Cert III' },
+  { value: 'Diploma', label: 'Diploma' },
+]
+function levelForQualification(code) {
+  if (!code) return ''
+  const c = String(code).toLowerCase()
+  if (c.includes('30')) return 'Cert III'
+  if (c.includes('50')) return 'Diploma'
+  return ''
+}
 
 export function HoursPage() {
   const [summary, setSummary] = useState([])
@@ -35,11 +49,18 @@ export function HoursPage() {
   const approve = async id => { await api.put(`/hours/${id}/approve`); toast.success('Approved'); load() }
   const reject = async id => { await api.put(`/hours/${id}/reject`); toast.success('Rejected'); load() }
 
-  const addRow = () => setEntries(e => [...e, { ...emptyEntry }])
+  const defaultLevelForSelected = () => levelForQualification(students.find(s => s.id === selectedStudent)?.qualification)
+
+  const addRow = () => setEntries(e => [...e, { ...emptyEntry, qualification_level: defaultLevelForSelected() }])
   const removeRow = idx => setEntries(e => e.filter((_, i) => i !== idx))
   const updateRow = (idx, field, value) => setEntries(e =>
     e.map((row, i) => i === idx ? { ...row, [field]: value } : row)
   )
+  const selectStudent = id => {
+    setSelectedStudent(id)
+    const level = levelForQualification(students.find(s => s.id === id)?.qualification)
+    setEntries(e => e.map(row => row.qualification_level ? row : { ...row, qualification_level: level }))
+  }
 
   const save = async () => {
     if (!selectedStudent) return toast.error('Please select a student')
@@ -49,7 +70,12 @@ export function HoursPage() {
     try {
       const r = await api.post('/hours/bulk', {
         student_id: selectedStudent,
-        entries: valid.map(e => ({ log_date: e.log_date, hours: +e.hours, activity_description: e.activity_description }))
+        entries: valid.map(e => ({
+          log_date: e.log_date,
+          hours: +e.hours,
+          qualification_level: e.qualification_level || defaultLevelForSelected() || null,
+          activity_description: e.activity_description,
+        }))
       })
       const allWarnings = (r.data.results || []).flatMap(res => res.warnings || [])
       if (allWarnings.length > 0) {
@@ -96,17 +122,19 @@ export function HoursPage() {
 
       {tab === 'summary' && (
         <div className="card p-0 overflow-hidden overflow-x-auto">
+          <p className="text-xs text-gray-500 px-4 pt-3">Each qualification level a student is logging hours toward is shown as its own row with its own progress.</p>
           <table className="w-full">
             <thead className="bg-gray-50"><tr>
-              {['Student', 'Qualification', 'Campus', 'Progress', 'Completed', 'Pending Approval', '%'].map(h => (
+              {['Student', 'Qualification', 'Level', 'Campus', 'Progress', 'Completed', 'Pending Approval', '%'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
               ))}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {summary.map(s => (
-                <tr key={s.student_id} className="hover:bg-gray-50">
+                <tr key={`${s.student_id}-${s.qualification_level}`} className="hover:bg-gray-50">
                   <td className="px-4 py-3"><p className="text-sm font-medium text-gray-900">{s.student_name}</p><p className="text-xs text-gray-400">{s.student_ref}</p></td>
                   <td className="px-4 py-3 text-xs text-gray-500">{s.qualification}</td>
+                  <td className="px-4 py-3"><span className="text-xs font-medium px-2 py-0.5 rounded-full bg-cyan/10 text-cyan-700">{s.qualification_level || 'Unspecified'}</span></td>
                   <td className="px-4 py-3 text-xs text-gray-500 capitalize">{s.campus}</td>
                   <td className="px-4 py-3 w-40"><ProgressBar value={s.completed_hours} max={s.required_hours} showPct={false} /></td>
                   <td className="px-4 py-3 text-sm font-medium">{s.completed_hours}h</td>
@@ -123,7 +151,7 @@ export function HoursPage() {
         <div className="card p-0 overflow-hidden overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50"><tr>
-              {['Date', 'Student', 'Hours', 'Activity', 'Flags', 'Status', 'Actions'].map(h => (
+              {['Date', 'Student', 'Hours', 'Level', 'Activity', 'Flags', 'Status', 'Actions'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
               ))}
             </tr></thead>
@@ -133,6 +161,7 @@ export function HoursPage() {
                   <td className="px-4 py-3 text-sm">{format(new Date(l.log_date), 'd MMM yyyy')}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{students.find(s => s.id === l.student_id)?.full_name || '—'}</td>
                   <td className="px-4 py-3 text-sm font-medium">{l.hours}h</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{l.qualification_level || '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{l.activity_description || '—'}</td>
                   <td className="px-4 py-3">
                     {l.flagged_unrealistic && <span className="text-xs text-orange-600 bg-orange-50 px-1 py-0.5 rounded mr-1">⚠ Unrealistic</span>}
@@ -158,15 +187,15 @@ export function HoursPage() {
       <Modal open={showModal} onClose={() => { setShowModal(false); setEntries([{ ...emptyEntry }]); setSelectedStudent('') }} title="Log Placement Hours" size="lg">
         <div className="mb-4">
           <FormRow label="Student" required>
-            <Select value={selectedStudent} onChange={setSelectedStudent}
+            <Select value={selectedStudent} onChange={selectStudent}
               options={students.map(s => ({ value: s.id, label: `${s.full_name} (${s.student_id})` }))} placeholder="Select student..." />
           </FormRow>
         </div>
-        <p className="text-xs text-gray-500 mb-3">Add one or more entries. Click "+ Add Row" to log hours for multiple dates at once.</p>
+        <p className="text-xs text-gray-500 mb-3">Add one or more entries. Click "+ Add Row" to log hours for multiple dates at once. Select the qualification level each entry counts toward.</p>
         <div className="space-y-3">
           {entries.map((entry, idx) => (
             <div key={idx} className="grid grid-cols-12 gap-2 items-start bg-gray-50 p-3 rounded-xl">
-              <div className="col-span-4">
+              <div className="col-span-3">
                 <label className="text-xs text-gray-500 mb-1 block">Date *</label>
                 <input className="input text-sm" type="date" value={entry.log_date}
                   onChange={e => updateRow(idx, 'log_date', e.target.value)} />
@@ -176,7 +205,12 @@ export function HoursPage() {
                 <input className="input text-sm" type="number" step="0.5" min="0.5" max="24" value={entry.hours}
                   onChange={e => updateRow(idx, 'hours', e.target.value)} placeholder="8" />
               </div>
-              <div className="col-span-5">
+              <div className="col-span-3">
+                <label className="text-xs text-gray-500 mb-1 block">Qualification Level *</label>
+                <Select value={entry.qualification_level} onChange={v => updateRow(idx, 'qualification_level', v)}
+                  options={QUAL_LEVEL_OPTIONS} placeholder="Select level..." className="text-sm" />
+              </div>
+              <div className="col-span-3">
                 <label className="text-xs text-gray-500 mb-1 block">Activity</label>
                 <input className="input text-sm" value={entry.activity_description}
                   onChange={e => updateRow(idx, 'activity_description', e.target.value)}

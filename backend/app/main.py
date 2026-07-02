@@ -62,6 +62,60 @@ def ensure_admin():
         db.close()
 
 
+def migrate_add_qualification_level():
+    """
+    One-time migration: add the qualification_level column to hours_log and
+    compliance_documents (idempotent — safe to run on every startup). Backfills
+    existing compliance_documents rows from the legacy "Qualification: X" notes
+    prefix, and existing hours_log rows from the owning student's qualification,
+    so historical data reads correctly once the new column is in place.
+    """
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        db.execute(text(
+            "ALTER TABLE hours_log ADD COLUMN IF NOT EXISTS qualification_level VARCHAR"
+        ))
+        db.execute(text(
+            "ALTER TABLE compliance_documents ADD COLUMN IF NOT EXISTS qualification_level VARCHAR"
+        ))
+        db.commit()
+
+        # Backfill hours_log.qualification_level from the student's qualification
+        # for rows logged before this column existed.
+        result = db.execute(text("""
+            UPDATE hours_log SET qualification_level = CASE
+                WHEN students.qualification ILIKE '%30%' THEN 'Cert III'
+                WHEN students.qualification ILIKE '%50%' THEN 'Diploma'
+                ELSE NULL END
+            FROM students
+            WHERE hours_log.student_id = students.id
+              AND hours_log.qualification_level IS NULL
+        """))
+        db.commit()
+        if result.rowcount:
+            logger.info(f"migrate_add_qualification_level: backfilled {result.rowcount} hours_log row(s)")
+
+        # Backfill compliance_documents.qualification_level from the legacy
+        # "Qualification: Cert III" / "Qualification: Diploma" notes prefix.
+        for level in ["Cert III", "Diploma"]:
+            result = db.execute(text("""
+                UPDATE compliance_documents SET qualification_level = :level
+                WHERE qualification_level IS NULL
+                  AND notes ILIKE :pattern
+            """), {"level": level, "pattern": f"Qualification: {level}%"})
+            db.commit()
+            if result.rowcount:
+                logger.info(f"migrate_add_qualification_level: backfilled {result.rowcount} compliance_documents row(s) as {level}")
+
+        logger.info("migrate_add_qualification_level: complete")
+    except Exception as e:
+        logger.error(f"migrate_add_qualification_level failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def migrate_normalise_campus():
     """
     One-time migration: lowercase all campus values so filters work consistently.
@@ -118,6 +172,7 @@ async def lifespan(app: FastAPI):
     ensure_admin()              # always runs — guarantees login works
     migrate_normalise_campus()  # lowercase all campus values so filters match
     migrate_active_to_current() # one-time rename 'active' → 'current'
+    migrate_add_qualification_level()  # add + backfill qualification_level columns
     start_scheduler()
     yield
     shutdown_scheduler()

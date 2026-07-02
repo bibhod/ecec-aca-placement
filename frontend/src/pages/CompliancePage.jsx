@@ -341,6 +341,12 @@ export default function CompliancePage() {
   const [reminderResults, setReminderResults]   = useState(null)
   const [expandedPreview, setExpandedPreview]   = useState(null)
 
+  // ── WPA / MOU status by qualification level ───────────────────────────────
+  const [wpaMouStatus, setWpaMouStatus]       = useState([])
+  const [wpaMouLoading, setWpaMouLoading]     = useState(false)
+  const [wpaMouSearch, setWpaMouSearch]       = useState('')
+  const [wpaMouMissingOnly, setWpaMouMissingOnly] = useState(false)
+
   // ── Hours Report / reminder state ─────────────────────────────────────────
   const [hoursReport, setHoursReport]                   = useState([])
   const [hoursReportLoading, setHoursReportLoading]     = useState(false)
@@ -427,10 +433,18 @@ export default function CompliancePage() {
       .finally(() => setHoursReportLoading(false))
   }, [])
 
+  const loadWpaMouStatus = useCallback(() => {
+    setWpaMouLoading(true)
+    api.get('/compliance/wpa-mou-status')
+      .then(r => setWpaMouStatus(r.data))
+      .finally(() => setWpaMouLoading(false))
+  }, [])
+
   useEffect(() => { load() }, [load])
   useEffect(() => { if (activeTab === 'report')       loadReport()      }, [activeTab, loadReport])
   useEffect(() => { if (activeTab === 'email_log')    loadEmailLog()    }, [activeTab, loadEmailLog])
   useEffect(() => { if (activeTab === 'hours_report') loadHoursReport() }, [activeTab, loadHoursReport])
+  useEffect(() => { if (activeTab === 'wpa_mou')      loadWpaMouStatus() }, [activeTab, loadWpaMouStatus])
 
   // ─── Filters ──────────────────────────────────────────────────────────────
 
@@ -720,6 +734,7 @@ export default function CompliancePage() {
         {[
           { key: 'documents',    label: 'Documents',             icon: FileText    },
           { key: 'report',       label: 'Compliance Report',     icon: CheckCircle },
+          { key: 'wpa_mou',      label: 'WPA/MOU by Level',       icon: CheckCircle },
           { key: 'hours_report', label: 'Placement Hours Report', icon: BarChart2  },
           { key: 'email_log',    label: 'Email Log',             icon: Mail        },
           { key: 'bulk_upload',  label: 'Bulk Upload',           icon: Upload      },
@@ -1039,6 +1054,74 @@ export default function CompliancePage() {
           )}
         </>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          WPA / MOU Submission Status by Qualification Level
+      ════════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'wpa_mou' && (() => {
+        const filteredWpaMou = wpaMouStatus.filter(r => {
+          if (wpaMouSearch && !r.student_name?.toLowerCase().includes(wpaMouSearch.toLowerCase())) return false
+          if (wpaMouMissingOnly && r.fully_submitted) return false
+          return true
+        })
+        const StatusChip = ({ item }) => {
+          if (!item.submitted) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-600">Missing</span>
+          if (!item.verified)  return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Submitted</span>
+          return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Verified</span>
+        }
+        return (
+          <>
+            <p className="text-xs text-gray-500 mb-3">
+              Check WPA and MOU submission status per student, broken down by qualification level.
+              Students logging hours toward more than one level (e.g. Cert III then Diploma) will show
+              one row per level, each needing its own WPA and MOU.
+            </p>
+            <div className="flex flex-wrap gap-3 mb-4 items-center">
+              <SearchInput value={wpaMouSearch} onChange={setWpaMouSearch} placeholder="Search student..." />
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={wpaMouMissingOnly} onChange={e => setWpaMouMissingOnly(e.target.checked)} className="rounded" />
+                Show incomplete only
+              </label>
+            </div>
+            {wpaMouLoading ? <Spinner size="lg" /> : (
+              <div className="card p-0 overflow-hidden">
+                <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">Student</th>
+                        <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">Campus</th>
+                        <th className="px-3 py-3 text-left font-medium text-gray-500 whitespace-nowrap bg-gray-50">Qualification Level</th>
+                        <th className="px-3 py-3 text-center font-medium text-gray-500 whitespace-nowrap bg-gray-50">WPA</th>
+                        <th className="px-3 py-3 text-center font-medium text-gray-500 whitespace-nowrap bg-gray-50">MOU</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredWpaMou.map(r => (
+                        <tr key={`${r.student_id}-${r.qualification_level}`} className={r.fully_submitted ? 'bg-green-50/30' : 'hover:bg-red-50/20'}>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-900">{r.student_name}</p>
+                            <p className="text-gray-400">{r.student_ref}</p>
+                          </td>
+                          <td className="px-3 py-3 text-gray-600 capitalize">{r.campus || '-'}</td>
+                          <td className="px-3 py-3">
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-cyan/10 text-cyan-700">{r.qualification_level}</span>
+                          </td>
+                          <td className="px-3 py-3 text-center"><StatusChip item={r.wpa} /></td>
+                          <td className="px-3 py-3 text-center"><StatusChip item={r.mou} /></td>
+                        </tr>
+                      ))}
+                      {filteredWpaMou.length === 0 && (
+                        <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No matching records</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           Placement Hours Report Tab

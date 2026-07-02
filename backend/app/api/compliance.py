@@ -13,7 +13,10 @@ from pydantic import BaseModel
 from datetime import date, datetime
 
 from app.database import get_db
-from app.models import ComplianceDocument, Student, User, COMPLIANCE_DOC_TYPE_CHOICES
+from app.models import (
+    ComplianceDocument, Student, User, COMPLIANCE_DOC_TYPE_CHOICES,
+    QUALIFICATION_LEVEL_CHOICES, qualification_level_for_code,
+)
 from app.utils.auth import get_current_user
 from app.api.audit import write_audit
 
@@ -35,6 +38,22 @@ REQUIRED_DOC_TYPES = {
 DOC_TYPE_LABELS = {**REQUIRED_DOC_TYPES, "national_police_check": "National Police Check"}
 
 
+def _extract_qualification_level(d: ComplianceDocument) -> Optional[str]:
+    """
+    Qualification level ("Cert III" / "Diploma") a WPA/MOU document applies to.
+    Prefers the dedicated column; falls back to parsing the legacy
+    "Qualification: X" notes prefix for documents created before that column
+    existed.
+    """
+    if d.qualification_level:
+        return d.qualification_level
+    if d.notes:
+        for level in QUALIFICATION_LEVEL_CHOICES:
+            if d.notes.strip().startswith(f"Qualification: {level}"):
+                return level
+    return None
+
+
 def doc_to_dict(d: ComplianceDocument) -> dict:
     today = date.today()
     status = "pending"
@@ -53,6 +72,7 @@ def doc_to_dict(d: ComplianceDocument) -> dict:
         "student_id": d.student_id,
         "document_type": d.document_type,
         "document_type_label": DOC_TYPE_LABELS.get(d.document_type, d.document_type.replace("_", " ").title()),
+        "qualification_level": _extract_qualification_level(d),
         "document_number": d.document_number,
         "issue_date": str(d.issue_date) if d.issue_date else None,
         "expiry_date": str(d.expiry_date) if d.expiry_date else None,
@@ -123,6 +143,7 @@ def expiring_docs(
 class DocCreate(BaseModel):
     student_id: str
     document_type: str
+    qualification_level: Optional[str] = None
     document_number: Optional[str] = None
     issue_date: Optional[str] = None
     expiry_date: Optional[str] = None
@@ -149,6 +170,7 @@ def create_document(
     doc = ComplianceDocument(
         student_id=data.student_id,
         document_type=data.document_type,
+        qualification_level=data.qualification_level,
         document_number=data.document_number,
         issue_date=date.fromisoformat(data.issue_date) if data.issue_date else None,
         expiry_date=date.fromisoformat(data.expiry_date) if data.expiry_date else None,
@@ -202,6 +224,7 @@ async def create_document_with_upload(
     doc = ComplianceDocument(
         student_id=student_id,
         document_type=document_type,
+        qualification_level=qualification or None,
         document_number=document_number or None,
         issue_date=date.fromisoformat(issue_date) if issue_date else None,
         expiry_date=date.fromisoformat(expiry_date) if expiry_date else None,
@@ -361,6 +384,146 @@ def compliance_report(
     return result
 
 
+# ─── WPA / MOU submission status by qualification level ──────────────────────
+WPA_MOU_TYPES = {
+    "work_placement_agreement":    "Work Placement Agreement (WPA)",
+    "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
+}
+
+
+def _student_relevant_levels(student, docs, hours_logs) -> list:
+    """
+    The set of qualification levels a student is relevant for: their own
+    enrolled level, plus any level their existing WPA/MOU docs or hour logs
+    reference (covers students transitioning between levels).
+    """
+    levels = []
+    own_level = qualification_level_for_code(student.qualification)
+    if own_level:
+        levels.append(own_level)
+    for d in docs:
+        lvl = _extract_qualification_level(d)
+        if lvl and lvl not in levels:
+            levels.append(lvl)
+    for l in hours_logs:
+        lvl = l.qualification_level
+        if lvl and lvl not in levels:
+            levels.append(lvl)
+    return levels or ["Unspecified"]
+
+
+@router.get("/wpa-mou-status")
+def wpa_mou_status_by_level(
+    campus: Optional[str] = None,
+    qualification_level: Optional[str] = None,
+    missing_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    WPA and MOU submission status for every active student, broken down per
+    qualification level ("Cert III" / "Diploma") rather than just per student.
+    A student progressing across levels will get one row per level, each with
+    its own WPA/MOU submission + verification status.
+    """
+    from app.models import HoursLog
+
+    q = db.query(Student).filter(Student.status == "current")
+    if campus:
+        q = q.filter(Student.campus == campus)
+    students = q.order_by(Student.full_name).all()
+
+    result = []
+    for s in students:
+        docs = db.query(ComplianceDocument).filter(
+            ComplianceDocument.student_id == s.id,
+            ComplianceDocument.document_type.in_(list(WPA_MOU_TYPES.keys())),
+        ).all()
+        hours_logs = db.query(HoursLog).filter(HoursLog.student_id == s.id).all()
+        levels = _student_relevant_levels(s, docs, hours_logs)
+
+        for level in levels:
+            if qualification_level and level != qualification_level:
+                continue
+
+            level_docs = [d for d in docs if (_extract_qualification_level(d) or levels[0]) == level]
+            doc_status = {}
+            for dtype, dlabel in WPA_MOU_TYPES.items():
+                matching = [d for d in level_docs if d.document_type == dtype]
+                if matching:
+                    latest = sorted(matching, key=lambda d: d.created_at or date.min, reverse=True)[0]
+                    dd = doc_to_dict(latest)
+                    doc_status[dtype] = {
+                        "submitted": True, "label": dlabel,
+                        "status": dd["status"], "verified": dd["verified"],
+                    }
+                else:
+                    doc_status[dtype] = {"submitted": False, "label": dlabel, "status": "missing", "verified": False}
+
+            fully_submitted = all(v["submitted"] for v in doc_status.values())
+            if missing_only and fully_submitted:
+                continue
+
+            result.append({
+                "student_id": s.id,
+                "student_ref": s.student_id,
+                "student_name": s.full_name,
+                "email": s.email,
+                "campus": s.campus,
+                "qualification": s.qualification,
+                "qualification_level": level,
+                "wpa": doc_status["work_placement_agreement"],
+                "mou": doc_status["memorandum_of_understanding"],
+                "fully_submitted": fully_submitted,
+            })
+    return result
+
+
+# ─── Outstanding-documents helper (qualification-level aware) ────────────────
+ABBREV = {
+    "working_with_children_check": "Working with Children Check (WWCC)",
+    "first_aid_certificate":       "First Aid Certificate (incl. CPR)",
+    "work_placement_agreement":    "Work Placement Agreement (WPA)",
+    "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
+}
+
+
+def _outstanding_docs_for_student(db: Session, s: Student):
+    """
+    Outstanding compliance documents for a student. WWCC / First Aid are
+    checked once per student as before. WPA / MOU are checked per relevant
+    qualification level, since Feature: students logging hours across more
+    than one level (e.g. Cert III -> Diploma) need a WPA and MOU submitted
+    for each level, not just one overall.
+    """
+    from app.models import HoursLog
+
+    docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
+    hours_logs = db.query(HoursLog).filter(HoursLog.student_id == s.id).all()
+    wpa_mou_docs = [d for d in docs if d.document_type in WPA_MOU_TYPES]
+    levels = _student_relevant_levels(s, wpa_mou_docs, hours_logs)
+
+    outstanding = []
+    submitted_types = {d.document_type for d in docs}
+    for dtype, label in REQUIRED_DOC_TYPES.items():
+        if dtype in WPA_MOU_TYPES:
+            continue
+        if dtype not in submitted_types:
+            outstanding.append(ABBREV.get(dtype, label))
+
+    for level in levels:
+        level_docs = [d for d in wpa_mou_docs if (_extract_qualification_level(d) or levels[0]) == level]
+        level_submitted_types = {d.document_type for d in level_docs}
+        suffix = f" — {level}" if level != "Unspecified" else ""
+        for dtype, label in WPA_MOU_TYPES.items():
+            if dtype not in level_submitted_types:
+                outstanding.append(f"{ABBREV.get(dtype, label)}{suffix}")
+
+    total_required = (len(REQUIRED_DOC_TYPES) - len(WPA_MOU_TYPES)) + len(WPA_MOU_TYPES) * len(levels)
+    submitted_count = total_required - len(outstanding)
+    return outstanding, submitted_count, total_required
+
+
 # ─── Preview which students would receive reminders (no emails sent) ─────────
 @router.get("/reminder-preview")
 def get_reminder_preview(
@@ -369,15 +532,9 @@ def get_reminder_preview(
 ):
     """
     Returns the list of students who would receive a compliance reminder,
-    including each student's outstanding documents and a personalised email
-    preview. No emails are sent.
+    including each student's outstanding documents (WPA/MOU broken out per
+    qualification level) and a personalised email preview. No emails are sent.
     """
-    ABBREV = {
-        "working_with_children_check": "Working with Children Check (WWCC)",
-        "first_aid_certificate":       "First Aid Certificate (incl. CPR)",
-        "work_placement_agreement":    "Work Placement Agreement (WPA)",
-        "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
-    }
     students_list = db.query(Student).filter(Student.status == "current").all()
     recipients, compliant_count, no_email_count = [], 0, 0
 
@@ -385,11 +542,7 @@ def get_reminder_preview(
         if not s.email:
             no_email_count += 1
             continue
-        docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
-        submitted_types = {d.document_type for d in docs}
-        outstanding_labels = [ABBREV.get(dtype, label) for dtype, label in REQUIRED_DOC_TYPES.items()
-                              if dtype not in submitted_types]
-        submitted_count = len(REQUIRED_DOC_TYPES) - len(outstanding_labels)
+        outstanding_labels, submitted_count, total_required = _outstanding_docs_for_student(db, s)
         if not outstanding_labels:
             compliant_count += 1
             continue
@@ -398,7 +551,7 @@ def get_reminder_preview(
             f"Dear {s.full_name},\n\n"
             f"This is a reminder that the following compliance documents are still outstanding "
             f"for your work placement:\n\n{outstanding_txt}\n\n"
-            f"You currently have {submitted_count} of {len(REQUIRED_DOC_TYPES)} required "
+            f"You currently have {submitted_count} of {total_required} required "
             f"documents submitted.\n\n"
             "Please submit the outstanding documents as soon as possible to ensure your "
             "placement is not affected.\n\n"
@@ -436,23 +589,12 @@ def send_compliance_reminders(
     students_list = db.query(Student).filter(Student.status == "current").all()
     sent, skipped = [], []
 
-    ABBREV = {
-        "working_with_children_check": "Working with Children Check (WWCC)",
-        "first_aid_certificate": "First Aid Certificate (incl. CPR)",
-        "work_placement_agreement": "Work Placement Agreement (WPA)",
-        "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
-    }
-
     for s in students_list:
         if not s.email:
             skipped.append({"student": s.full_name, "reason": "No email address"})
             continue
 
-        docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
-        submitted_types = {d.document_type for d in docs}
-        outstanding_labels = [ABBREV.get(dtype, label) for dtype, label in REQUIRED_DOC_TYPES.items()
-                              if dtype not in submitted_types]
-        submitted_count = len(REQUIRED_DOC_TYPES) - len(outstanding_labels)
+        outstanding_labels, submitted_count, total_required = _outstanding_docs_for_student(db, s)
 
         if not outstanding_labels:
             skipped.append({"student": s.full_name, "reason": "Fully compliant"})
@@ -465,7 +607,7 @@ def send_compliance_reminders(
             f"Dear {s.full_name},\n\n"
             f"This is a reminder that the following compliance documents are still outstanding "
             f"for your work placement:\n\n{outstanding_list_txt}\n\n"
-            f"You currently have {submitted_count} of {len(REQUIRED_DOC_TYPES)} required documents submitted.\n\n"
+            f"You currently have {submitted_count} of {total_required} required documents submitted.\n\n"
             "Please submit the outstanding documents as soon as possible to ensure your placement "
             "is not affected.\n\nIf you have any questions, please contact your coordinator."
         )
@@ -476,7 +618,7 @@ def send_compliance_reminders(
 <div class="highlight">
   <ul>{outstanding_list_html}</ul>
 </div>
-<p>You currently have <strong>{submitted_count} of {len(REQUIRED_DOC_TYPES)}</strong> required documents submitted.</p>
+<p>You currently have <strong>{submitted_count} of {total_required}</strong> required documents submitted.</p>
 <p>Please submit the outstanding documents as soon as possible to ensure your placement is not affected.</p>
 <p>If you have any questions, please contact your coordinator.</p>
 """

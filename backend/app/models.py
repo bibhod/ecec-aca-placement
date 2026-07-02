@@ -64,6 +64,33 @@ QUALIFICATION_UNITS_MAP = {
 VISIT_LIMITS = {"CHC30121": 3, "CHC30125": 3, "CHC50121": 2, "CHC50125": 2}
 
 
+# ─── Qualification levels ──────────────────────────────────────────────────
+# A "qualification level" groups the qualification codes into the two broad
+# levels students place hours/documents against: Certificate III and Diploma.
+# (CHC30121/CHC30125 are both Cert III curriculum versions; CHC50121/CHC50125
+# are both Diploma curriculum versions.) This matches the "Cert III" / "Diploma"
+# vocabulary already used for WPA/MOU qualification tagging in the frontend.
+QUALIFICATION_LEVEL_CHOICES = ["Cert III", "Diploma"]
+
+REQUIRED_HOURS_BY_LEVEL = {"Cert III": 160.0, "Diploma": 288.0}
+
+
+def qualification_level_for_code(code):
+    """Map a qualification code (e.g. 'CHC30125') to its level ('Cert III' / 'Diploma')."""
+    if not code:
+        return None
+    c = str(code).lower()
+    if "30" in c:
+        return "Cert III"
+    if "50" in c:
+        return "Diploma"
+    return None
+
+
+def required_hours_for_level(level):
+    return REQUIRED_HOURS_BY_LEVEL.get(level, 0.0)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # USERS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -190,6 +217,10 @@ class ComplianceDocument(Base):
     id = Column(String, primary_key=True, default=gen_uuid)
     student_id = Column(String, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     document_type = Column(String, nullable=False)
+    # Qualification level ("Cert III" / "Diploma") this document applies to.
+    # Primarily used for WPA (work_placement_agreement) and MOU
+    # (memorandum_of_understanding) documents, which are tracked per level.
+    qualification_level = Column(String, nullable=True)
     document_number = Column(String, nullable=True)
     issue_date = Column(Date, nullable=True)
     expiry_date = Column(Date, nullable=True)
@@ -255,6 +286,11 @@ class HoursLog(Base):
     log_date = Column(Date, nullable=False)
     hours = Column(Float, nullable=False)
     activity_description = Column(Text, nullable=True)
+    # Qualification level ("Cert III" / "Diploma") these hours are being recorded
+    # against. Defaults to the student's own qualification level when not set
+    # explicitly, so a student progressing across levels (or enrolled dual) can
+    # have hours tracked and totalled separately per level.
+    qualification_level = Column(String, nullable=True)
     approved = Column(Boolean, default=False)
     approved_by = Column(String, nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
