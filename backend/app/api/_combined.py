@@ -361,47 +361,22 @@ def export_audit_csv(db: Session = Depends(get_db), current_user: User = Depends
     )
 
 
-@reports_router.get("/export/pdf")
-def export_report_pdf(
-    report_type: str = "enrollment_summary",
-    campus: str = "",
-    qualification: str = "",
-    status: str = "current",
-    days: str = "30",
-    missing_only: bool = False,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+def _build_custom_report_data(
+    report_type: str,
+    campus: str,
+    qualification: str,
+    status: str,
+    days: str,
+    missing_only: bool,
+    db: Session,
 ):
     """
-    Generate a PDF export of any Custom Report.
-    Uses the Academies Australasia brand header from the email templates.
-    Returns file as attachment download.
+    Shared data builder for the "Custom Report" - used by both the on-screen
+    JSON preview (/reports/data) and the PDF export (/reports/export/pdf) so
+    the two can never drift out of sync with each other.
+    Returns (title, filter_desc, headers, rows_data).
     """
-    from fastapi.responses import Response
-    from datetime import datetime as dt
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import cm
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
-        import io as _io
-    except ImportError:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail="ReportLab not installed. Run: pip install reportlab")
-
     today = date.today()
-    now_str = dt.now().strftime("%d %b %Y %H:%M")
-
-    # ── Brand colours ────────────────────────────────────────────────────────
-    NAVY   = colors.HexColor("#1A2B5F")
-    CYAN   = colors.HexColor("#00AEEF")
-    LGRAY  = colors.HexColor("#F0F4F8")
-    DGRAY  = colors.HexColor("#2C3E50")
-    WHITE  = colors.white
-
-    # ── Fetch data ───────────────────────────────────────────────────────────
     rows_data, headers, title, filter_desc = [], [], "", ""
 
     def _qual_match(s_qual):
@@ -538,6 +513,80 @@ def export_report_pdf(
         filter_desc = ""
         headers = ["No data"]
         rows_data = [["Unknown report type"]]
+
+    return title, filter_desc, headers, rows_data
+
+
+@reports_router.get("/data")
+def get_custom_report_data(
+    report_type: str = "enrollment_summary",
+    campus: str = "",
+    qualification: str = "",
+    status: str = "current",
+    days: str = "30",
+    missing_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    JSON version of the Custom Report, for on-screen display before/instead
+    of downloading the PDF.
+    """
+    title, filter_desc, headers, rows_data = _build_custom_report_data(
+        report_type, campus, qualification, status, days, missing_only, db,
+    )
+    return {
+        "title": title,
+        "filter_desc": filter_desc,
+        "headers": headers,
+        "rows": rows_data,
+        "row_count": len(rows_data),
+    }
+
+
+@reports_router.get("/export/pdf")
+def export_report_pdf(
+    report_type: str = "enrollment_summary",
+    campus: str = "",
+    qualification: str = "",
+    status: str = "current",
+    days: str = "30",
+    missing_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate a PDF export of any Custom Report.
+    Uses the Academies Australasia brand header from the email templates.
+    Returns file as attachment download.
+    """
+    from fastapi.responses import Response
+    from datetime import datetime as dt
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        import io as _io
+    except ImportError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="ReportLab not installed. Run: pip install reportlab")
+
+    today = date.today()
+    now_str = dt.now().strftime("%d %b %Y %H:%M")
+
+    # ── Brand colours ────────────────────────────────────────────────────────
+    NAVY   = colors.HexColor("#1A2B5F")
+    CYAN   = colors.HexColor("#00AEEF")
+    LGRAY  = colors.HexColor("#F0F4F8")
+    DGRAY  = colors.HexColor("#2C3E50")
+    WHITE  = colors.white
+
+    title, filter_desc, headers, rows_data = _build_custom_report_data(
+        report_type, campus, qualification, status, days, missing_only, db,
+    )
 
     # ── Build PDF ─────────────────────────────────────────────────────────────
     buffer = _io.BytesIO()
