@@ -2,18 +2,21 @@ import React, { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import {
-  LayoutDashboard, Calendar, BarChart3, UserCog,
+  LayoutDashboard, Users, Calendar, MessageSquare, BarChart3, UserCog,
   Building2, Bell, ChevronDown, LogOut, Menu, X,
   Shield, Upload
 } from 'lucide-react'
 import NotificationPanel from './NotificationPanel'
 
-// Task #18: Students/Hours Tracking/Compliance/Communications/Issues are no
-// longer separate nav items - the student profile (via Dashboard's student
-// list) is now the single entry point for that information per student.
+// Students has its own left-nav section again (a dedicated Students +
+// Reminders page). Hours Tracking/Compliance/Issues stay off the nav - those
+// are reached via each student's own profile page. Communications is back on
+// the nav so email templates are easy to find.
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { to: '/students', label: 'Students', icon: Users },
   { to: '/appointments', label: 'Appointments', icon: Calendar },
+  { to: '/communications', label: 'Communications', icon: MessageSquare },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   null,
   { to: '/centres', label: 'Centres', icon: Building2 },
