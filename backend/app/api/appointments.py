@@ -20,7 +20,7 @@ from app.models import (
     APPOINTMENT_TYPE_CHOICES, QUALIFICATION_UNITS_MAP,
     UNITS_CHC30125, UNITS_CHC50125, VISIT_LIMITS,
 )
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
 from app.services.email_service import email_appointment_reminder
 from app.services.sms_service import sms_appointment_reminder
@@ -183,7 +183,7 @@ class AppointmentCreate(BaseModel):
 def create_appointment(
     data: AppointmentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     # Validate student
     student = db.query(Student).filter(Student.id == data.student_id).first()
@@ -336,7 +336,7 @@ class AppointmentUpdate(BaseModel):
 @router.put("/{appt_id}")
 def update_appointment(
     appt_id: str, data: AppointmentUpdate,
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db), current_user: User = Depends(require_admin),
 ):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: raise HTTPException(404, "Not found")
@@ -357,7 +357,7 @@ def update_appointment(
 
 
 @router.delete("/{appt_id}")
-def delete_appointment(appt_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_appointment(appt_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: raise HTTPException(404, "Not found")
 
@@ -375,7 +375,7 @@ def delete_appointment(appt_id: str, db: Session = Depends(get_db), current_user
 @router.post("/{appt_id}/send-reminder")
 def send_reminder(
     appt_id: str, send_sms_flag: bool = False,
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db), current_user: User = Depends(require_admin),
 ):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: raise HTTPException(404, "Not found")

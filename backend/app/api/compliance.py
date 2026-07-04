@@ -195,7 +195,7 @@ class DocCreate(BaseModel):
 def create_document(
     data: DocCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     student = db.query(Student).filter(Student.id == data.student_id).first()
     if not student:
@@ -244,7 +244,7 @@ async def create_document_with_upload(
     qualification: str = Form(""),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Create a compliance document AND optionally attach a file in one request.
@@ -295,7 +295,7 @@ async def upload_document_file(
     doc_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     doc = db.query(ComplianceDocument).filter(ComplianceDocument.id == doc_id).first()
     if not doc:
@@ -344,7 +344,7 @@ def update_document(
     doc_id: str,
     data: DocUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     doc = db.query(ComplianceDocument).filter(ComplianceDocument.id == doc_id).first()
     if not doc:
@@ -621,7 +621,7 @@ def get_reminder_preview(
 @router.post("/send-reminders")
 def send_compliance_reminders(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Send reminder emails to all active students who have outstanding compliance documents."""
     from app.services.email_service import send_email, _base_template
@@ -763,7 +763,7 @@ def get_hours_reminder_preview(
 @router.post("/send-hours-reminders")
 def send_hours_reminders(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Send 'Hours Log Submission Reminder' emails to students who haven't met their required hours."""
     from app.services.email_service import send_email, _base_template
@@ -854,7 +854,7 @@ def send_hours_reminders(
 def delete_document(
     doc_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     doc = db.query(ComplianceDocument).filter(ComplianceDocument.id == doc_id).first()
     if not doc:

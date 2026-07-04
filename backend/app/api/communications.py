@@ -15,7 +15,7 @@ import logging
 
 from app.database import get_db
 from app.models import Communication, Student, User, EmailTemplate
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
 from app.services.email_service import send_email, base_template as _base_template
 from app.services.sms_service import send_sms
@@ -168,7 +168,7 @@ def update_template(
     template_id: str,
     data: TemplateUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Edit an existing email template (Issue 6 - template editing)."""
     t = db.query(EmailTemplate).filter(EmailTemplate.id == template_id).first()
@@ -206,7 +206,7 @@ def create_template(
     data: TemplateUpdate,
     name: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Create a new custom email template."""
     existing = db.query(EmailTemplate).filter(EmailTemplate.name == name).first()
@@ -248,7 +248,7 @@ class SendEmailRequest(BaseModel):
 def send_communication(
     data: SendEmailRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     html_body = _base_template(
         f"<h2>{data.subject}</h2><p>{data.body.replace(chr(10), '<br>')}</p>"
@@ -298,7 +298,7 @@ class SendSMSRequest(BaseModel):
 def send_sms_message(
     data: SendSMSRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     error_msg = None
     try:
@@ -345,7 +345,7 @@ class SendTemplateRequest(BaseModel):
 def send_template_email(
     data: SendTemplateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Send a template email. If custom_subject / custom_body are supplied they

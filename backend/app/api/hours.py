@@ -197,7 +197,7 @@ def _validate_and_create(
 def create_hours_log(
     data: HoursCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     student = db.query(Student).filter(Student.id == data.student_id).first()
     if not student:
@@ -253,7 +253,7 @@ class HoursBulkCreate(BaseModel):
 def create_hours_bulk(
     data: HoursBulkCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Submit multiple placement-hour entries at once (Issue 3).

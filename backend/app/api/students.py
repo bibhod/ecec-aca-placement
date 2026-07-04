@@ -204,7 +204,7 @@ class StudentCreate(BaseModel):
 def create_student(
     data: StudentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     # A student may be re-enrolled under a new qualification (e.g. Cert III
     # graduate progressing into the Diploma). Only block if this exact
@@ -302,7 +302,7 @@ def update_student(
     student_id: str,
     data: StudentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     s = db.query(Student).filter(Student.id == student_id).first()
     if not s:
@@ -354,15 +354,12 @@ def update_student_status(
     student_id: str,
     data: StatusUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Admin-only endpoint to change a student's enrolment status.
     Valid values: current, completed, withdrawn.
     """
-    if current_user.role not in ("admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Only admins can change student status")
-
     if data.status not in VALID_STUDENT_STATUSES:
         raise HTTPException(
             status_code=400,
@@ -508,7 +505,7 @@ def get_placement_checklist(
 def generate_placement_completion(
     student_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Generates and stores a Placement Completion Record.
