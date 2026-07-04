@@ -37,14 +37,33 @@ export default function AuditPage() {
     if (!details) return action.replace('.', ' → ')
     if (action === 'student.create') return `Created student ${details.student_id || ''} (${details.qualification || ''})`
     if (action === 'student.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
+    if (action === 'student.status_change') return `Status changed: ${details.old_status || '?'} → ${details.new_status || '?'}`
+    if (action === 'student.delete') return `Deleted student ${details.student_id || ''}`
+    if (action === 'placement.completion') return `Placement completion record ${details.reference_number || ''} generated`
     if (action === 'compliance.add') return `Added ${(details.document_type || '').replace(/_/g, ' ')} for student`
+    if (action === 'compliance.verify') return `Verified ${(details.document_type || '').replace(/_/g, ' ')}`
+    if (action === 'compliance.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
     if (action === 'compliance.delete') return `Deleted ${(details.document_type || '').replace(/_/g, ' ')}`
     if (action === 'hours.create') return `Logged ${details.hours}h on ${details.log_date}`
     if (action === 'hours.approve') return `Approved ${details.hours}h logged on ${details.log_date}`
-    if (action === 'visit.create') return `Created visit on ${details.visit_date || ''}`
-    if (action === 'visit.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
-    if (action === 'visit.approve') return `Claim approved by ${details.approved_by || ''}`
-    if (action === 'placement.completion') return `Placement completion record ${details.reference_number || ''} generated`
+    if (action === 'hours.reject') return `Rejected ${details.hours}h logged on ${details.log_date}`
+    if (action === 'hours.delete') return `Deleted ${details.hours}h log from ${details.log_date}`
+    if (action === 'appointment.create') return `Scheduled for ${details.scheduled_date || ''}`
+    if (action === 'appointment.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
+    if (action === 'appointment.delete') return `Deleted appointment scheduled for ${details.scheduled_date || ''}`
+    if (action === 'issue.create') return `Logged ${details.issue_type || ''} issue (${details.priority || ''} priority)`
+    if (action === 'issue.update') return `Updated fields: ${(details.updated_fields || []).join(', ')} - now ${details.status || ''}`
+    if (action === 'issue.resolve') return `Resolved - status: ${details.status || ''}`
+    if (action === 'issue.delete') return `Deleted ${details.issue_type || ''} issue`
+    if (action === 'communication.send') return `${details.subject ? `"${details.subject}"` : 'Message'} sent${details.sent_successfully === false ? ' (failed)' : ''}`
+    if (action === 'communication.template_create') return `Created template "${details.name || ''}"`
+    if (action === 'communication.template_update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
+    if (action === 'centre.create') return `Created centre in ${details.suburb || ''}, ${details.state || ''}`
+    if (action === 'centre.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
+    if (action === 'centre.delete') return `Deleted centre in ${details.suburb || ''}, ${details.state || ''}`
+    if (action === 'user.create') return `Created ${details.role || 'user'} account (${details.campus || ''})`
+    if (action === 'user.update') return `Updated fields: ${(details.updated_fields || []).join(', ')}`
+    if (action === 'user.deactivate') return `Deactivated ${details.role || 'user'} account`
     // Fallback: pretty-print the details object
     return Object.entries(details).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ')
   }
@@ -86,14 +105,33 @@ export default function AuditPage() {
             <option value="">All actions</option>
             <option value="student.create">Student created</option>
             <option value="student.update">Student updated</option>
+            <option value="student.status_change">Student status changed</option>
+            <option value="student.delete">Student deleted</option>
+            <option value="placement.completion">Placement completed</option>
             <option value="compliance.add">Compliance doc added</option>
+            <option value="compliance.verify">Compliance doc verified</option>
+            <option value="compliance.update">Compliance doc updated</option>
             <option value="compliance.delete">Compliance doc deleted</option>
             <option value="hours.create">Hours logged</option>
             <option value="hours.approve">Hours approved</option>
-            <option value="visit.create">Visit created</option>
-            <option value="visit.update">Visit updated</option>
-            <option value="visit.approve">Visit claim approved</option>
-            <option value="placement.completion">Placement completed</option>
+            <option value="hours.reject">Hours rejected</option>
+            <option value="hours.delete">Hours log deleted</option>
+            <option value="appointment.create">Appointment created</option>
+            <option value="appointment.update">Appointment updated</option>
+            <option value="appointment.delete">Appointment deleted</option>
+            <option value="issue.create">Issue logged</option>
+            <option value="issue.update">Issue updated</option>
+            <option value="issue.resolve">Issue resolved</option>
+            <option value="issue.delete">Issue deleted</option>
+            <option value="communication.send">Communication sent</option>
+            <option value="communication.template_create">Email template created</option>
+            <option value="communication.template_update">Email template updated</option>
+            <option value="centre.create">Centre created</option>
+            <option value="centre.update">Centre updated</option>
+            <option value="centre.delete">Centre deleted</option>
+            <option value="user.create">User created</option>
+            <option value="user.update">User updated</option>
+            <option value="user.deactivate">User deactivated</option>
           </select>
         </div>
         <div>
@@ -103,7 +141,12 @@ export default function AuditPage() {
             <option value="student">Student</option>
             <option value="compliance_document">Compliance document</option>
             <option value="hours_log">Hours log</option>
-            <option value="assessor_visit">Assessor visit</option>
+            <option value="appointment">Appointment</option>
+            <option value="issue">Issue</option>
+            <option value="communication">Communication</option>
+            <option value="communication_template">Email template</option>
+            <option value="placement_centre">Centre</option>
+            <option value="user">User</option>
           </select>
         </div>
         <div className="flex-1 min-w-40">
@@ -154,8 +197,8 @@ export default function AuditPage() {
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap
                       ${entry.action?.includes('create') || entry.action?.includes('add') ? 'bg-green-100 text-green-700'
-                        : entry.action?.includes('delete') ? 'bg-red-100 text-red-600'
-                        : entry.action?.includes('approve') || entry.action?.includes('completion') ? 'bg-blue-100 text-blue-700'
+                        : entry.action?.includes('delete') || entry.action?.includes('reject') || entry.action?.includes('deactivate') ? 'bg-red-100 text-red-600'
+                        : entry.action?.includes('approve') || entry.action?.includes('completion') || entry.action?.includes('verify') || entry.action?.includes('resolve') ? 'bg-blue-100 text-blue-700'
                         : 'bg-gray-100 text-gray-600'
                       }`}>
                       {entry.action || '-'}
