@@ -262,7 +262,7 @@ def send_communication(
         logger.error(f"send_communication error: {exc}")
 
     comm = Communication(
-        student_id=data.student_id,
+        student_id=data.student_id or None,
         sender_id=current_user.id,
         recipient_email=data.recipient_email,
         recipient_name=data.recipient_name,
@@ -309,7 +309,7 @@ def send_sms_message(
         logger.error(f"send_sms_message error: {exc}")
 
     comm = Communication(
-        student_id=data.student_id,
+        student_id=data.student_id or None,
         sender_id=current_user.id,
         recipient_phone=data.recipient_phone,
         recipient_name=data.recipient_name,
