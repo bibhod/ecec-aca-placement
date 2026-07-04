@@ -173,6 +173,59 @@ def run_v31():
     cur.close(); conn.close()
     logger.info("v3.1 migration complete")
 
+# v3.2 — allow a student to be re-enrolled under a new qualification
+# (e.g. Cert III graduate progressing into the Diploma). Previously
+# student_id was globally unique, which blocked this. Uniqueness is now
+# per (student_id, qualification).
+def run_v32():
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = True
+    cur = conn.cursor()
+
+    # Find and drop whatever the existing single-column unique constraint
+    # on students.student_id is called (Postgres auto-names it, commonly
+    # students_student_id_key).
+    cur.execute("""
+        SELECT tc.constraint_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+        WHERE tc.table_name = 'students'
+          AND tc.constraint_type = 'UNIQUE'
+          AND kcu.column_name = 'student_id'
+          AND tc.constraint_name NOT IN (
+              SELECT constraint_name FROM information_schema.table_constraints
+              WHERE table_name = 'students' AND constraint_type = 'UNIQUE'
+              GROUP BY constraint_name HAVING COUNT(*) > 1
+          )
+    """)
+    row = cur.fetchone()
+    if row:
+        constraint_name = row[0]
+        cur.execute(f'ALTER TABLE students DROP CONSTRAINT "{constraint_name}"')
+        logger.info(f"  DROP  students.{constraint_name} (old single-column unique on student_id)")
+    else:
+        logger.info("  SKIP  no single-column unique constraint found on students.student_id")
+
+    # Add the new composite unique constraint if it doesn't already exist.
+    cur.execute("""
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_name = 'students' AND constraint_name = 'uq_student_id_qualification'
+    """)
+    if cur.fetchone():
+        logger.info("  SKIP  uq_student_id_qualification already exists")
+    else:
+        cur.execute("""
+            ALTER TABLE students
+            ADD CONSTRAINT uq_student_id_qualification UNIQUE (student_id, qualification)
+        """)
+        logger.info("  ADD   uq_student_id_qualification (student_id, qualification)")
+
+    cur.close(); conn.close()
+    logger.info("v3.2 migration complete")
+
+
 if __name__ == "__main__":
     run_migration()
     run_v31()
+    run_v32()

@@ -8,7 +8,7 @@ Changes in this version:
   - Visit limits: Cert III=3, Diploma=2, extra needs admin approval
   - Audit trail on every write
 """
-from sqlalchemy import Column, String, Integer, Float, Boolean, Date, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Float, Boolean, Date, DateTime, Text, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -178,7 +178,12 @@ class PlacementCentre(Base):
 class Student(Base):
     __tablename__ = "students"
     id = Column(String, primary_key=True, default=gen_uuid)
-    student_id = Column(String, unique=True, nullable=False, index=True)
+    # student_id is NOT globally unique on its own: a student can be
+    # re-enrolled under a new qualification (e.g. Cert III -> Diploma
+    # progression), which creates a second row with the same student_id.
+    # Uniqueness is enforced per (student_id, qualification) via the
+    # table-level constraint below.
+    student_id = Column(String, nullable=False, index=True)
     full_name = Column(String, nullable=False)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
@@ -207,6 +212,10 @@ class Student(Base):
     communications = relationship("Communication", back_populates="student", cascade="all, delete-orphan")
     issues = relationship("Issue", back_populates="student", cascade="all, delete-orphan")
     coordinator = relationship("User", foreign_keys=[coordinator_id])
+
+    __table_args__ = (
+        UniqueConstraint("student_id", "qualification", name="uq_student_id_qualification"),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -186,9 +186,18 @@ def create_student(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    existing = db.query(Student).filter(Student.student_id == data.student_id).first()
+    # A student may be re-enrolled under a new qualification (e.g. Cert III
+    # graduate progressing into the Diploma). Only block if this exact
+    # student ID + qualification combination already exists.
+    existing = db.query(Student).filter(
+        Student.student_id == data.student_id,
+        Student.qualification == data.qualification,
+    ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Student ID already exists")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Student ID {data.student_id} already exists under {data.qualification}",
+        )
 
     # Validate qualification (Issue 9)
     if data.qualification not in QUALIFICATION_CHOICES:

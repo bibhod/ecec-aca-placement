@@ -24,6 +24,43 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _resolve_student(db: Session, sid: str, qualification: str = None):
+    """
+    Look up a student by student_id. Since a student can now have more than
+    one enrolment row (e.g. Cert III history + a new Diploma enrolment under
+    the same student_id), a bare student_id lookup can be ambiguous.
+
+    - If `qualification` is supplied (e.g. from a qualification column in the
+      import row), match on student_id + qualification.
+    - Otherwise, if exactly one row matches the student_id, use it.
+    - If multiple rows match and no qualification was given, prefer the one
+      with status "current"; if that's still ambiguous, return an error
+      asking the uploader to include a qualification column to disambiguate.
+    """
+    q = db.query(Student).filter(Student.student_id == sid)
+    if qualification:
+        student = q.filter(Student.qualification == qualification).first()
+        if not student:
+            return None, f'Student "{sid}" not found under qualification "{qualification}"'
+        return student, None
+
+    matches = q.all()
+    if not matches:
+        return None, f'Student "{sid}" not found'
+    if len(matches) == 1:
+        return matches[0], None
+
+    current_matches = [s for s in matches if s.status == "current"]
+    if len(current_matches) == 1:
+        return current_matches[0], None
+
+    return None, (
+        f'Student "{sid}" has multiple enrolments '
+        f'({", ".join(sorted(set(s.qualification for s in matches)))}) — '
+        f'add a "qualification" column to this file to disambiguate'
+    )
+
+
 def _read_file(file_content: bytes, filename: str) -> list:
     """Parse CSV or Excel into a list of dicts."""
     if filename.lower().endswith(".csv"):
@@ -158,7 +195,10 @@ async def import_students(
             errors.append({"row": i, "field": "qualification", "error": 'Required field "qualification" is empty'}); continue
         if qual not in QUALIFICATION_CHOICES:
             errors.append({"row": i, "field": "qualification", "error": f'Invalid qualification "{qual}" — valid values: {", ".join(QUALIFICATION_CHOICES)}'}); continue
-        if db.query(Student).filter(Student.student_id == sid).first():
+        # Same student ID re-enrolling under a new qualification (e.g. Cert III
+        # graduate progressing into the Diploma) is allowed; only skip if this
+        # exact student_id + qualification combination already exists.
+        if db.query(Student).filter(Student.student_id == sid, Student.qualification == qual).first():
             skipped.append(sid); continue
 
         # Date field validation with specific column names
@@ -265,9 +305,9 @@ async def import_hours(
         if not hrs_raw:
             errors.append({"row": i, "field": "hours", "error": 'Required field "hours" is empty'}); continue
 
-        student = db.query(Student).filter(Student.student_id == sid).first()
+        student, err = _resolve_student(db, sid, row.get("qualification", "").strip() or None)
         if not student:
-            errors.append({"row": i, "field": "student_id", "error": f'Student ID "{sid}" not found in the system'}); continue
+            errors.append({"row": i, "field": "student_id", "error": err}); continue
 
         try:
             parsed_date = date.fromisoformat(log_date)
@@ -322,9 +362,9 @@ async def import_visits(
         vdate = (row.get("visit_date") or "").strip()
         if not sid or not vdate:
             errors.append({"row": i, "error": "Missing student_id or visit_date"}); continue
-        student = db.query(Student).filter(Student.student_id == sid).first()
+        student, err = _resolve_student(db, sid, row.get("qualification", "").strip() or None)
         if not student:
-            errors.append({"row": i, "error": f"Student '{sid}' not found"}); continue
+            errors.append({"row": i, "error": err}); continue
         trainer = None
         if row.get("trainer_assessor_email"):
             trainer = db.query(User).filter(User.email == row["trainer_assessor_email"].strip()).first()
@@ -399,9 +439,9 @@ async def import_compliance(
             errors.append({"row": i, "error": f'Unknown document_type "{doc_type}". '
                            f'Valid values: {", ".join(COMPLIANCE_DOC_TYPE_CHOICES)}'}); continue
 
-        student = db.query(Student).filter(Student.student_id == sid).first()
+        student, err = _resolve_student(db, sid, qual_raw or None)
         if not student:
-            errors.append({"row": i, "error": f'Student "{sid}" not found'}); continue
+            errors.append({"row": i, "error": err}); continue
 
         def _parse_date(raw, field_name):
             if not raw:
