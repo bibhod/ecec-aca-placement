@@ -553,7 +553,7 @@ export default function CompliancePage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                     <tr>
-                      {['Student', 'Document Type', 'Level', 'Doc Number', 'Issue Date', 'Expiry Date', 'Status', 'File', 'Verified By', 'Actions'].map(h => (
+                      {['Student', 'Document Type', 'Level', 'Doc Number', 'Issue Date', 'Expiry Date', 'Status', 'Verified By'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">
                           {h}
                         </th>
@@ -601,26 +601,7 @@ export default function CompliancePage() {
                             ) : '-'}
                           </td>
                           <td className="px-4 py-3"><Badge status={d.status} /></td>
-                          <td className="px-4 py-3">
-                            {d.file_url
-                              ? <a href={d.file_url} target="_blank" rel="noreferrer" className="text-xs text-cyan hover:underline">View</a>
-                              : '-'}
-                          </td>
                           <td className="px-4 py-3 text-xs text-gray-500">{d.verified_by || '-'}</td>
-                          <td className="px-4 py-3">
-                            {!d.verified && (
-                              isAdmin ? (
-                                <button
-                                  onClick={() => verify(d.id)}
-                                  className="text-xs text-cyan hover:underline flex items-center gap-1"
-                                >
-                                  <CheckCircle size={12} /> Verify
-                                </button>
-                              ) : (
-                                <span className="text-xs text-gray-400">Admin only</span>
-                              )
-                            )}
-                          </td>
                         </tr>
                       )
                     })}
