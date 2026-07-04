@@ -18,6 +18,7 @@ from sqlalchemy import func as sqlfunc
 from app.database import get_db
 from app.models import (
     Student, PlacementCentre, ComplianceDocument, HoursLog, User, QUALIFICATION_CHOICES,
+    NEW_STUDENT_QUALIFICATION_CHOICES,
     qualification_level_for_code, required_hours_for_level,
 )
 from app.utils.auth import get_current_user, require_admin
@@ -218,9 +219,15 @@ def create_student(
             detail=f"Student ID {data.student_id} already exists under {data.qualification}",
         )
 
-    # Validate qualification (Issue 9)
-    if data.qualification not in QUALIFICATION_CHOICES:
-        raise HTTPException(status_code=400, detail=f"Invalid qualification. Valid: {QUALIFICATION_CHOICES}")
+    # Validate qualification. New students may only be enrolled under the
+    # current, non-superseded codes (CHC30125/CHC50125) - the superseded
+    # CHC30121/CHC50121 codes remain valid on existing records but can no
+    # longer be assigned to newly created students.
+    if data.qualification not in NEW_STUDENT_QUALIFICATION_CHOICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid qualification for a new student. Valid: {NEW_STUDENT_QUALIFICATION_CHOICES}",
+        )
 
     # Auto-set hours based on qualification level (single source of truth -
     # same mapping used by Hours Tracking / WPA-MOU status / reminder emails).
