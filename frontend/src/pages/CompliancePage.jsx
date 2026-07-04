@@ -226,7 +226,9 @@ export default function CompliancePage() {
   const [report, setReport]               = useState([])
 
   const [loading, setLoading]             = useState(true)
+  const [loadError, setLoadError]         = useState(false)
   const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError]     = useState(false)
   const [filterStatus, setFilterStatus]   = useState('')
   const [filterType, setFilterType]       = useState('')
   const [filterLevel, setFilterLevel]     = useState('')
@@ -252,12 +254,14 @@ export default function CompliancePage() {
   // ── WPA / MOU status by qualification level ───────────────────────────────
   const [wpaMouStatus, setWpaMouStatus]       = useState([])
   const [wpaMouLoading, setWpaMouLoading]     = useState(false)
+  const [wpaMouError, setWpaMouError]         = useState(false)
   const [wpaMouSearch, setWpaMouSearch]       = useState('')
   const [wpaMouMissingOnly, setWpaMouMissingOnly] = useState(false)
 
   // ── Hours Report / reminder state ─────────────────────────────────────────
   const [hoursReport, setHoursReport]                   = useState([])
   const [hoursReportLoading, setHoursReportLoading]     = useState(false)
+  const [hoursReportError, setHoursReportError]         = useState(false)
   const [hoursPreviewLoading, setHoursPreviewLoading]   = useState(false)
   const [hoursPreviewData, setHoursPreviewData]         = useState(null)
   const [sendingHoursReminders, setSendingHoursReminders] = useState(false)
@@ -294,31 +298,70 @@ export default function CompliancePage() {
 
   // ─── Data loaders ─────────────────────────────────────────────────────────
 
-  const load = useCallback(() => {
-    Promise.all([api.get('/compliance'), api.get('/students')]).then(([d, s]) => {
-      setDocs(d.data)
-      setStudents(s.data)
-    }).finally(() => setLoading(false))
+  // Loads compliance docs + students. Previously had no error handling at
+  // all, so a transient failure (network blip, brief backend hiccup) left the
+  // page stuck showing stale/empty data with no indication anything went
+  // wrong ("sometimes doesn't work"). Now it auto-retries once, and if that
+  // also fails, surfaces a visible error with a manual Retry action instead
+  // of failing silently.
+  const load = useCallback((isRetry = false) => {
+    if (!isRetry) setLoadError(false)
+    setLoading(true)
+    Promise.all([api.get('/compliance'), api.get('/students')])
+      .then(([d, s]) => {
+        setDocs(d.data)
+        setStudents(s.data)
+        setLoadError(false)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (!isRetry) {
+          // Transient blip - retry once, silently, before bothering the user.
+          setTimeout(() => load(true), 1200)
+          return
+        }
+        setLoadError(true)
+        setLoading(false)
+        toast.error('Failed to load compliance data. Check your connection and try again.')
+      })
   }, [])
 
-  const loadReport = useCallback(() => {
+  const loadReport = useCallback((isRetry = false) => {
     setReportLoading(true)
+    if (!isRetry) setReportError(false)
     api.get('/compliance/report')
-      .then(r => setReport(r.data))
+      .then(r => { setReport(r.data); setReportError(false) })
+      .catch(() => {
+        if (!isRetry) { setTimeout(() => loadReport(true), 1200); return }
+        setReportError(true)
+        toast.error('Failed to load compliance report. Check your connection and try again.')
+      })
       .finally(() => setReportLoading(false))
   }, [])
 
-  const loadHoursReport = useCallback(() => {
+  const loadHoursReport = useCallback((isRetry = false) => {
     setHoursReportLoading(true)
+    if (!isRetry) setHoursReportError(false)
     api.get('/hours/summary')
-      .then(r => setHoursReport(r.data))
+      .then(r => { setHoursReport(r.data); setHoursReportError(false) })
+      .catch(() => {
+        if (!isRetry) { setTimeout(() => loadHoursReport(true), 1200); return }
+        setHoursReportError(true)
+        toast.error('Failed to load hours report. Check your connection and try again.')
+      })
       .finally(() => setHoursReportLoading(false))
   }, [])
 
-  const loadWpaMouStatus = useCallback(() => {
+  const loadWpaMouStatus = useCallback((isRetry = false) => {
     setWpaMouLoading(true)
+    if (!isRetry) setWpaMouError(false)
     api.get('/compliance/wpa-mou-status')
-      .then(r => setWpaMouStatus(r.data))
+      .then(r => { setWpaMouStatus(r.data); setWpaMouError(false) })
+      .catch(() => {
+        if (!isRetry) { setTimeout(() => loadWpaMouStatus(true), 1200); return }
+        setWpaMouError(true)
+        toast.error('Failed to load WPA/MOU status. Check your connection and try again.')
+      })
       .finally(() => setWpaMouLoading(false))
   }, [])
 
@@ -472,6 +515,13 @@ export default function CompliancePage() {
         subtitle="Manage student compliance documents"
       />
 
+      {loadError && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>Couldn't load compliance data - the server may be waking up or your connection dropped.</span>
+          <button onClick={() => load()} className="btn-secondary text-xs flex-shrink-0">Retry</button>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
@@ -619,6 +669,12 @@ export default function CompliancePage() {
       ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'report' && (
         <>
+          {reportError && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <span>Couldn't load the compliance report.</span>
+              <button onClick={() => loadReport()} className="btn-secondary text-xs flex-shrink-0">Retry</button>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3 mb-4 items-center">
             <SearchInput value={reportSearch} onChange={setReportSearch} placeholder="Search student..." />
             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
@@ -758,6 +814,12 @@ export default function CompliancePage() {
               Students logging hours toward more than one level (e.g. Cert III then Diploma) will show
               one row per level, each needing its own WPA and MOU.
             </p>
+            {wpaMouError && (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span>Couldn't load WPA/MOU status.</span>
+                <button onClick={() => loadWpaMouStatus()} className="btn-secondary text-xs flex-shrink-0">Retry</button>
+              </div>
+            )}
             <div className="flex flex-wrap gap-3 mb-4 items-center">
               <SearchInput value={wpaMouSearch} onChange={setWpaMouSearch} placeholder="Search student..." />
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
@@ -815,6 +877,12 @@ export default function CompliancePage() {
 
         return (
           <>
+            {hoursReportError && (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <span>Couldn't load the hours report.</span>
+                <button onClick={() => loadHoursReport()} className="btn-secondary text-xs flex-shrink-0">Retry</button>
+              </div>
+            )}
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-4 text-sm text-blue-800 flex flex-wrap items-center gap-2">
               <span>
                 The full per-student, per-qualification-level hours breakdown now lives on the{' '}
