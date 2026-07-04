@@ -391,7 +391,7 @@ export default function StudentDetailPage() {
                   <p className="text-xs text-gray-500">Remaining</p>
                 </div>
               </div>
-              {isAdmin && <button onClick={() => setShowLogHours(true)} className="btn-primary text-sm mt-3 w-full"><Plus size={14} /> Log Hours</button>}
+              {isAdmin && <button onClick={() => { setHoursEntries([{ ...emptyEntry }]); setShowLogHours(true) }} className="btn-primary text-sm mt-3 w-full"><Plus size={14} /> Log Hours</button>}
             </div>
             <div className="card">
               <h3 className="font-semibold text-navy mb-3">Quick Stats</h3>
@@ -476,7 +476,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Hours Log</h3>
             {/* Issue 5 - Log Hours button lives in the Hours tab */}
-            {isAdmin && <button onClick={() => setShowLogHours(true)} className="btn-primary text-sm"><Plus size={14} /> Log Hours</button>}
+            {isAdmin && <button onClick={() => { setHoursEntries([{ ...emptyEntry }]); setShowLogHours(true) }} className="btn-primary text-sm"><Plus size={14} /> Log Hours</button>}
           </div>
           {hours.length === 0 ? <p className="text-center text-gray-400 py-8">No hours logged yet</p> : (
             <div className="overflow-x-auto">
