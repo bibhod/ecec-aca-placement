@@ -327,6 +327,17 @@ def verify_document(
     doc.verified_by = current_user.full_name
     doc.verified_at = date.today()
     db.commit()
+
+    # Audit trail gap fix: verifying a document previously left no audit
+    # record at all, even though deleting one (compliance.delete) did.
+    write_audit(
+        db, current_user, "compliance.verify", "compliance_document",
+        resource_id=doc.id,
+        resource_label=f"{doc.document_type.replace('_', ' ').title()} for student {doc.student_id}",
+        details={"document_type": doc.document_type, "student_id": doc.student_id},
+    )
+    db.commit()
+
     return doc_to_dict(doc)
 
 
@@ -349,6 +360,7 @@ def update_document(
     doc = db.query(ComplianceDocument).filter(ComplianceDocument.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    updated_fields = list(data.dict(exclude_none=True).keys())
     if data.document_number is not None:
         doc.document_number = data.document_number
     if data.issue_date:
@@ -364,6 +376,18 @@ def update_document(
             doc.verified_by = current_user.full_name
             doc.verified_at = date.today()
     db.commit()
+
+    # Audit trail gap fix: editing a document's details previously left no
+    # audit record at all.
+    if updated_fields:
+        write_audit(
+            db, current_user, "compliance.update", "compliance_document",
+            resource_id=doc.id,
+            resource_label=f"{doc.document_type.replace('_', ' ').title()} for student {doc.student_id}",
+            details={"updated_fields": updated_fields},
+        )
+        db.commit()
+
     return doc_to_dict(doc)
 
 

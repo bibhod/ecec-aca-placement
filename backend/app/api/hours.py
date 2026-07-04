@@ -341,8 +341,20 @@ def reject_hours(
     student = db.query(Student).filter(Student.id == log.student_id).first()
     if student:
         student.completed_hours = max(0, (student.completed_hours or 0) - log.hours)
+    log_id_val, log_hours, log_date, student_id = log.id, log.hours, str(log.log_date), log.student_id
     db.delete(log)
     db.commit()
+
+    # Audit trail gap fix: rejecting a log previously left no audit record,
+    # even though approving one (hours.approve) did.
+    write_audit(
+        db, current_user, "hours.reject", "hours_log",
+        resource_id=log_id_val,
+        resource_label=f"Rejected {log_hours}h logged on {log_date}",
+        details={"hours": log_hours, "log_date": log_date, "student_id": student_id},
+    )
+    db.commit()
+
     return {"message": "Hours log rejected and removed"}
 
 
@@ -358,6 +370,17 @@ def delete_hours_log(
     student = db.query(Student).filter(Student.id == log.student_id).first()
     if student:
         student.completed_hours = max(0, (student.completed_hours or 0) - log.hours)
+    log_id_val, log_hours, log_date, student_id = log.id, log.hours, str(log.log_date), log.student_id
     db.delete(log)
     db.commit()
+
+    # Audit trail gap fix: deleting a log previously left no audit record.
+    write_audit(
+        db, current_user, "hours.delete", "hours_log",
+        resource_id=log_id_val,
+        resource_label=f"Deleted {log_hours}h logged on {log_date}",
+        details={"hours": log_hours, "log_date": log_date, "student_id": student_id},
+    )
+    db.commit()
+
     return {"message": "Hours log deleted"}
