@@ -214,7 +214,7 @@ def get_action_items(
     )
     expiring_7d = _safe(db, lambda: expiring_student_ids.count(), 0)
 
-    # 2. Overdue visits — scheduled date has passed, not yet completed or cancelled
+    # 2. Overdue visits - scheduled date has passed, not yet completed or cancelled
     overdue_visits = _safe(db, lambda: db.query(Appointment).filter(
         Appointment.scheduled_date < today,
         Appointment.completed == False,

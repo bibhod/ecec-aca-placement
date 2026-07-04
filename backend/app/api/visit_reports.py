@@ -1,13 +1,13 @@
 """
-Visit Reports API — auto-populated from Appointment data.
+Visit Reports API - auto-populated from Appointment data.
 Replaces the old AssessorVisits standalone table.
 All visit data comes directly from Appointments so there is no duplication.
 
 Endpoints:
-  GET /visit-reports/trainer          — all visits grouped by Trainer/Assessor
-  GET /visit-reports/student/{id}     — all visits for one student
-  GET /visit-reports/summary          — aggregate stats
-  GET /visit-reports/export/csv       — CSV download (auth-protected)
+  GET /visit-reports/trainer          - all visits grouped by Trainer/Assessor
+  GET /visit-reports/student/{id}     - all visits for one student
+  GET /visit-reports/summary          - aggregate stats
+  GET /visit-reports/export/csv       - CSV download (auth-protected)
 """
 import csv, io, uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -51,7 +51,7 @@ def _appt_to_visit(a: Appointment, db: Session) -> dict:
         "student_name": student.full_name if student else "Unknown",
         "student_qualification": student.qualification if student else None,
         "placement_centre_id": a.placement_centre_id,
-        "placement_centre_name": centre.centre_name if centre else (a.location_address or "—"),
+        "placement_centre_name": centre.centre_name if centre else (a.location_address or "-"),
         "visit_date": str(a.scheduled_date),
         "visit_time": a.scheduled_time,
         "duration_hours": a.duration_hours,
@@ -117,7 +117,7 @@ def visits_by_trainer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Returns each trainer with their visit list — for the main report table."""
+    """Returns each trainer with their visit list - for the main report table."""
     trainers = db.query(User).filter(User.role.in_(["trainer", "admin", "coordinator"])).all()
     result = []
     for t in trainers:
@@ -168,7 +168,7 @@ def student_visit_report(
         "student_id": student.student_id,
         "student_name": student.full_name,
         "qualification": student.qualification,
-        "placement_centre": centre.centre_name if centre else "—",
+        "placement_centre": centre.centre_name if centre else "-",
         "visit_limit": limit,
         "visits_used": len(regular_visits),
         "visits_remaining": max(0, limit - len(regular_visits)),

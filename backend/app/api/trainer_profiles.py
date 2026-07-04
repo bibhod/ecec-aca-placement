@@ -179,7 +179,7 @@ def _build_visit_records(trainer_id: str, db: Session) -> list:
             "student_id": student.student_id if student else None,
             "student_name": student.full_name if student else "Unknown",
             "student_qualification": student.qualification if student else None,
-            "placement_centre": centre.centre_name if centre else a.location_address or "—",
+            "placement_centre": centre.centre_name if centre else a.location_address or "-",
             "visit_date": str(a.scheduled_date),
             "visit_time": a.scheduled_time,
             "duration_hours": a.duration_hours,

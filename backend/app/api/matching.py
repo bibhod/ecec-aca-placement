@@ -42,7 +42,7 @@ def _score_centre(centre: PlacementCentre, student: Student) -> dict:
     current = db_count_students(centre)
     available_spots = (centre.max_students or 5) - current
     if available_spots <= 0:
-        return None   # full — exclude
+        return None   # full - exclude
     score += min(available_spots, 5) * 10
     reasons.append(f"{available_spots} spot(s) available")
 
@@ -54,7 +54,7 @@ def _score_centre(centre: PlacementCentre, student: Student) -> dict:
     else:
         return None   # doesn't accept this qual
 
-    # 3. Location preference — exact suburb/state match
+    # 3. Location preference - exact suburb/state match
     if student.preferred_suburb and centre.suburb:
         if student.preferred_suburb.lower() == centre.suburb.lower():
             score += 50
@@ -88,7 +88,7 @@ def _score_centre(centre: PlacementCentre, student: Student) -> dict:
     }
 
 
-# Keep a reference to db for _score_centre — passed in from list_matches
+# Keep a reference to db for _score_centre - passed in from list_matches
 _current_db = None
 
 

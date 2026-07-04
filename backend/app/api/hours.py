@@ -1,8 +1,8 @@
 """
 Hours Log API
 Fixes:
-  Issue 3  — bulk create endpoint so UI can submit multiple rows in one session
-  Issue 19 — smart validation: flag shifts >10h and duplicate dates per student
+  Issue 3  - bulk create endpoint so UI can submit multiple rows in one session
+  Issue 19 - smart validation: flag shifts >10h and duplicate dates per student
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -243,7 +243,7 @@ def create_hours_log(
     return result
 
 
-# ─── Issue 3 — bulk create (multiple rows in one session) ────────────────────
+# ─── Issue 3 - bulk create (multiple rows in one session) ────────────────────
 class HoursBulkCreate(BaseModel):
     student_id: str
     entries: List[HoursEntry]
@@ -287,9 +287,9 @@ def create_hours_bulk(
         result = log_to_dict(log)
         result["warnings"] = []
         if flag_unreal:
-            result["warnings"].append(f"Shift on {entry.log_date} exceeds 10 hours — flagged for review.")
+            result["warnings"].append(f"Shift on {entry.log_date} exceeds 10 hours - flagged for review.")
         if flag_dup:
-            result["warnings"].append(f"A log entry already exists for {entry.log_date} — flagged as duplicate.")
+            result["warnings"].append(f"A log entry already exists for {entry.log_date} - flagged as duplicate.")
         results.append(result)
 
     db.commit()

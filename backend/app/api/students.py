@@ -1,9 +1,9 @@
 """
 Students API
 Fixes:
-  Issue 9  — support all four qualifications (CHC30121/50121 superseded + CHC30125/50125)
-  Issue 13 — bulk import from CSV/Excel
-  Issue 17 — bulk upload endpoint
+  Issue 9  - support all four qualifications (CHC30121/50121 superseded + CHC30125/50125)
+  Issue 13 - bulk import from CSV/Excel
+  Issue 17 - bulk upload endpoint
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,7 +45,7 @@ def student_to_dict(s: Student, db: Session, docs: Optional[List[ComplianceDocum
     if missing_count > 0:
         compliance_status = "pending"
     else:
-        # All 4 submitted — check expiry on the latest per required type
+        # All 4 submitted - check expiry on the latest per required type
         latest_docs: dict = {}
         for d in docs:
             if d.document_type in REQUIRED_4:
@@ -222,7 +222,7 @@ def create_student(
     if data.qualification not in QUALIFICATION_CHOICES:
         raise HTTPException(status_code=400, detail=f"Invalid qualification. Valid: {QUALIFICATION_CHOICES}")
 
-    # Auto-set hours based on qualification level (single source of truth —
+    # Auto-set hours based on qualification level (single source of truth -
     # same mapping used by Hours Tracking / WPA-MOU status / reminder emails).
     # Only overrides the client-sent default (160), so an explicit custom
     # required_hours value from the caller is still respected.
@@ -401,7 +401,7 @@ def get_placement_checklist(
         "work_placement_agreement", "memorandum_of_understanding",
     ]
 
-    # 1. All 4 compliance docs submitted (not just any doc — all required types)
+    # 1. All 4 compliance docs submitted (not just any doc - all required types)
     submitted_types = {
         d.document_type
         for d in db.query(ComplianceDocument).filter(
