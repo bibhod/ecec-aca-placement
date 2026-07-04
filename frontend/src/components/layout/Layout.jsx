@@ -23,9 +23,11 @@ const NAV = [
   { to: '/trainer-profiles', label: 'Trainer/Assessor Profiles', icon: UserCheck },
   null,
   { to: '/centres', label: 'Centres', icon: Building2 },
-  { to: '/bulk-upload', label: 'Bulk Upload', icon: Upload },
-  { to: '/users', label: 'User Management', icon: UserCog },
-  { to: '/audit', label: 'Audit Trail', icon: Shield },
+  // These three are visible read-only to admin/coordinator, but fully hidden
+  // from the trainer role (RBAC redesign).
+  { to: '/bulk-upload', label: 'Bulk Upload', icon: Upload, hideForRoles: ['trainer'] },
+  { to: '/users', label: 'User Management', icon: UserCog, hideForRoles: ['trainer'] },
+  { to: '/audit', label: 'Audit Trail', icon: Shield, hideForRoles: ['trainer'] },
 ]
 
 export default function Layout() {
@@ -55,7 +57,7 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3">
-          {NAV.map((item, i) => {
+          {NAV.filter(item => !item || !item.hideForRoles?.includes(user?.role)).map((item, i) => {
             if (item === null) return <div key={i} className="h-px bg-white/10 my-2 mx-2" />
             const Icon = item.icon
             return (
