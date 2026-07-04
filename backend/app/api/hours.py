@@ -61,9 +61,19 @@ def hours_summary(
     transitioning from Cert III into Diploma) see separate progress for each.
     """
     students = db.query(Student).filter(Student.status == "current").all()
+
+    # Batch-fetch every student's hours logs in a single query instead of one
+    # query per student (was causing N+1 queries and a slow-loading Hours page).
+    student_ids = [s.id for s in students]
+    logs_by_student: dict = {sid: [] for sid in student_ids}
+    if student_ids:
+        all_logs = db.query(HoursLog).filter(HoursLog.student_id.in_(student_ids)).all()
+        for l in all_logs:
+            logs_by_student.setdefault(l.student_id, []).append(l)
+
     result = []
     for s in students:
-        logs = db.query(HoursLog).filter(HoursLog.student_id == s.id).all()
+        logs = logs_by_student.get(s.id, [])
         student_level = qualification_level_for_code(s.qualification)
 
         # Group logs by qualification level, defaulting missing/legacy values

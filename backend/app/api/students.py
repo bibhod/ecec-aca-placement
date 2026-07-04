@@ -7,7 +7,7 @@ Fixes:
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import Optional, List
 from pydantic import BaseModel
@@ -26,9 +26,13 @@ from app.api.audit import write_audit
 router = APIRouter()
 
 
-def student_to_dict(s: Student, db: Session) -> dict:
+def student_to_dict(s: Student, db: Session, docs: Optional[List[ComplianceDocument]] = None) -> dict:
     centre = s.placement_centre
-    docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
+    # Callers that already have all students' documents prefetched in bulk
+    # (e.g. list_students) can pass them in directly to avoid one query per
+    # student. Falls back to a per-student query for single-student callers.
+    if docs is None:
+        docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
     today = date.today()
 
     # A student is only compliant when ALL 4 required doc types are submitted
@@ -118,7 +122,10 @@ def list_students(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = db.query(Student)
+    # Eager-load placement_centre so it isn't fetched with a separate query
+    # per student (was causing N+1 queries and slow page loads for large
+    # student lists).
+    q = db.query(Student).options(joinedload(Student.placement_centre))
     if search:
         q = q.filter(or_(
             Student.full_name.ilike(f"%{search}%"),
@@ -132,7 +139,19 @@ def list_students(
     if status:
         q = q.filter(sqlfunc.lower(Student.status) == status.lower())
     students = q.order_by(Student.full_name).all()
-    return [student_to_dict(s, db) for s in students]
+
+    # Batch-fetch every student's compliance documents in a single query
+    # instead of one query per student (was the other half of the N+1).
+    student_ids = [s.id for s in students]
+    docs_by_student: dict = {sid: [] for sid in student_ids}
+    if student_ids:
+        all_docs = db.query(ComplianceDocument).filter(
+            ComplianceDocument.student_id.in_(student_ids)
+        ).all()
+        for d in all_docs:
+            docs_by_student.setdefault(d.student_id, []).append(d)
+
+    return [student_to_dict(s, db, docs=docs_by_student.get(s.id, [])) for s in students]
 
 
 @router.get("/qualifications")
