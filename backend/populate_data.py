@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ECEC Full Database Population — v2 (Bulletproof)
+ECEC Full Database Population - v2 (Bulletproof)
 =================================================
 Inserts exactly 20 records into every table.
 Handles missing tables, unique constraints, and existing data gracefully.
@@ -16,7 +16,7 @@ from app.database import SessionLocal, engine
 from app.models import Base
 from app.utils.auth import get_password_hash
 
-# Create ALL tables (safe — no-op if already exist)
+# Create ALL tables (safe - no-op if already exist)
 Base.metadata.create_all(bind=engine)
 
 # Also create trainer_profiles if missing
@@ -148,22 +148,22 @@ ISSUE_TITLES = [
 ]
 
 COMM_SUBJECTS = [
-    "Welcome to Academies Australasia — Your Placement Details",
-    "Upcoming Visit Reminder — Please Prepare Documentation",
-    "Compliance Documents Due — Action Required Immediately",
-    "Hours Log Reminder — Please Update Your Timesheet",
-    "Placement Confirmation — All Details Enclosed",
-    "Assessment Outcome — Congratulations on Your Progress",
+    "Welcome to Academies Australasia - Your Placement Details",
+    "Upcoming Visit Reminder - Please Prepare Documentation",
+    "Compliance Documents Due - Action Required Immediately",
+    "Hours Log Reminder - Please Update Your Timesheet",
+    "Placement Confirmation - All Details Enclosed",
+    "Assessment Outcome - Congratulations on Your Progress",
     "Upcoming Assessor Visit Scheduled for Next Week",
-    "Trainer/Assessor Feedback Required — Please Respond",
-    "Low Hours Alert — Urgent Review of Your Progress",
-    "Document Expiry Notice — Renewal Required Before Placement",
-    "New Placement Arranged — Please Review Details",
-    "Mid-Point Review Scheduled — Please Attend",
-    "Final Assessment Approaching — Prepare Your Portfolio",
-    "Absence Noted — Please Provide Documentation",
-    "Policy Update — Please Review Attached Information",
-    "Centre Contact Details Updated — Please Note",
+    "Trainer/Assessor Feedback Required - Please Respond",
+    "Low Hours Alert - Urgent Review of Your Progress",
+    "Document Expiry Notice - Renewal Required Before Placement",
+    "New Placement Arranged - Please Review Details",
+    "Mid-Point Review Scheduled - Please Attend",
+    "Final Assessment Approaching - Prepare Your Portfolio",
+    "Absence Noted - Please Provide Documentation",
+    "Policy Update - Please Review Attached Information",
+    "Centre Contact Details Updated - Please Note",
     "Holiday Closure Notice from Placement Centre",
     "Emergency Contact Details Required",
     "Assessment Extension Approved",
@@ -212,7 +212,7 @@ db.commit()
 print(f"  Coordinators in DB: {db.query(User).filter(User.role=='coordinator').count()}")
 
 # ═══════════════════════════════════════════════════════════════
-# 2. TRAINERS/ASSESSORS — 20 records
+# 2. TRAINERS/ASSESSORS - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[2/12] Creating Trainers/Assessors (20)...")
 trainer_ids = []
@@ -240,7 +240,7 @@ trainer_ids = [t.id for t in all_trainers]
 print(f"  Trainers/Assessors in DB: {len(trainer_ids)}")
 
 # ═══════════════════════════════════════════════════════════════
-# 3. TRAINER PROFILES — 20 records
+# 3. TRAINER PROFILES - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[3/12] Creating Trainer/Assessor Profiles (20)...")
 added_tp = 0
@@ -311,7 +311,7 @@ except Exception as e:
     traceback.print_exc()
 
 # ═══════════════════════════════════════════════════════════════
-# 4. PLACEMENT CENTRES — 20 records
+# 4. PLACEMENT CENTRES - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[4/12] Creating Placement Centres (20)...")
 from app.models import PlacementCentre
@@ -351,7 +351,7 @@ centre_ids = [c.id for c in all_centres]
 print(f"  Added {added_c}. Total centres: {len(centre_ids)}")
 
 # ═══════════════════════════════════════════════════════════════
-# 5. STUDENTS — 20 named records
+# 5. STUDENTS - 20 named records
 # ═══════════════════════════════════════════════════════════════
 print("\n[5/12] Creating Students (20)...")
 from app.models import Student
@@ -419,7 +419,7 @@ student_ids = [s.id for s in all_students]
 print(f"  Added {added_s}. Total students: {len(student_ids)}")
 
 # ═══════════════════════════════════════════════════════════════
-# 6. COMPLIANCE DOCUMENTS — 20 records (4 students × 5 doc types)
+# 6. COMPLIANCE DOCUMENTS - 20 records (4 students × 5 doc types)
 # ═══════════════════════════════════════════════════════════════
 print("\n[6/12] Creating Compliance Documents (20)...")
 from app.models import ComplianceDocument
@@ -452,7 +452,7 @@ db.commit()
 print(f"  Added {added_cd}. Total compliance docs: {db.query(ComplianceDocument).count()}")
 
 # ═══════════════════════════════════════════════════════════════
-# 7. APPOINTMENTS — 20 records
+# 7. APPOINTMENTS - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[7/12] Creating Appointments (20)...")
 from app.models import Appointment
@@ -502,7 +502,7 @@ db.commit()
 print(f"  Added {added_a}. Total appointments: {db.query(Appointment).count()}")
 
 # ═══════════════════════════════════════════════════════════════
-# 8. HOURS LOG — 20 records
+# 8. HOURS LOG - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[8/12] Creating Hours Logs (20)...")
 from app.models import HoursLog
@@ -533,7 +533,7 @@ db.commit()
 print(f"  Added {added_h}. Total hours logs: {db.query(HoursLog).count()}")
 
 # ═══════════════════════════════════════════════════════════════
-# 9. COMMUNICATIONS — 20 records
+# 9. COMMUNICATIONS - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[9/12] Creating Communications (20)...")
 from app.models import Communication
@@ -564,7 +564,7 @@ db.commit()
 print(f"  Added {added_comm}. Total communications: {db.query(Communication).count()}")
 
 # ═══════════════════════════════════════════════════════════════
-# 10. ISSUES — 20 records
+# 10. ISSUES - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[10/12] Creating Issues (20)...")
 from app.models import Issue
@@ -601,20 +601,20 @@ db.commit()
 print(f"  Added {added_i}. Total issues: {db.query(Issue).count()}")
 
 # ═══════════════════════════════════════════════════════════════
-# 11. NOTIFICATIONS — 20 records
+# 11. NOTIFICATIONS - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[11/12] Creating Notifications (20)...")
 from app.models import Notification
 NOTIF_DATA = [
-    ("Visit Scheduled","New assessor visit scheduled for tomorrow at 09:00 — Sunshine Early Learning","info","/appointments"),
+    ("Visit Scheduled","New assessor visit scheduled for tomorrow at 09:00 - Sunshine Early Learning","info","/appointments"),
     ("Compliance Expiry","Working with Children Check expires in 30 days for Zoe Harrison","warning","/compliance"),
-    ("Hours Approved","8.0 hours approved for Ethan Burke — 15 May 2025","success","/hours"),
+    ("Hours Approved","8.0 hours approved for Ethan Burke - 15 May 2025","success","/hours"),
     ("New Issue Raised","Attendance concern reported for Chloe Patterson","warning","/issues"),
-    ("Visit Completed","Assessment visit completed for Ryan Sullivan — feedback recorded","success","/appointments"),
+    ("Visit Completed","Assessment visit completed for Ryan Sullivan - feedback recorded","success","/appointments"),
     ("Compliance Alert","National Police Check EXPIRED for Sophie Anderson","error","/compliance"),
     ("Hours Pending","5 hour log entries awaiting your approval","info","/hours"),
     ("Student Enrolled","New student Blake Robinson enrolled in CHC30125","info","/students"),
-    ("Visit Reminder","Upcoming visit in 48 hours — please prepare documentation","warning","/appointments"),
+    ("Visit Reminder","Upcoming visit in 48 hours - please prepare documentation","warning","/appointments"),
     ("Email Sent","Template email sent to 8 students successfully","success","/communications"),
     ("Low Hours Alert","Jordan Lee has only completed 20% of required hours","warning","/students"),
     ("Document Verified","First Aid Certificate verified for Tara Nguyen","success","/compliance"),
@@ -623,7 +623,7 @@ NOTIF_DATA = [
     ("Centre Update","Sunshine Early Learning has updated their supervisor contact","info","/centres"),
     ("Bulk Import","15 students successfully imported from CSV file","success","/students"),
     ("Password Reset","Admin password was reset via the reset endpoint","info","/users"),
-    ("Audit Alert","Unusual login activity detected — please review audit log","warning","/audit"),
+    ("Audit Alert","Unusual login activity detected - please review audit log","warning","/audit"),
     ("Visit Limit","Amber Clarke has reached the 3-visit limit for CHC30125","warning","/appointments"),
     ("Completion","Dylan Martin has completed all required placement hours!","success","/students"),
 ]
@@ -642,7 +642,7 @@ db.commit()
 print(f"  Added {added_notif}. Total notifications: {db.query(Notification).count()}")
 
 # ═══════════════════════════════════════════════════════════════
-# 12. AUDIT LOGS — 20 records
+# 12. AUDIT LOGS - 20 records
 # ═══════════════════════════════════════════════════════════════
 print("\n[12/12] Creating Audit Logs (20)...")
 from app.models import AuditLog
@@ -678,7 +678,7 @@ for i, (action, rtype, label) in enumerate(AUDIT_EVENTS):
             user_email=user.email, user_name=user.full_name,
             action=action, resource_type=rtype,
             resource_id=student.id if student else user.id,
-            resource_label=f"{label} — {student.full_name if student else user.full_name}",
+            resource_label=f"{label} - {student.full_name if student else user.full_name}",
             details={"action": label, "student": student.student_id if student else None},
             ip_address=f"192.168.1.{random.randint(10,254)}",
             created_at=datetime.utcnow()-timedelta(days=random.randint(0,90)),
@@ -715,7 +715,7 @@ db.commit()
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════
 print("\n" + "═"*55)
-print("  POPULATION COMPLETE — RECORD COUNTS")
+print("  POPULATION COMPLETE - RECORD COUNTS")
 print("═"*55)
 
 from app.models import User, PlacementCentre, Student, ComplianceDocument

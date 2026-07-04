@@ -1,12 +1,12 @@
 """
-Database migration script — run once after upgrading from v2 to v3.
+Database migration script - run once after upgrading from v2 to v3.
 Adds new columns and tables for all 21 issue fixes.
 
 Usage:
   cd backend
   python migrate.py
 
-The script is idempotent — safe to run multiple times.
+The script is idempotent - safe to run multiple times.
 """
 import psycopg2
 import os
@@ -27,7 +27,7 @@ def run_migration():
     cur = conn.cursor()
 
     migrations = [
-        # ── Appointments — new columns (Issue 1, 10, 21) ────────────────────
+        # ── Appointments - new columns (Issue 1, 10, 21) ────────────────────
         ("appointments", "trainer_assessor_id", "ADD COLUMN trainer_assessor_id VARCHAR"),
         ("appointments", "visit_type", "ADD COLUMN visit_type VARCHAR DEFAULT 'onsite'"),
         ("appointments", "placement_centre_id", "ADD COLUMN placement_centre_id VARCHAR REFERENCES placement_centres(id)"),
@@ -35,27 +35,27 @@ def run_migration():
         ("appointments", "units_assessed", "ADD COLUMN units_assessed JSONB DEFAULT '[]'"),
         ("appointments", "visit_reference", "ADD COLUMN visit_reference VARCHAR"),
 
-        # ── PlacementCentre — new columns (Issue 20) ─────────────────────────
+        # ── PlacementCentre - new columns (Issue 20) ─────────────────────────
         ("placement_centres", "latitude", "ADD COLUMN latitude FLOAT"),
         ("placement_centres", "longitude", "ADD COLUMN longitude FLOAT"),
         ("placement_centres", "max_students", "ADD COLUMN max_students INTEGER DEFAULT 5"),
         ("placement_centres", "accepted_qualifications", "ADD COLUMN accepted_qualifications JSONB"),
 
-        # ── ComplianceDocument — new columns (Issue 8) ────────────────────────
+        # ── ComplianceDocument - new columns (Issue 8) ────────────────────────
         ("compliance_documents", "file_name", "ADD COLUMN file_name VARCHAR"),
 
-        # ── Student — new columns (Issue 20) ─────────────────────────────────
+        # ── Student - new columns (Issue 20) ─────────────────────────────────
         ("students", "preferred_suburb", "ADD COLUMN preferred_suburb VARCHAR"),
         ("students", "preferred_state", "ADD COLUMN preferred_state VARCHAR"),
 
-        # ── HoursLog — new columns (Issue 19) ────────────────────────────────
+        # ── HoursLog - new columns (Issue 19) ────────────────────────────────
         ("hours_log", "flagged_unrealistic", "ADD COLUMN flagged_unrealistic BOOLEAN DEFAULT FALSE"),
         ("hours_log", "flagged_duplicate", "ADD COLUMN flagged_duplicate BOOLEAN DEFAULT FALSE"),
 
-        # ── Communication — new column (Issue 2) ──────────────────────────────
+        # ── Communication - new column (Issue 2) ──────────────────────────────
         ("communications", "recipient_phone", "ADD COLUMN recipient_phone VARCHAR"),
 
-        # ── AuditLog — new columns (Issue 14) ────────────────────────────────
+        # ── AuditLog - new columns (Issue 14) ────────────────────────────────
         ("audit_logs", "user_name", "ADD COLUMN user_name VARCHAR"),
         ("audit_logs", "resource_label", "ADD COLUMN resource_label VARCHAR"),
     ]
@@ -67,7 +67,7 @@ def run_migration():
                 WHERE table_name = %s AND column_name = %s
             """, (table, column))
             if cur.fetchone():
-                logger.info(f"  SKIP  {table}.{column} — already exists")
+                logger.info(f"  SKIP  {table}.{column} - already exists")
             else:
                 cur.execute(f"ALTER TABLE {table} {stmt}")
                 logger.info(f"  ADD   {table}.{column}")
@@ -173,7 +173,7 @@ def run_v31():
     cur.close(); conn.close()
     logger.info("v3.1 migration complete")
 
-# v3.2 — allow a student to be re-enrolled under a new qualification
+# v3.2 - allow a student to be re-enrolled under a new qualification
 # (e.g. Cert III graduate progressing into the Diploma). Previously
 # student_id was globally unique, which blocked this. Uniqueness is now
 # per (student_id, qualification).
