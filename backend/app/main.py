@@ -1,5 +1,6 @@
 """ECEC Work Placement Management System — FastAPI v3.1"""
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -231,3 +232,23 @@ def reset_admin(db=Depends(get_db)):
     )
     db.add(new_admin); db.commit()
     return {"message": "Admin created with password aca0022z"}
+
+
+# ── Serve built frontend (static/) so this one service covers both apps ──
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+if os.path.isdir(STATIC_DIR):
+    assets_dir = os.path.join(STATIC_DIR, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Never let this shadow the API or uploads routes above.
+        if full_path.startswith("api/") or full_path.startswith("uploads/"):
+            raise HTTPException(status_code=404)
+        candidate = os.path.join(STATIC_DIR, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        # SPA fallback: any other path (e.g. /students/123) serves index.html
+        # so React Router can handle client-side routing.
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
