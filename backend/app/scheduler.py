@@ -10,6 +10,7 @@ Issues fixed:
 """
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 from datetime import date, timedelta, datetime
 import logging
 
@@ -455,6 +456,85 @@ def auto_complete_students():
         db.close()
 
 
+def send_monthly_reminders():
+    """
+    Task 6 - runs on the 1st of every month. Reuses the existing, already-
+    working manual reminder functions (rather than duplicating their email
+    wording / Communication-log behaviour) to notify:
+      1. Students missing compliance documents
+      2. Students who have not met their required placement hours
+      3. Students + trainers with a visit scheduled in the next 30 days
+    """
+    db = SessionLocal()
+    try:
+        system_user = (
+            db.query(User).filter(User.role == "admin").order_by(User.created_at.asc()).first()
+        )
+        if not system_user:
+            logger.warning("Monthly reminders: no admin user found in the database, skipping run")
+            return
+
+        from app.api.compliance import send_compliance_reminders, send_hours_reminders
+
+        try:
+            result = send_compliance_reminders(db=db, current_user=system_user)
+            logger.info(f"Monthly compliance reminders: {result.get('message')}")
+        except Exception as e:
+            logger.error(f"Monthly compliance reminders failed: {e}")
+            db.rollback()
+
+        try:
+            result = send_hours_reminders(db=db, current_user=system_user)
+            logger.info(f"Monthly hours reminders: {result.get('message')}")
+        except Exception as e:
+            logger.error(f"Monthly hours reminders failed: {e}")
+            db.rollback()
+
+        try:
+            from app.models import Communication
+            from app.api.appointments import send_reminder
+
+            today = date.today()
+            month_ahead = today + timedelta(days=30)
+            month_key = today.strftime("%Y-%m")
+            upcoming = db.query(Appointment).filter(
+                Appointment.scheduled_date >= today,
+                Appointment.scheduled_date <= month_ahead,
+                Appointment.status == "scheduled",
+                Appointment.cancelled == False,
+            ).all()
+
+            sent_count = 0
+            for appt in upcoming:
+                dedup_key = f"monthly_visit_reminder_{appt.id}_{month_key}"
+                if db.query(Communication).filter(Communication.template_used == dedup_key).first():
+                    continue
+                try:
+                    send_reminder(appt_id=appt.id, send_sms_flag=False, db=db, current_user=system_user)
+                    db.add(Communication(
+                        student_id=appt.student_id,
+                        recipient_email="", recipient_name="system",
+                        message_type="email",
+                        subject=f"Monthly visit reminder - {appt.title}",
+                        body=f"Automated monthly reminder sent for appointment {appt.id} on {appt.scheduled_date}.",
+                        template_used=dedup_key,
+                        sent_successfully=True,
+                    ))
+                    db.commit()
+                    sent_count += 1
+                except Exception as e:
+                    logger.warning(f"Monthly visit reminder failed for appointment {appt.id}: {e}")
+            logger.info(f"Monthly visit reminders: sent for {sent_count} upcoming appointment(s)")
+        except Exception as e:
+            logger.error(f"Monthly visit reminders failed: {e}")
+
+    except Exception as e:
+        logger.error(f"Monthly reminders job error: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def start_scheduler():
     scheduler.add_job(
         check_appointment_reminders,
@@ -507,8 +587,17 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
     )
+    # Task 6 - monthly reminders (compliance, hours, upcoming visits), 1st of
+    # each month at 8am
+    scheduler.add_job(
+        send_monthly_reminders,
+        trigger=CronTrigger(day=1, hour=8, minute=0),
+        id="monthly_reminders",
+        replace_existing=True,
+        max_instances=1,
+    )
     scheduler.start()
-    logger.info("Background scheduler started (7 jobs registered)")
+    logger.info("Background scheduler started (8 jobs registered)")
 
 
 def shutdown_scheduler():
