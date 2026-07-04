@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import User
+from app.models import User, NEW_ENTRY_CAMPUS_CHOICES
 from app.utils.auth import get_current_user, get_password_hash, require_admin
 from app.api.audit import write_audit
 
@@ -65,6 +65,14 @@ def create_user(
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    # New staff accounts may only be assigned to the current Sydney/Melbourne
+    # campuses - existing staff elsewhere are untouched.
+    if (data.campus or "").lower().strip() not in NEW_ENTRY_CAMPUS_CHOICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid campus for a new user. Valid: {NEW_ENTRY_CAMPUS_CHOICES}",
+        )
 
     u = User(
         email=data.email,

@@ -18,7 +18,7 @@ from sqlalchemy import func as sqlfunc
 from app.database import get_db
 from app.models import (
     Student, PlacementCentre, ComplianceDocument, HoursLog, User, QUALIFICATION_CHOICES,
-    NEW_STUDENT_QUALIFICATION_CHOICES,
+    NEW_STUDENT_QUALIFICATION_CHOICES, NEW_ENTRY_CAMPUS_CHOICES,
     qualification_level_for_code, required_hours_for_level,
 )
 from app.utils.auth import get_current_user, require_admin
@@ -227,6 +227,15 @@ def create_student(
         raise HTTPException(
             status_code=400,
             detail=f"Invalid qualification for a new student. Valid: {NEW_STUDENT_QUALIFICATION_CHOICES}",
+        )
+
+    # Validate campus. New students may only be enrolled at the current
+    # Sydney/Melbourne campuses - existing students elsewhere are untouched.
+    campus_normalised = (data.campus or "").lower().strip()
+    if campus_normalised not in NEW_ENTRY_CAMPUS_CHOICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid campus for a new student. Valid: {NEW_ENTRY_CAMPUS_CHOICES}",
         )
 
     # Auto-set hours based on qualification level (single source of truth -

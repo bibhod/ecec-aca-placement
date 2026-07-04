@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from datetime import date
 
 from app.database import get_db
-from app.models import PlacementCentre, Student, Notification, User, HoursLog, ComplianceDocument, Appointment
+from app.models import PlacementCentre, Student, Notification, User, HoursLog, ComplianceDocument, Appointment, NEW_ENTRY_STATE_CHOICES
 from app.utils.auth import get_current_user
 from app.api.audit import write_audit
 
@@ -93,6 +93,13 @@ class CentreCreate(BaseModel):
 
 @centres_router.post("")
 def create_centre(data: CentreCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # New placement centres may only be added in the current Sydney/Melbourne
+    # (NSW/VIC) operating area - existing centres elsewhere are untouched.
+    if data.state and data.state.upper().strip() not in NEW_ENTRY_STATE_CHOICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid state for a new placement centre. Valid: {NEW_ENTRY_STATE_CHOICES}",
+        )
     c = PlacementCentre(**data.dict())
     db.add(c)
     db.commit()

@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models import (
     Student, PlacementCentre, HoursLog, Appointment, User,
     ComplianceDocument, COMPLIANCE_DOC_TYPE_CHOICES,
-    QUALIFICATION_CHOICES, NEW_STUDENT_QUALIFICATION_CHOICES,
+    QUALIFICATION_CHOICES, NEW_STUDENT_QUALIFICATION_CHOICES, NEW_ENTRY_CAMPUS_CHOICES,
     UNITS_CHC30125, UNITS_CHC50125,
     qualification_level_for_code, required_hours_for_level,
 )
@@ -199,6 +199,10 @@ async def import_students(
         # students are untouched and remain valid on their own records).
         if qual not in NEW_STUDENT_QUALIFICATION_CHOICES:
             errors.append({"row": i, "field": "qualification", "error": f'Invalid qualification "{qual}" for a new student - valid values: {", ".join(NEW_STUDENT_QUALIFICATION_CHOICES)}'}); continue
+        # New students may only be enrolled at the current Sydney/Melbourne
+        # campuses - existing students elsewhere are untouched.
+        if campus.lower() not in NEW_ENTRY_CAMPUS_CHOICES:
+            errors.append({"row": i, "field": "campus", "error": f'Invalid campus "{campus}" for a new student - valid values: {", ".join(NEW_ENTRY_CAMPUS_CHOICES)}'}); continue
         # Same student ID re-enrolling under a new qualification (e.g. Cert III
         # graduate progressing into the Diploma) is allowed; only skip if this
         # exact student_id + qualification combination already exists.
