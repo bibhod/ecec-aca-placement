@@ -154,7 +154,7 @@ export function HoursPage() {
         <div className="card p-0 overflow-hidden overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50"><tr>
-              {['Date', 'Student', 'Hours', 'Level', 'Activity', 'Flags', 'Status', 'Actions'].map(h => (
+              {['Date', 'Student', 'Hours', 'Level', 'Activity', 'Status', 'Actions'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
               ))}
             </tr></thead>
@@ -166,10 +166,6 @@ export function HoursPage() {
                   <td className="px-4 py-3 text-sm font-medium">{l.hours}h</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{l.qualification_level || '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{l.activity_description || '—'}</td>
-                  <td className="px-4 py-3">
-                    {l.flagged_unrealistic && <span className="text-xs text-orange-600 bg-orange-50 px-1 py-0.5 rounded mr-1">⚠ Unrealistic</span>}
-                    {l.flagged_duplicate && <span className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded">⚠ Duplicate</span>}
-                  </td>
                   <td className="px-4 py-3"><Badge status={l.approved ? 'approved' : 'pending'} /></td>
                   <td className="px-4 py-3">
                     {!l.approved && (
@@ -181,7 +177,7 @@ export function HoursPage() {
                       ) : (
                         <span className="text-xs text-gray-400">Admin approval required</span>
                       )
-                    )}
+                    }
                   </td>
                 </tr>
               ))}
