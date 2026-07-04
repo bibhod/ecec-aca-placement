@@ -22,10 +22,6 @@ export default function CommunicationsPage() {
   const [emailForm, setEmailForm] = useState({ student_id: '', recipient_email: '', recipient_name: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
 
-  // SMS modal
-  const [showSMSModal, setShowSMSModal] = useState(false)
-  const [smsForm, setSmsForm] = useState({ student_id: '', recipient_phone: '', recipient_name: '', body: '' })
-  const [sendingSMS, setSendingSMS] = useState(false)
 
   // Template modal — Issue 6: includes editing before send
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -85,20 +81,6 @@ export default function CommunicationsPage() {
     } finally { setSendingEmail(false) }
   }
 
-  // SMS send
-  const sendSMS = async () => {
-    if (!smsForm.recipient_phone || !smsForm.body)
-      return toast.error('Phone number and message are required')
-    setSendingSMS(true)
-    try {
-      const r = await api.post('/communications/send-sms', smsForm)
-      if (r.data.success) { toast.success('SMS sent'); setShowSMSModal(false); load() }
-      else toast.error(r.data.error || 'SMS failed — check Twilio credentials in docker-compose.yml')
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'SMS send error')
-    } finally { setSendingSMS(false) }
-  }
-
   // Template send
   const sendTemplate = async () => {
     if (!templateForm.student_id || !templateForm.template)
@@ -140,12 +122,6 @@ export default function CommunicationsPage() {
     const s = students.find(x => x.id === v)
     setEmailForm(f => ({ ...f, student_id: v, recipient_email: s?.email || '', recipient_name: s?.full_name || '' }))
   }
-
-  const handleSMSStudentSelect = (v) => {
-    const s = students.find(x => x.id === v)
-    setSmsForm(f => ({ ...f, student_id: v, recipient_phone: s?.phone || '', recipient_name: s?.full_name || '' }))
-  }
-
   if (loading) return <div className="p-8"><Spinner size="lg" /></div>
 
   return (
@@ -158,9 +134,6 @@ export default function CommunicationsPage() {
             </button>
             <button onClick={() => setShowTemplateModal(true)} className="btn-secondary text-sm">
               <MessageSquare size={15} /> Use Template
-            </button>
-            <button onClick={() => setShowSMSModal(true)} className="btn-secondary text-sm">
-              <Phone size={15} /> Send SMS
             </button>
             <button onClick={() => setShowEmailModal(true)} className="btn-primary text-sm">
               <Mail size={15} /> Compose Email
@@ -226,30 +199,6 @@ export default function CommunicationsPage() {
           <button onClick={() => setShowEmailModal(false)} className="btn-secondary">Cancel</button>
           <button onClick={sendEmail} disabled={sendingEmail} className="btn-primary">
             <Send size={15} />{sendingEmail ? 'Sending…' : 'Send Email'}
-          </button>
-        </div>
-      </Modal>
-
-      {/* ── Send SMS Modal ──────────────────────────────────────────────────── */}
-      <Modal open={showSMSModal} onClose={() => setShowSMSModal(false)} title="Send SMS" size="sm">
-        <div className="space-y-4">
-          <FormRow label="Student (auto-fill)">
-            <Select value={smsForm.student_id} onChange={handleSMSStudentSelect}
-              options={students.map(s => ({ value: s.id, label: `${s.full_name} (${s.student_id})` }))} placeholder="Select student…" />
-          </FormRow>
-          <FormRow label="Mobile Number" required>
-            <input className="input" value={smsForm.recipient_phone} onChange={e => setSmsForm(f => ({ ...f, recipient_phone: e.target.value }))} placeholder="+61412345678 or 04XX XXX XXX" />
-          </FormRow>
-          <FormRow label="Message (max 160 chars)" required>
-            <textarea className="input h-24 resize-none" value={smsForm.body}
-              onChange={e => setSmsForm(f => ({ ...f, body: e.target.value }))} maxLength={160} />
-            <p className="text-xs text-gray-400 text-right mt-0.5">{smsForm.body.length}/160</p>
-          </FormRow>
-        </div>
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
-          <button onClick={() => setShowSMSModal(false)} className="btn-secondary">Cancel</button>
-          <button onClick={sendSMS} disabled={sendingSMS} className="btn-primary">
-            <Phone size={15} />{sendingSMS ? 'Sending…' : 'Send SMS'}
           </button>
         </div>
       </Modal>
