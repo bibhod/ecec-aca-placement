@@ -30,6 +30,12 @@ QUALIFICATION_CHOICES = ["CHC30121", "CHC50121", "CHC30125", "CHC50125"]
 # are left untouched and remain fully valid for updates.
 NEW_STUDENT_QUALIFICATION_CHOICES = ["CHC30125", "CHC50125"]
 
+# Locations: the organisation now only operates out of Sydney and Melbourne.
+# New students, staff, and placement centres may only be assigned to these
+# two campuses/states; existing records elsewhere are left untouched.
+NEW_ENTRY_CAMPUS_CHOICES = ["sydney", "melbourne"]
+NEW_ENTRY_STATE_CHOICES = ["NSW", "VIC"]
+
 APPOINTMENT_TYPE_CHOICES = [
     "cert_iii_1st_visit", "cert_iii_2nd_visit", "cert_iii_3rd_visit",
     "diploma_1st_visit", "diploma_2nd_visit", "reassessment_visit",
