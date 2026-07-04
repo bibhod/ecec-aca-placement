@@ -1,5 +1,5 @@
 /**
- * HoursPage — Issue 3:
+ * HoursPage - Issue 3:
  * Allow multiple log hour entries with separate dates in a single session.
  */
 import React, { useEffect, useState } from 'react'
@@ -12,7 +12,7 @@ import { format } from 'date-fns'
 
 const emptyEntry = { log_date: '', hours: '', qualification_level: '', activity_description: '' }
 
-// Matches backend app.models.qualification_level_for_code — CHC301xx codes are
+// Matches backend app.models.qualification_level_for_code - CHC301xx codes are
 // "Cert III", CHC501xx codes are "Diploma".
 const QUAL_LEVEL_OPTIONS = [
   { value: 'Cert III', label: 'Cert III' },
@@ -141,7 +141,7 @@ export function HoursPage() {
                   <td className="px-4 py-3 text-xs text-gray-500 capitalize">{s.campus}</td>
                   <td className="px-4 py-3 w-40"><ProgressBar value={s.completed_hours} max={s.required_hours} showPct={false} /></td>
                   <td className="px-4 py-3 text-sm font-medium">{s.completed_hours}h</td>
-                  <td className="px-4 py-3 text-sm text-yellow-600">{s.pending_hours > 0 ? `${s.pending_hours}h` : '—'}</td>
+                  <td className="px-4 py-3 text-sm text-yellow-600">{s.pending_hours > 0 ? `${s.pending_hours}h` : '-'}</td>
                   <td className="px-4 py-3 text-sm font-bold text-navy">{s.percentage}%</td>
                 </tr>
               ))}
@@ -162,10 +162,10 @@ export function HoursPage() {
               {(tab === 'pending' ? pending : tab === 'flagged' ? flagged : logs).map(l => (
                 <tr key={l.id} className={`hover:bg-gray-50 ${(l.flagged_unrealistic || l.flagged_duplicate) ? 'bg-orange-50/20' : ''}`}>
                   <td className="px-4 py-3 text-sm">{format(new Date(l.log_date), 'd MMM yyyy')}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{students.find(s => s.id === l.student_id)?.full_name || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{students.find(s => s.id === l.student_id)?.full_name || '-'}</td>
                   <td className="px-4 py-3 text-sm font-medium">{l.hours}h</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{l.qualification_level || '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{l.activity_description || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{l.qualification_level || '-'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{l.activity_description || '-'}</td>
                   <td className="px-4 py-3"><Badge status={l.approved ? 'approved' : 'pending'} /></td>
                   <td className="px-4 py-3">
                     {!l.approved && (
@@ -186,7 +186,7 @@ export function HoursPage() {
         </div>
       )}
 
-      {/* Issue 3 — multi-row log hours modal */}
+      {/* Issue 3 - multi-row log hours modal */}
       <Modal open={showModal} onClose={() => { setShowModal(false); setEntries([{ ...emptyEntry }]); setSelectedStudent('') }} title="Log Placement Hours" size="lg">
         <div className="mb-4">
           <FormRow label="Student" required>

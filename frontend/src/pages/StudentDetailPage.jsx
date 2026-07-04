@@ -1,5 +1,5 @@
 /**
- * StudentDetailPage — fixes Issues 3, 4, 5:
+ * StudentDetailPage - fixes Issues 3, 4, 5:
  *   Issue 3: Multi-row log hours (add multiple date entries at once)
  *   Issue 4: Five specific compliance doc types visible in the student Compliance tab
  *   Issue 5: Each section (Compliance, Appointments, Communications, Issues) has its own
@@ -14,7 +14,7 @@ import { Badge, ProgressBar, Spinner, Modal, FormRow, Select } from '../componen
 import { format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 
-// Issue 4 — five required compliance document types
+// Issue 4 - five required compliance document types
 const COMPLIANCE_DOC_TYPES = [
   { value: 'working_with_children_check',   label: 'Working with Children Check',              qualSpecific: false },
   { value: 'first_aid_certificate',          label: 'Valid First Aid Certificate (including CPR)', qualSpecific: false },
@@ -50,7 +50,7 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
 
-  // Issue 3 — multi-row log hours
+  // Issue 3 - multi-row log hours
   const [showLogHours, setShowLogHours] = useState(false)
   const emptyEntry = { log_date: '', hours: '', activity_description: '' }
   const [hoursEntries, setHoursEntries] = useState([{ ...emptyEntry }])
@@ -113,7 +113,7 @@ export default function StudentDetailPage() {
     api.get('/users').then(r => setTrainers(r.data.filter(u => ['coordinator', 'admin', 'trainer'].includes(u.role)))).catch(() => {})
   }, [])
 
-  // ── Issue 3 — Multi-row hours log helpers ────────────────────────────────
+  // ── Issue 3 - Multi-row hours log helpers ────────────────────────────────
   const addHoursRow = () => setHoursEntries(e => [...e, { ...emptyEntry }])
   const removeHoursRow = idx => setHoursEntries(e => e.filter((_, i) => i !== idx))
   const updateHoursRow = (idx, field, value) => setHoursEntries(e =>
@@ -256,7 +256,7 @@ export default function StudentDetailPage() {
 
   const tabs = ['overview', 'hours', 'compliance', 'appointments', 'communications', 'issues']
 
-  // Issue 5 — qualification display label
+  // Issue 5 - qualification display label
   const QUAL_LABELS = {
     'CHC30121': 'CHC30121 – Certificate III (Superseded)',
     'CHC50121': 'CHC50121 – Diploma (Superseded)',
@@ -291,7 +291,7 @@ export default function StudentDetailPage() {
             </div>
           </div>
         </div>
-        {/* Issue 5 — only global action is Email; each section has its own + Add */}
+        {/* Issue 5 - only global action is Email; each section has its own + Add */}
         <div className="flex gap-2">
           {['admin', 'superadmin'].includes(user?.role) && (
             <button onClick={openStatusModal} className="btn-secondary text-sm flex items-center gap-1">
@@ -323,12 +323,12 @@ export default function StudentDetailPage() {
                 {[
                   ['Qualification', QUAL_LABELS[student.qualification] || student.qualification],
                   ['Campus', <span className="capitalize">{student.campus}</span>],
-                  ['Email', student.email || '—'],
-                  ['Phone', student.phone || '—'],
-                  ['Course Start', student.course_start_date ? format(new Date(student.course_start_date), 'd MMM yyyy') : '—'],
-                  ['Course End', student.course_end_date ? format(new Date(student.course_end_date), 'd MMM yyyy') : '—'],
-                  ['Placement Start', student.placement_start_date ? format(new Date(student.placement_start_date), 'd MMM yyyy') : '—'],
-                  ['Placement End', student.placement_end_date ? format(new Date(student.placement_end_date), 'd MMM yyyy') : '—'],
+                  ['Email', student.email || '-'],
+                  ['Phone', student.phone || '-'],
+                  ['Course Start', student.course_start_date ? format(new Date(student.course_start_date), 'd MMM yyyy') : '-'],
+                  ['Course End', student.course_end_date ? format(new Date(student.course_end_date), 'd MMM yyyy') : '-'],
+                  ['Placement Start', student.placement_start_date ? format(new Date(student.placement_start_date), 'd MMM yyyy') : '-'],
+                  ['Placement End', student.placement_end_date ? format(new Date(student.placement_end_date), 'd MMM yyyy') : '-'],
                 ].map(([k, v]) => (
                   <div key={k}>
                     <p className="text-xs text-gray-400 mb-0.5">{k}</p>
@@ -346,9 +346,9 @@ export default function StudentDetailPage() {
                   {[
                     ['Centre', student.placement_site.centre_name],
                     ['Address', student.placement_site.address],
-                    ['Trainer/Assessor', student.placement_site.supervisor_name || '—'],
-                    ['Trainer/Assessor Email', student.placement_site.supervisor_email || '—'],
-                    ['Trainer/Assessor Phone', student.placement_site.supervisor_phone || '—'],
+                    ['Trainer/Assessor', student.placement_site.supervisor_name || '-'],
+                    ['Trainer/Assessor Email', student.placement_site.supervisor_email || '-'],
+                    ['Trainer/Assessor Phone', student.placement_site.supervisor_phone || '-'],
                   ].map(([k, v]) => (
                     <div key={k}>
                       <p className="text-xs text-gray-400 mb-0.5">{k}</p>
@@ -458,7 +458,7 @@ export default function StudentDetailPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Hours Log</h3>
-            {/* Issue 5 — Log Hours button lives in the Hours tab */}
+            {/* Issue 5 - Log Hours button lives in the Hours tab */}
             <button onClick={() => setShowLogHours(true)} className="btn-primary text-sm"><Plus size={14} /> Log Hours</button>
           </div>
           {hours.length === 0 ? <p className="text-center text-gray-400 py-8">No hours logged yet</p> : (
@@ -470,7 +470,7 @@ export default function StudentDetailPage() {
                     <tr key={l.id} className={l.flagged_unrealistic || l.flagged_duplicate ? 'bg-yellow-50/30' : ''}>
                       <td className="px-3 py-3">{format(new Date(l.log_date), 'd MMM yyyy')}</td>
                       <td className="px-3 py-3 font-medium">{l.hours}h</td>
-                      <td className="px-3 py-3 text-gray-500">{l.activity_description || '—'}</td>
+                      <td className="px-3 py-3 text-gray-500">{l.activity_description || '-'}</td>
                       <td className="px-3 py-3">
                         {l.flagged_unrealistic && <span className="text-xs text-orange-600 bg-orange-50 px-1 py-0.5 rounded mr-1">⚠ Unrealistic</span>}
                         {l.flagged_duplicate && <span className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded">⚠ Duplicate</span>}
@@ -543,7 +543,7 @@ export default function StudentDetailPage() {
               </div>
             </div>
 
-            {/* All submitted documents — grouped by type, latest first */}
+            {/* All submitted documents - grouped by type, latest first */}
             <div className="card">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-navy">Submitted Documents</h3>
@@ -633,7 +633,7 @@ export default function StudentDetailPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Appointments</h3>
-            {/* Issue 5 — Appointments section has its own + Add button */}
+            {/* Issue 5 - Appointments section has its own + Add button */}
             <button onClick={() => setShowApptModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Appointment</button>
           </div>
           {appointments.length === 0 ? <p className="text-center text-gray-400 py-8">No appointments scheduled</p>
@@ -662,7 +662,7 @@ export default function StudentDetailPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Communications</h3>
-            {/* Issue 5 — Communications section has its own + Add button */}
+            {/* Issue 5 - Communications section has its own + Add button */}
             <button onClick={() => setShowEmailModal(true)} className="btn-primary text-sm"><Mail size={14} /> Send Email</button>
           </div>
           {comms.length === 0 ? <p className="text-center text-gray-400 py-8">No communications yet</p>
@@ -687,7 +687,7 @@ export default function StudentDetailPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Issues</h3>
-            {/* Issue 5 — Issues section has its own + Add button */}
+            {/* Issue 5 - Issues section has its own + Add button */}
             <button onClick={() => setShowIssueModal(true)} className="btn-primary text-sm"><Plus size={14} /> Log Issue</button>
           </div>
           {issues.length === 0 ? <p className="text-center text-gray-400 py-8">No issues recorded</p>
@@ -708,7 +708,7 @@ export default function StudentDetailPage() {
         </div>
       )}
 
-      {/* ── Issue 3 — Multi-row Log Hours Modal ──────────────────────────────── */}
+      {/* ── Issue 3 - Multi-row Log Hours Modal ──────────────────────────────── */}
       <Modal open={showLogHours} onClose={() => { setShowLogHours(false); setHoursEntries([{ ...emptyEntry }]) }} title="Log Placement Hours" size="lg">
         <p className="text-xs text-gray-500 mb-4">Add one or more entries. Click "+ Add Row" to log hours for different dates in a single session.</p>
         <div className="space-y-3">
@@ -759,7 +759,7 @@ export default function StudentDetailPage() {
             />
           </FormRow>
 
-          {/* Qualification — N/A for WWCC/First Aid; dropdown for WPA/MOU */}
+          {/* Qualification - N/A for WWCC/First Aid; dropdown for WPA/MOU */}
           <FormRow label="Qualification">
             {QUAL_SPECIFIC_SET.has(compForm.document_type) ? (
               <Select
@@ -883,9 +883,9 @@ export default function StudentDetailPage() {
               value={statusForm.status}
               onChange={v => setStatusForm(f => ({ ...f, status: v }))}
               options={[
-                { value: 'current',   label: '🔵 Current — actively enrolled' },
-                { value: 'completed', label: '✅ Completed — course finished' },
-                { value: 'withdrawn', label: '🔴 Withdrawn — left the course' },
+                { value: 'current',   label: '🔵 Current - actively enrolled' },
+                { value: 'completed', label: '✅ Completed - course finished' },
+                { value: 'withdrawn', label: '🔴 Withdrawn - left the course' },
               ]}
               placeholder=""
             />

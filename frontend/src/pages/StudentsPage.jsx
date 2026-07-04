@@ -1,5 +1,5 @@
 /**
- * StudentsPage — fixes Issues 9, 13, 17, 18:
+ * StudentsPage - fixes Issues 9, 13, 17, 18:
  *   Issue 9:  All four qualifications shown
  *   Issue 13: Functional Bulk Import (CSV/Excel)
  *   Issue 17: Bulk import endpoint connected
@@ -12,7 +12,7 @@ import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { Modal, Badge, ProgressBar, PageHeader, SearchInput, Select, Spinner, EmptyState, FormRow } from '../components/ui/index'
 
-// Issue 9 — all four qualifications
+// Issue 9 - all four qualifications
 const QUALIFICATIONS = [
   { value: 'CHC30121', label: 'CHC30121 – Certificate III in ECEC (Superseded)' },
   { value: 'CHC50121', label: 'CHC50121 – Diploma of ECEC (Superseded)' },
@@ -23,7 +23,7 @@ const QUALIFICATIONS = [
 const CAMPUSES = ['sydney', 'melbourne', 'perth']
 const STATUSES = ['current', 'completed', 'withdrawn']
 
-// Issue 9 — short labels for display
+// Issue 9 - short labels for display
 const QUAL_SHORT = {
   'CHC30121': 'Cert III (Superseded)',
   'CHC50121': 'Diploma (Superseded)',
@@ -63,7 +63,7 @@ function StudentCard({ student, onClick }) {
           {student.compliance_status === 'compliant'
             ? '✓ Compliant'
             : student.compliance_missing_count > 0
-              ? `Pending — ${student.compliance_missing_count} doc${student.compliance_missing_count > 1 ? 's' : ''} missing`
+              ? `Pending - ${student.compliance_missing_count} doc${student.compliance_missing_count > 1 ? 's' : ''} missing`
               : `Compliance: ${student.compliance_status}`}
         </span>
         <span className="text-xs text-gray-400"><Clock size={10} className="inline mr-0.5" />{student.completed_hours}h</span>
@@ -150,7 +150,7 @@ export default function StudentsPage() {
     finally { setSaving(false) }
   }
 
-  // Issue 13 — Bulk Import
+  // Issue 13 - Bulk Import
   const doImport = async () => {
     if (!importFile) return toast.error('Please select a file')
     setImporting(true)
@@ -177,14 +177,14 @@ export default function StudentsPage() {
         subtitle={`${students.length} student${students.length !== 1 ? 's' : ''} found`}
         actions={
           <>
-            {/* Issue 13 — functional Bulk Import button */}
+            {/* Issue 13 - functional Bulk Import button */}
             <button onClick={() => { setShowImportModal(true); setImportResult(null) }} className="btn-secondary text-sm"><Upload size={15} /> Bulk Import</button>
             <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>
           </>
         }
       />
 
-      {/* Filters — Issue 18 responsive */}
+      {/* Filters - Issue 18 responsive */}
       <div className="flex flex-wrap gap-3 mb-6">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by name, ID, email..." />
         <Select value={filterCampus} onChange={setFilterCampus} placeholder="All Campuses"
@@ -233,7 +233,7 @@ export default function StudentsPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{QUAL_SHORT[s.qualification] || s.qualification}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 capitalize">{s.campus}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{s.placement_site?.centre_name || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{s.placement_site?.centre_name || '-'}</td>
                   <td className="px-4 py-3"><div className="w-32"><ProgressBar value={s.completed_hours} max={s.required_hours} /></div></td>
                   <td className="px-4 py-3"><Badge status={s.compliance_status} /></td>
                   <td className="px-4 py-3"><Badge status={s.status} /></td>
@@ -260,7 +260,7 @@ export default function StudentsPage() {
           <FormRow label="Phone">
             <input className="input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
           </FormRow>
-          {/* Issue 9 — all four qualifications */}
+          {/* Issue 9 - all four qualifications */}
           <FormRow label="Qualification" required>
             <Select value={form.qualification} onChange={handleQualChange} options={QUALIFICATIONS} placeholder="" />
           </FormRow>
@@ -300,7 +300,7 @@ export default function StudentsPage() {
         </div>
       </Modal>
 
-      {/* Issue 13 — Bulk Import Modal */}
+      {/* Issue 13 - Bulk Import Modal */}
       <Modal open={showImportModal} onClose={() => setShowImportModal(false)} title="Bulk Import Students" size="md">
         <div className="space-y-4">
           <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-800">

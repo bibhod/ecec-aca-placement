@@ -1,5 +1,5 @@
 /**
- * ReportsPage — all exports fixed.
+ * ReportsPage - all exports fixed.
  * Bug: window.location.href and window.open do NOT send the Authorization header,
  * so every export call returned 401. Fixed by using downloadFile() from api.js
  * which uses the axios instance (includes Bearer token).

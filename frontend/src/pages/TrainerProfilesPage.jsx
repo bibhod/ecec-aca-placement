@@ -241,7 +241,7 @@ export default function TrainerProfilesPage() {
 
       {/* Visit History Modal */}
       <Modal open={showVisitModal} onClose={() => setShowVisitModal(false)}
-        title={`Visit History — ${selectedName}`} size="xl">
+        title={`Visit History - ${selectedName}`} size="xl">
         {selectedVisits.length === 0 ? (
           <p className="text-center text-gray-400 py-8">No visits recorded yet.</p>
         ) : (

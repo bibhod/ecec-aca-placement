@@ -1,5 +1,5 @@
 /**
- * For Trainer/Assessor — Visit Reports
+ * For Trainer/Assessor - Visit Reports
  * Auto-populated from Appointment data. No manual data entry.
  * Shows every visit each Trainer/Assessor did, with filters.
  */
@@ -82,7 +82,7 @@ export default function VisitReportsPage() {
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <PageHeader
         title="Trainer/Assessor Visit Reports"
-        subtitle={`${visits.length} visit record${visits.length !== 1 ? 's' : ''} — auto-populated from appointments`}
+        subtitle={`${visits.length} visit record${visits.length !== 1 ? 's' : ''} - auto-populated from appointments`}
         actions={
           <>
             <button onClick={load} className="btn-secondary text-sm"><RefreshCw size={15} /> Refresh</button>
@@ -134,7 +134,7 @@ export default function VisitReportsPage() {
             <tbody className="divide-y divide-gray-50">
               {visits.map(v => (
                 <tr key={v.appointment_id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-400">{v.visit_reference || '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-400">{v.visit_reference || '-'}</td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-gray-900">{v.trainer_assessor_name}</p>
                   </td>
@@ -145,7 +145,7 @@ export default function VisitReportsPage() {
                   <td className="px-4 py-3 text-xs text-gray-500">{v.student_qualification}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{v.placement_centre_name}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                    {v.visit_date ? format(new Date(v.visit_date), 'd MMM yyyy') : '—'}
+                    {v.visit_date ? format(new Date(v.visit_date), 'd MMM yyyy') : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{v.visit_time}</td>
                   <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
@@ -158,7 +158,7 @@ export default function VisitReportsPage() {
                           <span key={u} className="text-xs bg-cyan/10 text-cyan px-1.5 py-0.5 rounded">{u}</span>
                         ))}
                       </div>
-                    ) : <span className="text-gray-300 text-xs">—</span>}
+                    ) : <span className="text-gray-300 text-xs">-</span>}
                   </td>
                   <td className="px-4 py-3"><Badge status={v.status} /></td>
                 </tr>
@@ -206,7 +206,7 @@ export default function VisitReportsPage() {
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">{v.placement_centre_name}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                            {v.visit_date ? format(new Date(v.visit_date), 'd MMM yyyy') : '—'} {v.visit_time}
+                            {v.visit_date ? format(new Date(v.visit_date), 'd MMM yyyy') : '-'} {v.visit_time}
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-600">
                             {APPT_LABELS[v.appointment_type] || v.appointment_type}
@@ -218,10 +218,10 @@ export default function VisitReportsPage() {
                                     <span key={u} className="text-xs bg-cyan/10 text-cyan px-1.5 py-0.5 rounded">{u}</span>
                                   ))}
                                 </div>
-                              : <span className="text-gray-300 text-xs">—</span>}
+                              : <span className="text-gray-300 text-xs">-</span>}
                           </td>
                           <td className="px-4 py-3"><Badge status={v.status} /></td>
-                          <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{v.feedback || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">{v.feedback || '-'}</td>
                         </tr>
                       ))}
                     </tbody>

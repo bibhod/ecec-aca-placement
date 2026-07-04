@@ -42,7 +42,7 @@ export default function DashboardPage() {
     ? Object.entries(stats.campus_breakdown).map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
     : []
 
-  // Backend already aggregates to "Cert III" / "Diploma" — use as-is
+  // Backend already aggregates to "Cert III" / "Diploma" - use as-is
   const qualData = stats?.qualification_breakdown
     ? Object.entries(stats.qualification_breakdown).map(([name, value]) => ({ name, value }))
     : []
@@ -52,7 +52,7 @@ export default function DashboardPage() {
       {/* Welcome */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-navy">Welcome back, {user?.full_name?.split(' ')[0]} 👋</h1>
-        <p className="text-gray-500 text-sm mt-1">Here's an overview of your placement activities — {format(new Date(), 'EEEE, d MMMM yyyy')}</p>
+        <p className="text-gray-500 text-sm mt-1">Here's an overview of your placement activities - {format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
       {/* ── Action Required ───────────────────────────────────────────────────────────────── */}
@@ -66,7 +66,7 @@ export default function DashboardPage() {
             {
               label: 'Compliance Expiring',
               sublabel: 'within 7 days',
-              count: actionItems?.expiring_compliance_7d ?? '—',
+              count: actionItems?.expiring_compliance_7d ?? '-',
               color: 'red',
               link: '/compliance',
               icon: FileX,
@@ -74,7 +74,7 @@ export default function DashboardPage() {
             {
               label: 'Overdue Visits',
               sublabel: 'not yet completed',
-              count: actionItems?.overdue_visits ?? '—',
+              count: actionItems?.overdue_visits ?? '-',
               color: 'orange',
               link: '/appointments',
               icon: Calendar,
@@ -82,15 +82,15 @@ export default function DashboardPage() {
             {
               label: 'Upcoming Appointments',
               sublabel: 'in the next 7 days',
-              count: actionItems?.appointments_7d ?? '—',
+              count: actionItems?.appointments_7d ?? '-',
               color: 'purple',
               link: '/appointments',
               icon: Calendar,
             },
             {
-              label: 'Students — No Hours',
+              label: 'Students - No Hours',
               sublabel: 'logged this month',
-              count: actionItems?.zero_hours_this_month ?? '—',
+              count: actionItems?.zero_hours_this_month ?? '-',
               color: 'yellow',
               link: '/hours',
               icon: Clock,
@@ -142,7 +142,7 @@ export default function DashboardPage() {
             className="flex flex-col items-center p-4 rounded-xl bg-blue-50 border border-blue-200 hover:border-blue-400 transition-all hover:shadow-md cursor-pointer"
           >
             <BookOpen size={24} className="text-blue-600 mb-2" />
-            <p className="text-3xl font-bold text-blue-700">{stats?.current_students ?? '—'}</p>
+            <p className="text-3xl font-bold text-blue-700">{stats?.current_students ?? '-'}</p>
             <p className="text-sm font-semibold text-blue-600 mt-1">Current</p>
             <p className="text-xs text-gray-400">Enrolled students</p>
           </button>
@@ -151,7 +151,7 @@ export default function DashboardPage() {
             className="flex flex-col items-center p-4 rounded-xl bg-green-50 border border-green-200 hover:border-green-400 transition-all hover:shadow-md cursor-pointer"
           >
             <GraduationCap size={24} className="text-green-600 mb-2" />
-            <p className="text-3xl font-bold text-green-700">{stats?.completed_students ?? '—'}</p>
+            <p className="text-3xl font-bold text-green-700">{stats?.completed_students ?? '-'}</p>
             <p className="text-sm font-semibold text-green-600 mt-1">Completed</p>
             <p className="text-xs text-gray-400">Course finished</p>
           </button>
@@ -160,7 +160,7 @@ export default function DashboardPage() {
             className="flex flex-col items-center p-4 rounded-xl bg-red-50 border border-red-200 hover:border-red-400 transition-all hover:shadow-md cursor-pointer"
           >
             <UserX size={24} className="text-red-600 mb-2" />
-            <p className="text-3xl font-bold text-red-700">{stats?.withdrawn_students ?? '—'}</p>
+            <p className="text-3xl font-bold text-red-700">{stats?.withdrawn_students ?? '-'}</p>
             <p className="text-sm font-semibold text-red-600 mt-1">Withdrawn</p>
             <p className="text-xs text-gray-400">Left the course</p>
           </button>

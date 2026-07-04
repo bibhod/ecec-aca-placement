@@ -72,8 +72,8 @@ export default function UsersPage() {
                 </td>
                 <td className="px-4 py-3"><Badge status={u.role} label={u.role==='trainer'?'Trainer/Assessor':u.role.charAt(0).toUpperCase()+u.role.slice(1)} /></td>
                 <td className="px-4 py-3 text-sm text-gray-600 capitalize">{u.campus}</td>
-                <td className="px-4 py-3 text-sm text-gray-500">{u.phone || '—'}</td>
-                <td className="px-4 py-3 text-xs text-gray-400">{u.created_at ? format(new Date(u.created_at), 'd MMM yyyy') : '—'}</td>
+                <td className="px-4 py-3 text-sm text-gray-500">{u.phone || '-'}</td>
+                <td className="px-4 py-3 text-xs text-gray-400">{u.created_at ? format(new Date(u.created_at), 'd MMM yyyy') : '-'}</td>
                 <td className="px-4 py-3"><Badge status={u.is_active ? 'active' : 'withdrawn'} label={u.is_active ? 'Active' : 'Inactive'} /></td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
