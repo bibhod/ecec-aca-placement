@@ -1,18 +1,24 @@
 /**
  * ReportsPage - Task #20: restricted to a single location (campus) based
  * report generator, replacing the previous overview charts + raw CSV export
- * buttons. Wired up to the existing (previously unused by the frontend)
- * /reports/export/pdf endpoint, which already supported campus/qualification/
- * status/days filters server-side.
+ * buttons. Wired up to the backend's Custom Report data, which supports
+ * campus/qualification/status/days filters server-side.
  *
  * Also see backend/app/api/_combined.py - the expiring_documents report type
  * accepted a campus filter but never applied it; that's fixed alongside this
- * page so every report type here is genuinely location-filterable.
+ * page so every report type here is genuinely location-filterable. The PDF
+ * export and this on-screen view now share one data builder
+ * (_build_custom_report_data) so they can never show different numbers.
+ *
+ * Follow-up: results now display on screen (a "View Report" button fetches
+ * JSON from /reports/data and renders it as a table) with a separate
+ * "Download PDF" action alongside it, rather than only ever producing a PDF.
  */
 import React, { useState } from 'react'
-import { Download, MapPin } from 'lucide-react'
-import { downloadFile } from '../utils/api'
-import { PageHeader, FormRow, Select } from '../components/ui/index'
+import { Download, MapPin, Eye } from 'lucide-react'
+import toast from 'react-hot-toast'
+import api, { downloadFile } from '../utils/api'
+import { PageHeader, FormRow, Select, Spinner } from '../components/ui/index'
 
 const REPORT_TYPES = [
   { value: 'enrollment_summary',  label: 'Student Enrolment Summary',  description: 'Students enrolled at the selected campus, with qualification, status and hours progress.' },
@@ -33,7 +39,9 @@ export default function ReportsPage() {
   const [status, setStatus] = useState('current')
   const [days, setDays] = useState(30)
   const [missingOnly, setMissingOnly] = useState(false)
-  const [generating, setGenerating] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)   // { title, filter_desc, headers, rows, row_count }
 
   const meta = REPORT_TYPES.find(r => r.value === reportType)
   const showQualification = reportType === 'enrollment_summary' || reportType === 'placement_hours'
@@ -41,28 +49,47 @@ export default function ReportsPage() {
   const showDays = reportType === 'expiring_documents'
   const showMissingOnly = reportType === 'compliance_status'
 
-  const generate = async () => {
-    setGenerating(true)
+  const buildParams = () => {
     const params = new URLSearchParams({ report_type: reportType })
     if (campus) params.append('campus', campus)
     if (showQualification && qualification) params.append('qualification', qualification)
     if (showStatus) params.append('status', status)
     if (showDays) params.append('days', String(days))
     if (showMissingOnly) params.append('missing_only', String(missingOnly))
+    return params
+  }
+
+  const viewReport = async () => {
+    setLoading(true)
+    setResult(null)
+    try {
+      const params = buildParams()
+      const r = await api.get(`/reports/data?${params}`)
+      setResult(r.data)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to load report')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const downloadPdf = async () => {
+    setDownloading(true)
+    const params = buildParams()
     const filenameCampus = campus ? `_${campus}` : ''
     await downloadFile(`/reports/export/pdf?${params}`, `${reportType}${filenameCampus}_${new Date().toISOString().split('T')[0]}.pdf`)
-    setGenerating(false)
+    setDownloading(false)
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
-      <PageHeader title="Reports" subtitle="Generate a location-based report as a PDF" />
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+      <PageHeader title="Reports" subtitle="View a location-based report on screen, or download it as a PDF" />
 
-      <div className="card space-y-5">
+      <div className="card space-y-5 max-w-3xl">
         <FormRow label="Report Type" required>
           <Select
             value={reportType}
-            onChange={v => setReportType(v)}
+            onChange={v => { setReportType(v); setResult(null) }}
             options={REPORT_TYPES.map(r => ({ value: r.value, label: r.label }))}
             placeholder=""
           />
@@ -129,12 +156,52 @@ export default function ReportsPage() {
           </label>
         )}
 
-        <div className="pt-2 border-t border-gray-100">
-          <button onClick={generate} disabled={generating} className="btn-primary w-full sm:w-auto">
-            <Download size={15} /> {generating ? 'Generating...' : 'Generate PDF Report'}
+        <div className="pt-2 border-t border-gray-100 flex flex-wrap gap-3">
+          <button onClick={viewReport} disabled={loading} className="btn-primary">
+            <Eye size={15} /> {loading ? 'Loading...' : 'View Report'}
+          </button>
+          <button onClick={downloadPdf} disabled={downloading} className="btn-secondary">
+            <Download size={15} /> {downloading ? 'Generating...' : 'Download PDF'}
           </button>
         </div>
       </div>
+
+      {loading && <div className="mt-6"><Spinner size="lg" /></div>}
+
+      {result && (
+        <div className="card p-0 overflow-hidden mt-6">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+            <h3 className="font-semibold text-navy">{result.title}</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {result.filter_desc || 'All students'} · {result.row_count} row{result.row_count !== 1 ? 's' : ''}
+            </p>
+          </div>
+          {result.rows.length === 0 ? (
+            <p className="text-center text-gray-400 py-10 text-sm">No data found for the selected filters.</p>
+          ) : (
+            <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
+                  <tr>
+                    {result.headers.map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {result.rows.map((row, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      {row.map((cell, j) => (
+                        <td key={j} className="px-4 py-3 text-gray-700 whitespace-nowrap">{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
