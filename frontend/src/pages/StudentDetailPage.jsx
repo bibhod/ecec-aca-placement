@@ -90,7 +90,8 @@ export default function StudentDetailPage() {
 
   // Communications modal
   const [showEmailModal, setShowEmailModal] = useState(false)
-  const [emailForm, setEmailForm] = useState({ subject: '', body: '' })
+  const [emailForm, setEmailForm] = useState({ recipient_email: '', recipient_name: '', template: '', subject: '', body: '' })
+  const [templates, setTemplates] = useState([])
 
   // Issues modal
   const [showIssueModal, setShowIssueModal] = useState(false)
@@ -126,7 +127,31 @@ export default function StudentDetailPage() {
   useEffect(() => {
     api.get('/centres').then(r => setCentres(r.data)).catch(() => {})
     api.get('/users').then(r => setTrainers(r.data.filter(u => ['coordinator', 'admin', 'trainer'].includes(u.role)))).catch(() => {})
+    api.get('/communications/templates').then(r => setTemplates(r.data || [])).catch(() => {})
   }, [])
+
+  // Open the Send Email modal pre-filled with this student's on-file email
+  // (still editable/replaceable) and no template selected.
+  const openEmailModal = () => {
+    setEmailForm({
+      recipient_email: student?.email || '',
+      recipient_name: student?.full_name || '',
+      template: '', subject: '', body: '',
+    })
+    setShowEmailModal(true)
+  }
+
+  // Selecting a template prefills subject/body (still editable) using this
+  // student's name in place of the {student_name} placeholder.
+  const handleEmailTemplateChange = (templateName) => {
+    const tmpl = templates.find(t => t.name === templateName)
+    setEmailForm(f => ({
+      ...f,
+      template: templateName,
+      subject: tmpl ? tmpl.subject_template.replace(/\{student_name\}/g, student?.full_name || '') : f.subject,
+      body: tmpl ? tmpl.body_template.replace(/\{student_name\}/g, student?.full_name || '') : f.body,
+    }))
+  }
 
   // ── Issue 3 - Multi-row hours log helpers ────────────────────────────────
   const addHoursRow = () => setHoursEntries(e => [...e, { ...emptyEntry }])
@@ -204,17 +229,24 @@ export default function StudentDetailPage() {
 
   // ── Send email ────────────────────────────────────────────────────────────
   const sendEmail = async () => {
-    if (!student?.email) return toast.error('Student has no email address')
+    if (!emailForm.recipient_email) return toast.error('Recipient email is required')
+    if (!emailForm.subject || !emailForm.body) return toast.error('Subject and message are required')
     try {
-      await api.post('/communications/send', {
-        student_id: id, recipient_email: student.email,
-        recipient_name: student.full_name, ...emailForm, message_type: 'email'
+      const r = await api.post('/communications/send', {
+        student_id: id,
+        recipient_email: emailForm.recipient_email,
+        recipient_name: emailForm.recipient_name || student.full_name,
+        subject: emailForm.subject, body: emailForm.body,
+        message_type: 'email',
       })
-      toast.success('Email sent')
-      setShowEmailModal(false)
-      setEmailForm({ subject: '', body: '' })
+      if (r.data.success === false) {
+        toast.error(r.data.error || r.data.message || 'Email failed to send - check email provider settings')
+      } else {
+        toast.success('Email sent')
+        setShowEmailModal(false)
+      }
       load()
-    } catch { toast.error('Failed to send email') }
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to send email') }
   }
 
   // ── Issue add ─────────────────────────────────────────────────────────────
@@ -314,7 +346,7 @@ export default function StudentDetailPage() {
             </button>
           )}
           {isAdmin && (
-            <button onClick={() => setShowEmailModal(true)} className="btn-secondary text-sm"><Mail size={15} /> Email</button>
+            <button onClick={openEmailModal} className="btn-secondary text-sm"><Mail size={15} /> Email</button>
           )}
         </div>
       </div>
@@ -481,16 +513,16 @@ export default function StudentDetailPage() {
           {hours.length === 0 ? <p className="text-center text-gray-400 py-8">No hours logged yet</p> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="bg-gray-50">{['Date', 'Hours', 'Activity', 'Flags', 'Approved', 'Actions'].map(h => <th key={h} className="px-3 py-2 text-left text-xs text-gray-500 font-medium">{h}</th>)}</tr></thead>
+                <thead><tr className="bg-gray-50">{['Date', 'Hours', 'Activity', 'Approved', 'Actions'].map(h => <th key={h} className="px-3 py-2 text-left text-xs text-gray-500 font-medium">{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {hours.map(l => (
                     <tr key={l.id} className={l.flagged_unrealistic || l.flagged_duplicate ? 'bg-yellow-50/30' : ''}>
                       <td className="px-3 py-3">{format(new Date(l.log_date), 'd MMM yyyy')}</td>
                       <td className="px-3 py-3 font-medium">{l.hours}h</td>
-                      <td className="px-3 py-3 text-gray-500">{l.activity_description || '-'}</td>
-                      <td className="px-3 py-3">
-                        {l.flagged_unrealistic && <span className="text-xs text-orange-600 bg-orange-50 px-1 py-0.5 rounded mr-1">⚠ Unrealistic</span>}
-                        {l.flagged_duplicate && <span className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded">⚠ Duplicate</span>}
+                      <td className="px-3 py-3 text-gray-500">
+                        {l.activity_description || '-'}
+                        {l.flagged_unrealistic && <span className="text-xs text-orange-600 bg-orange-50 px-1 py-0.5 rounded ml-2">⚠ Unrealistic</span>}
+                        {l.flagged_duplicate && <span className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded ml-2">⚠ Duplicate</span>}
                       </td>
                       <td className="px-3 py-3">
                         {l.approved ? <span className="text-green-600 flex items-center gap-1"><CheckCircle size={14} /> {l.approved_by}</span>
@@ -680,7 +712,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Communications</h3>
             {/* Issue 5 - Communications section has its own + Add button */}
-            {isAdmin && <button onClick={() => setShowEmailModal(true)} className="btn-primary text-sm"><Mail size={14} /> Send Email</button>}
+            {isAdmin && <button onClick={openEmailModal} className="btn-primary text-sm"><Mail size={14} /> Send Email</button>}
           </div>
           {comms.length === 0 ? <p className="text-center text-gray-400 py-8">No communications yet</p>
             : <div className="space-y-3">
@@ -866,9 +898,19 @@ export default function StudentDetailPage() {
       {/* ── Email Modal ────────────────────────────────────────────────────────── */}
       <Modal open={showEmailModal} onClose={() => setShowEmailModal(false)} title={`Email ${student.full_name}`} size="sm">
         <div className="space-y-4">
-          <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
-            To: <strong>{student.full_name}</strong> {student.email ? `<${student.email}>` : <span className="text-red-500">(no email on file)</span>}
-          </div>
+          <FormRow label="Recipient Email" required>
+            <input className="input" type="email" value={emailForm.recipient_email}
+              onChange={e => setEmailForm(f => ({ ...f, recipient_email: e.target.value }))}
+              placeholder="name@example.com" />
+            <p className="text-xs text-gray-400 mt-1.5">
+              Defaults to the email on file{student.email ? ` (${student.email})` : ''} - change it to send elsewhere instead.
+            </p>
+          </FormRow>
+          <FormRow label="Template (optional)">
+            <Select value={emailForm.template} onChange={handleEmailTemplateChange}
+              options={templates.map(t => ({ value: t.name, label: t.label }))}
+              placeholder="Select a template to prefill..." />
+          </FormRow>
           <FormRow label="Subject"><input className="input" value={emailForm.subject} onChange={e => setEmailForm(f => ({ ...f, subject: e.target.value }))} /></FormRow>
           <FormRow label="Message"><textarea className="input h-32 resize-none" value={emailForm.body} onChange={e => setEmailForm(f => ({ ...f, body: e.target.value }))} /></FormRow>
         </div>

@@ -13,7 +13,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Upload, Grid, List, MapPin, Clock, Mail, Eye, FileCheck, Calendar } from 'lucide-react'
+import { Plus, Grid, List, MapPin, Clock, Mail, Eye, FileCheck, Calendar } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { Modal, Badge, ProgressBar, PageHeader, SearchInput, Select, Spinner, EmptyState, FormRow } from '../components/ui/index'
@@ -99,12 +99,9 @@ export default function StudentsPage() {
   const [filterQual, setFilterQual] = useState('')
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'current')
   const [showModal, setShowModal] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
+
   const [editStudent, setEditStudent] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [importFile, setImportFile] = useState(null)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
   const [form, setForm] = useState({
     student_id: '', full_name: '', email: '', phone: '', qualification: 'CHC30125',
     campus: 'sydney', status: 'current', course_start_date: '', course_end_date: '',
@@ -163,22 +160,6 @@ export default function StudentsPage() {
       setShowModal(false); load()
     } catch (err) { toast.error(err.response?.data?.detail || 'Save failed') }
     finally { setSaving(false) }
-  }
-
-  const doImport = async () => {
-    if (!importFile) return toast.error('Please select a file')
-    setImporting(true)
-    try {
-      const fd = new FormData()
-      fd.append('file', importFile)
-      const r = await api.post('/bulk/import/students', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      setImportResult(r.data)
-      toast.success(r.data.message)
-      load()
-    } catch (err) { toast.error(err.response?.data?.detail || 'Import failed') }
-    finally { setImporting(false) }
   }
 
   // ── Reminders state ───────────────────────────────────────────────────────
@@ -248,14 +229,7 @@ export default function StudentsPage() {
         title="Students"
         subtitle={activeTab === 'list' ? `${students.length} student${students.length !== 1 ? 's' : ''} found` : 'Send reminder emails to students'}
         actions={activeTab === 'list' ? (
-          <>
-            {isAdmin && (
-              <button onClick={() => { setShowImportModal(true); setImportResult(null) }} className="btn-secondary text-sm"><Upload size={15} /> Bulk Import</button>
-            )}
-            {isAdmin && (
-              <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>
-            )}
-          </>
+          isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>
         ) : null}
       />
 
@@ -387,48 +361,6 @@ export default function StudentsPage() {
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
               <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
               <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editStudent ? 'Update Student' : 'Add Student'}</button>
-            </div>
-          </Modal>
-
-          {/* Bulk Import Modal */}
-          <Modal open={showImportModal} onClose={() => setShowImportModal(false)} title="Bulk Import Students" size="md">
-            <div className="space-y-4">
-              <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-800">
-                <p className="font-semibold mb-2">CSV/Excel format requirements:</p>
-                <p className="text-xs font-mono bg-blue-100 p-2 rounded overflow-x-auto">
-                  student_id, full_name, email, phone, qualification, campus, status, required_hours, course_start_date, course_end_date, placement_start_date, placement_end_date, notes
-                </p>
-                <p className="text-xs mt-2">Qualifications: CHC30121, CHC50121, CHC30125, CHC50125</p>
-                <p className="text-xs">Date format: YYYY-MM-DD (e.g. 2025-03-01)</p>
-              </div>
-              <FormRow label="Upload CSV or Excel File">
-                <input type="file" accept=".csv,.xlsx,.xls"
-                  onChange={e => { setImportFile(e.target.files[0]); setImportResult(null) }}
-                  className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-gray-300 file:text-sm file:bg-gray-50 file:cursor-pointer" />
-              </FormRow>
-              {importResult && (
-                <div className={`rounded-xl p-4 text-sm ${importResult.errors.length > 0 ? 'bg-yellow-50' : 'bg-green-50'}`}>
-                  <p className="font-semibold mb-2">{importResult.message}</p>
-                  {importResult.errors.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium text-red-700 mb-1">Errors:</p>
-                      {importResult.errors.map((e, i) => <p key={i} className="text-xs text-red-600">Row {e.row}: {e.error}</p>)}
-                    </div>
-                  )}
-                  {importResult.skipped.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium text-yellow-700 mb-1">Skipped (already exist):</p>
-                      <p className="text-xs text-yellow-600">{importResult.skipped.map(s => s?.student_id || s).join(', ')}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
-              <button onClick={() => setShowImportModal(false)} className="btn-secondary">Close</button>
-              <button onClick={doImport} disabled={importing || !importFile} className="btn-primary">
-                <Upload size={15} />{importing ? 'Importing...' : 'Import'}
-              </button>
             </div>
           </Modal>
         </>
