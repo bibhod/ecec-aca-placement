@@ -177,7 +177,7 @@ export function HoursPage() {
                       ) : (
                         <span className="text-xs text-gray-400">Admin approval required</span>
                       )
-                    }
+                    )}
                   </td>
                 </tr>
               ))}
