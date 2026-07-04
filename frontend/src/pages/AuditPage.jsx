@@ -1,10 +1,10 @@
 /**
- * AuditPage — Audit Trail
+ * AuditPage - Audit Trail
  *
  * Previously this page also carried a "Custom Reports" tab and an
  * "Email & SMS Log" tab, both of which duplicated the dedicated Reports page
  * (/reports) and Communications page (/communications). Consolidated so each
- * fact lives in exactly one place — this page is now the audit log only.
+ * fact lives in exactly one place - this page is now the audit log only.
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
@@ -145,10 +145,10 @@ export default function AuditPage() {
               {filtered.map(entry => (
                 <tr key={entry.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
-                    {entry.created_at ? format(parseISO(entry.created_at), 'd MMM yyyy, h:mm a') : '—'}
+                    {entry.created_at ? format(parseISO(entry.created_at), 'd MMM yyyy, h:mm a') : '-'}
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{entry.user_name || '—'}</p>
+                    <p className="font-medium text-gray-900">{entry.user_name || '-'}</p>
                     <p className="text-gray-400">{entry.user_email || ''}</p>
                   </td>
                   <td className="px-4 py-3">
@@ -158,12 +158,12 @@ export default function AuditPage() {
                         : entry.action?.includes('approve') || entry.action?.includes('completion') ? 'bg-blue-100 text-blue-700'
                         : 'bg-gray-100 text-gray-600'
                       }`}>
-                      {entry.action || '—'}
+                      {entry.action || '-'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-gray-700 font-medium">{(entry.resource_type || '').replace(/_/g, ' ')}</p>
-                    <p className="text-gray-400 truncate max-w-32" title={entry.resource_label}>{entry.resource_label || entry.resource_id || '—'}</p>
+                    <p className="text-gray-400 truncate max-w-32" title={entry.resource_label}>{entry.resource_label || entry.resource_id || '-'}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-600 max-w-xs">
                     {formatAuditDetail(entry.action || '', entry.details)}

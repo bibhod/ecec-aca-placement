@@ -1,5 +1,5 @@
 /**
- * CentresPage — fixes Issues 7 and 11:
+ * CentresPage - fixes Issues 7 and 11:
  *   Issue 7:  Google Maps Places autocomplete for the address field
  *   Issue 11: Rename "NQS" label → "National Quality Standard (NQS)"
  */
@@ -21,7 +21,7 @@ const emptyForm = {
 }
 
 /**
- * AddressAutocomplete — Issue 7
+ * AddressAutocomplete - Issue 7
  * Uses Google Maps Places API (Autocomplete widget) if VITE_GOOGLE_MAPS_API_KEY is set;
  * otherwise falls back to a plain text input.
  */
@@ -203,7 +203,7 @@ export default function CentresPage() {
             </FormRow>
           </div>
 
-          {/* Issue 7 — Google Maps address autocomplete */}
+          {/* Issue 7 - Google Maps address autocomplete */}
           <div className="col-span-full">
             <FormRow label="Address">
               <AddressAutocomplete
@@ -248,7 +248,7 @@ export default function CentresPage() {
           <FormRow label="Trainer/Assessor Email"><input className="input" type="email" value={form.supervisor_email} onChange={e => setForm(f => ({ ...f, supervisor_email: e.target.value }))} /></FormRow>
           <FormRow label="Trainer/Assessor Phone"><input className="input" value={form.supervisor_phone} onChange={e => setForm(f => ({ ...f, supervisor_phone: e.target.value }))} /></FormRow>
 
-          {/* Issue 11 — full label "National Quality Standard (NQS)" */}
+          {/* Issue 11 - full label "National Quality Standard (NQS)" */}
           <FormRow label="National Quality Standard (NQS)">
             <Select value={form.nqs_rating} onChange={v => setForm(f => ({ ...f, nqs_rating: v }))}
               options={NQS_RATINGS.map(r => ({ value: r, label: r }))} placeholder="" />

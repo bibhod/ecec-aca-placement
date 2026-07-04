@@ -1,5 +1,5 @@
 /**
- * AppointmentsPage — fixed:
+ * AppointmentsPage - fixed:
  *   - Unit loading: now shows ALL units on first open, falls back to full list if API fails
  *   - Correctly excludes already-assessed units per student
  *   - All six appointment types; Trainer and Assessor label
@@ -109,7 +109,7 @@ export default function AppointmentsPage() {
       const params = new URLSearchParams({ student_id: studentId })
       if (excludeApptId) params.append('exclude_appt_id', excludeApptId)
       const r = await api.get(`/appointments/units/${student.qualification}?${params}`)
-      // Always show something — never leave the list empty on error
+      // Always show something - never leave the list empty on error
       setAvailableUnits(r.data.available_units?.length > 0
         ? r.data.available_units
         : fallbackUnits(student.qualification))
@@ -223,7 +223,7 @@ export default function AppointmentsPage() {
             {a.duration_hours && ` · ${a.duration_hours}h`}
           </p>
           {a.trainer_assessor_name && <p className="text-xs text-gray-400 mt-0.5">Trainer & Assessor: {a.trainer_assessor_name}</p>}
-          {a.placement_centre_name && <p className="text-xs text-gray-500 mt-1">📍 {a.placement_centre_name}{a.placement_centre_address ? ` — ${a.placement_centre_address}` : ''}</p>}
+          {a.placement_centre_name && <p className="text-xs text-gray-500 mt-1">📍 {a.placement_centre_name}{a.placement_centre_address ? ` - ${a.placement_centre_address}` : ''}</p>}
           {a.units_assessed?.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
               <span className="text-xs text-gray-400 mr-1">Units:</span>
@@ -357,7 +357,7 @@ export default function AppointmentsPage() {
             </FormRow>
           </div>
 
-          {/* Unit to be Assessed — multi-select with per-student exclusion */}
+          {/* Unit to be Assessed - multi-select with per-student exclusion */}
           <div className="col-span-full">
             <FormRow label="Unit(s) to be Assessed">
               {!form.student_id ? (

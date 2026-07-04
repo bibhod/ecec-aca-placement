@@ -1,20 +1,20 @@
 /**
- * CompliancePage — Compliance section of the ECEC Placement Portal
+ * CompliancePage - Compliance section of the ECEC Placement Portal
  *
  * Changes in this revision (all scoped to this file / compliance endpoints):
  *
- *  Feature 1 — Searchable student combobox in Add Document modal
+ *  Feature 1 - Searchable student combobox in Add Document modal
  *    - StudentSearchInput component: real-time filter, keyboard nav (↑↓ Enter Esc),
  *      "No students found" fallback, submits correct student UUID.
  *
- *  Feature 2 — Bulk multi-document upload in Add Document modal
+ *  Feature 2 - Bulk multi-document upload in Add Document modal
  *    - One row per DOC_TYPE; each row has its own file picker.
  *    - WPA and MOU rows include a Qualification dropdown (Certificate III / Diploma).
  *    - Only rows with a file selected are submitted (parallel uploads).
  *    - Qualification is prepended to the notes field before sending so no DB schema
  *      changes are required.
  *
- *  Feature 3 — Sticky column headers on all scrollable tables
+ *  Feature 3 - Sticky column headers on all scrollable tables
  *    - Tables are wrapped in overflow-auto containers with max-height so they scroll
  *      independently of the page.
  *    - <thead> receives `sticky top-0 z-10` so headers remain visible during scroll.
@@ -22,7 +22,7 @@
  *      NOTE: if your layout has a fixed top navbar, increase the `top-0` offset on
  *      <thead> (e.g. `top-[64px]`) to match the navbar height and prevent overlap.
  *
- *  Feature 4 — Bulk Upload via CSV tab
+ *  Feature 4 - Bulk Upload via CSV tab
  *    - "Download CSV Template" generates a .csv client-side (no backend call needed).
  *    - CSV upload parses the file in the browser and shows a validated preview table.
  *    - Invalid rows are highlighted in red with a per-row error message.
@@ -31,7 +31,7 @@
  *
  * Assumptions / notes:
  *  - The `qualification` value for WPA/MOU is stored as a "Qualification: X" prefix
- *    in the `notes` field — no DB schema change required, fully backwards compatible.
+ *    in the `notes` field - no DB schema change required, fully backwards compatible.
  *  - CSV `student_id` column contains the student reference number (e.g. "STU001"),
  *    matched against the `student_id` field on the Student model (not the UUID).
  *  - CSV rows create metadata-only documents (no file attachment); files can be
@@ -77,9 +77,9 @@ const QUAL_OPTIONS = [
  * Submits the student's UUID (id) via onChange, not the display string.
  *
  * Props:
- *   students  — array of student objects from /api/students
- *   value     — currently selected student UUID (or '')
- *   onChange  — (uuid: string) => void
+ *   students  - array of student objects from /api/students
+ *   value     - currently selected student UUID (or '')
+ *   onChange  - (uuid: string) => void
  */
 function StudentSearchInput({ students, value, onChange }) {
   const [query, setQuery]           = useState('')
@@ -355,7 +355,7 @@ export default function CompliancePage() {
   }
 
   /**
-   * Feature 2 — Submit all bulk rows that have at least one date filled.
+   * Feature 2 - Submit all bulk rows that have at least one date filled.
    * Uses JSON POST /compliance (no file upload).
    * Entry Date is stored in notes; Issue Date maps to the issue_date field.
    */
@@ -409,7 +409,7 @@ export default function CompliancePage() {
     try {
       const res = await api.get('/compliance/reminder-preview')
       if (res.data.recipient_count === 0) {
-        toast.success('All active students are fully compliant — no reminders needed!')
+        toast.success('All active students are fully compliant - no reminders needed!')
       } else {
         setPreviewData(res.data)
       }
@@ -422,7 +422,7 @@ export default function CompliancePage() {
     try {
       const res = await api.get('/compliance/hours-reminder-preview')
       if (res.data.recipient_count === 0) {
-        toast.success('All active students have met their required placement hours — no reminders needed!')
+        toast.success('All active students have met their required placement hours - no reminders needed!')
       } else {
         setHoursPreviewData(res.data)
       }
@@ -485,7 +485,7 @@ export default function CompliancePage() {
         ))}
       </div>
 
-      {/* Tabs — Feature 4 adds the "Bulk Upload" tab */}
+      {/* Tabs - Feature 4 adds the "Bulk Upload" tab */}
       <div className="flex flex-wrap gap-1 mb-6 border-b border-gray-200">
         {[
           { key: 'documents',    label: 'Documents',             icon: FileText    },
@@ -838,11 +838,11 @@ export default function CompliancePage() {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="card text-center py-3">
                   <p className="text-xl font-bold text-green-600">{metCount}</p>
-                  <p className="text-xs text-gray-500">Students — Hours Requirement Met</p>
+                  <p className="text-xs text-gray-500">Students - Hours Requirement Met</p>
                 </div>
                 <div className="card text-center py-3">
                   <p className="text-xl font-bold text-orange-500">{pendingCount}</p>
-                  <p className="text-xs text-gray-500">Students — Hours Still Pending</p>
+                  <p className="text-xs text-gray-500">Students - Hours Still Pending</p>
                 </div>
               </div>
             )}
@@ -966,7 +966,7 @@ export default function CompliancePage() {
                           <p className="text-xs text-gray-400 leading-tight">{row.label}</p>
                         </div>
 
-                        {/* Qualification — N/A for WWCC/First Aid; dropdown for WPA/MOU */}
+                        {/* Qualification - N/A for WWCC/First Aid; dropdown for WPA/MOU */}
                         <div>
                           {row.qualSpecific ? (
                             <select
@@ -985,7 +985,7 @@ export default function CompliancePage() {
                           )}
                         </div>
 
-                        {/* Entry Date — defaults to today */}
+                        {/* Entry Date - defaults to today */}
                         <div>
                           <input
                             type="date"

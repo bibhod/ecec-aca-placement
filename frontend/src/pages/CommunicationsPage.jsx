@@ -1,5 +1,5 @@
 /**
- * CommunicationsPage — all issues fixed:
+ * CommunicationsPage - all issues fixed:
  *   Issue 6:  Templates loaded from API, can be EDITED before sending
  *   Issue 14: Messaging system fully wired
  *   Issue 15: Email + SMS sending errors now surfaced to user
@@ -23,7 +23,7 @@ export default function CommunicationsPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
 
 
-  // Template modal — Issue 6: includes editing before send
+  // Template modal - Issue 6: includes editing before send
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [templateForm, setTemplateForm] = useState({ student_id: '', template: '', custom_subject: '', custom_body: '' })
   const [sendingTemplate, setSendingTemplate] = useState(false)
@@ -75,7 +75,7 @@ export default function CommunicationsPage() {
     try {
       const r = await api.post('/communications/send', { ...emailForm, message_type: 'email' })
       if (r.data.success) { toast.success('Email sent successfully'); setShowEmailModal(false); load() }
-      else toast.error(r.data.error || r.data.message || 'Email failed — check SMTP settings in docker-compose.yml')
+      else toast.error(r.data.error || r.data.message || 'Email failed - check SMTP settings in docker-compose.yml')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Email send error')
     } finally { setSendingEmail(false) }
@@ -94,7 +94,7 @@ export default function CommunicationsPage() {
         custom_body: templateForm.custom_body || undefined,
       })
       if (r.data.success) { toast.success('Template email sent'); setShowTemplateModal(false); load() }
-      else toast.error(r.data.error || 'Template email failed — check SMTP settings')
+      else toast.error(r.data.error || 'Template email failed - check SMTP settings')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Send error')
     } finally { setSendingTemplate(false) }
@@ -203,7 +203,7 @@ export default function CommunicationsPage() {
         </div>
       </Modal>
 
-      {/* ── Template Email Modal (Issue 6 — editable before sending) ────────── */}
+      {/* ── Template Email Modal (Issue 6 - editable before sending) ────────── */}
       <Modal open={showTemplateModal} onClose={() => setShowTemplateModal(false)} title="Send Template Email" size="md">
         <div className="space-y-4">
           <FormRow label="Student" required>

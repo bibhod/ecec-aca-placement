@@ -1,5 +1,5 @@
 /**
- * Bulk Upload Page — Issue 17
+ * Bulk Upload Page - Issue 17
  * Download CSV templates, populate them, upload to import data.
  * Covers: Students, Centres, Hours, Visits.
  */
@@ -112,7 +112,7 @@ function UploadCard({ type }) {
 
       {/* Step 1: Download template */}
       <div className="bg-white/80 rounded-lg p-3 mb-3">
-        <p className="text-xs font-semibold text-gray-600 mb-2">Step 1 — Download Template</p>
+        <p className="text-xs font-semibold text-gray-600 mb-2">Step 1 - Download Template</p>
         <button onClick={doDownload} disabled={downloading}
           className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 w-full justify-center">
           <Download size={13} /> {downloading ? 'Downloading…' : `Download ${type.filename}`}
@@ -122,10 +122,10 @@ function UploadCard({ type }) {
         </p>
       </div>
 
-      {/* Step 2: Upload — only if type has an import endpoint */}
+      {/* Step 2: Upload - only if type has an import endpoint */}
       {type.import && (
         <div className="bg-white/80 rounded-lg p-3">
-          <p className="text-xs font-semibold text-gray-600 mb-2">Step 2 — Upload Completed File</p>
+          <p className="text-xs font-semibold text-gray-600 mb-2">Step 2 - Upload Completed File</p>
           <input
             type="file"
             accept=".csv,.xlsx,.xls"
@@ -181,7 +181,7 @@ export default function BulkUploadPage() {
           <li>Open the CSV in Excel or Google Sheets and fill in your data (do not change the column headers)</li>
           <li>Save as <strong>.csv</strong> or <strong>.xlsx</strong></li>
           <li>Click <strong>Upload Completed File</strong> and select your file</li>
-          <li>Review the import results — errors will be listed with the row number</li>
+          <li>Review the import results - errors will be listed with the row number</li>
         </ol>
       </div>
 
