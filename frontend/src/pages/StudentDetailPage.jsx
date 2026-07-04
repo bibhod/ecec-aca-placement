@@ -295,8 +295,6 @@ export default function StudentDetailPage() {
     } finally { setSavingStatus(false) }
   }
 
-  const approveHours = async (logId) => { await api.put(`/hours/${logId}/approve`); toast.success('Hours approved'); load() }
-  const rejectHours = async (logId) => { await api.put(`/hours/${logId}/reject`); toast.success('Hours rejected'); load() }
 
   if (loading) return <div className="p-8"><Spinner size="lg" /></div>
   if (!student) return <div className="p-8 text-center text-gray-500">Student not found</div>
@@ -513,28 +511,16 @@ export default function StudentDetailPage() {
           {hours.length === 0 ? <p className="text-center text-gray-400 py-8">No hours logged yet</p> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="bg-gray-50">{['Date', 'Hours', 'Activity', 'Approved', 'Actions'].map(h => <th key={h} className="px-3 py-2 text-left text-xs text-gray-500 font-medium">{h}</th>)}</tr></thead>
+                <thead><tr className="bg-gray-50">{['Date', 'Hours', 'Activity', 'Approved'].map(h => <th key={h} className="px-3 py-2 text-left text-xs text-gray-500 font-medium">{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {hours.map(l => (
-                    <tr key={l.id} className={l.flagged_unrealistic || l.flagged_duplicate ? 'bg-yellow-50/30' : ''}>
+                    <tr key={l.id}>
                       <td className="px-3 py-3">{format(new Date(l.log_date), 'd MMM yyyy')}</td>
                       <td className="px-3 py-3 font-medium">{l.hours}h</td>
-                      <td className="px-3 py-3 text-gray-500">
-                        {l.activity_description || '-'}
-                        {l.flagged_unrealistic && <span className="text-xs text-orange-600 bg-orange-50 px-1 py-0.5 rounded ml-2">⚠ Unrealistic</span>}
-                        {l.flagged_duplicate && <span className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded ml-2">⚠ Duplicate</span>}
-                      </td>
+                      <td className="px-3 py-3 text-gray-500">{l.activity_description || '-'}</td>
                       <td className="px-3 py-3">
                         {l.approved ? <span className="text-green-600 flex items-center gap-1"><CheckCircle size={14} /> {l.approved_by}</span>
                           : <span className="text-yellow-600 text-xs">Pending</span>}
-                      </td>
-                      <td className="px-3 py-3">
-                        {!l.approved && (
-                          <div className="flex gap-2">
-                            <button onClick={() => approveHours(l.id)} className="text-xs text-green-600 hover:underline">Approve</button>
-                            <button onClick={() => rejectHours(l.id)} className="text-xs text-red-600 hover:underline">Reject</button>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))}
