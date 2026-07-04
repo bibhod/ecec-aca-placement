@@ -470,16 +470,31 @@ def export_report_pdf(
     elif report_type == "expiring_documents":
         title = "Expiring Documents Report"
         days_int = int(days) if days.isdigit() else 30
-        filter_desc = f"Documents expiring within {days_int} days"
+        filter_parts = [f"Documents expiring within {days_int} days"]
+        # Bug fix: campus was accepted as a parameter here but never actually
+        # applied - every "location-based" export of this report type
+        # silently returned documents for ALL campuses regardless of the
+        # filter selected in the UI.
+        if campus:
+            filter_parts.append(f"Campus: {campus.title()}")
+        filter_desc = "  |  ".join(filter_parts)
         expiry_limit = today + __import__("datetime").timedelta(days=days_int)
         docs = db.query(ComplianceDocument).filter(
             ComplianceDocument.expiry_date >= today,
             ComplianceDocument.expiry_date <= expiry_limit,
         ).order_by(ComplianceDocument.expiry_date).all()
 
+        # Batch-fetch students instead of one query per document (was N+1).
+        student_ids = {d.student_id for d in docs}
+        students_by_id = {
+            s.id: s for s in db.query(Student).filter(Student.id.in_(student_ids)).all()
+        } if student_ids else {}
+
         headers = ["Student", "Campus", "Document Type", "Expiry Date", "Days Left", "Verified"]
         for d in docs:
-            s = db.query(Student).filter(Student.id == d.student_id).first()
+            s = students_by_id.get(d.student_id)
+            if campus and (not s or (s.campus or "").lower() != campus.lower()):
+                continue
             days_left = (d.expiry_date - today).days
             doc_label = d.document_type.replace("_", " ").title()
             rows_data.append([
