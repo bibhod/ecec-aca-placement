@@ -15,8 +15,6 @@ import ReportsPage from './pages/ReportsPage'
 import UsersPage from './pages/UsersPage'
 import CentresPage from './pages/CentresPage'
 import AuditPage from './pages/AuditPage'
-import VisitReportsPage from './pages/VisitReportsPage'
-import TrainerProfilesPage from './pages/TrainerProfilesPage'
 import BulkUploadPage from './pages/BulkUploadPage'
 
 function PrivateRoute({ children }) {
@@ -56,8 +54,6 @@ function AppRoutes() {
         <Route path="users" element={<RestrictedRoute><UsersPage /></RestrictedRoute>} />
         <Route path="centres" element={<CentresPage />} />
         <Route path="audit" element={<RestrictedRoute><AuditPage /></RestrictedRoute>} />
-        <Route path="visit-reports" element={<VisitReportsPage />} />
-        <Route path="trainer-profiles" element={<TrainerProfilesPage />} />
         <Route path="bulk-upload" element={<RestrictedRoute><BulkUploadPage /></RestrictedRoute>} />
       </Route>
     </Routes>
