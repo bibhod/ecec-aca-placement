@@ -26,7 +26,11 @@ const NEW_STUDENT_QUALIFICATIONS = QUALIFICATIONS.filter(
   q => q.value === 'CHC30125' || q.value === 'CHC50125'
 )
 
+// All campuses that may already exist on historical records (kept selectable
+// when editing an existing student so their current value still displays).
 const CAMPUSES = ['sydney', 'melbourne', 'perth']
+// New students may only be enrolled at the current Sydney/Melbourne campuses.
+const NEW_STUDENT_CAMPUSES = ['sydney', 'melbourne']
 const STATUSES = ['current', 'completed', 'withdrawn']
 
 // Issue 9 - short labels for display
@@ -271,7 +275,7 @@ export default function StudentsPage() {
             <Select value={form.qualification} onChange={handleQualChange} options={editStudent ? QUALIFICATIONS : NEW_STUDENT_QUALIFICATIONS} placeholder="" />
           </FormRow>
           <FormRow label="Campus" required>
-            <Select value={form.campus} onChange={v => setForm(f => ({ ...f, campus: v }))} options={CAMPUSES.map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} placeholder="" />
+            <Select value={form.campus} onChange={v => setForm(f => ({ ...f, campus: v }))} options={(editStudent ? CAMPUSES : NEW_STUDENT_CAMPUSES).map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} placeholder="" />
           </FormRow>
           <FormRow label="Status">
             <Select value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))}

@@ -15,7 +15,7 @@ const QUALIFICATIONS = [
   { value: 'CHC30125', label: 'CHC30125 – Certificate III in ECEC' },
   { value: 'CHC50125', label: 'CHC50125 – Diploma of ECEC' },
 ]
-const CAMPUSES = ['Sydney', 'Melbourne', 'Perth', 'Brisbane', 'Adelaide', 'Online']
+const CAMPUSES = ['Sydney', 'Melbourne']
 
 const emptyForm = {
   user_id: '', full_name: '', email: '', mobile: '',

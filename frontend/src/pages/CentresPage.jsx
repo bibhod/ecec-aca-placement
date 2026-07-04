@@ -10,7 +10,12 @@ import api from '../utils/api'
 import { PageHeader, Spinner, Badge, Modal, FormRow, Select, EmptyState, SearchInput } from '../components/ui/index'
 
 const NQS_RATINGS = ['Excellent', 'Exceeding NQS', 'Meeting NQS', 'Working Towards NQS', 'Significant Improvement Required']
+// All states that may already exist on historical centre records (kept
+// selectable when editing an existing centre so its current value still displays).
 const AU_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT']
+// New placement centres may only be added in the current Sydney/Melbourne
+// (NSW/VIC) operating area.
+const NEW_CENTRE_STATES = ['NSW', 'VIC']
 
 const emptyForm = {
   centre_name: '', address: '', suburb: '', state: 'NSW', postcode: '',
@@ -220,7 +225,7 @@ export default function CentresPage() {
             <input className="input" value={form.suburb} onChange={e => setForm(f => ({ ...f, suburb: e.target.value }))} />
           </FormRow>
           <FormRow label="State">
-            <Select value={form.state} onChange={v => setForm(f => ({ ...f, state: v }))} options={AU_STATES.map(s => ({ value: s, label: s }))} placeholder="" />
+            <Select value={form.state} onChange={v => setForm(f => ({ ...f, state: v }))} options={(editCentre ? AU_STATES : NEW_CENTRE_STATES).map(s => ({ value: s, label: s }))} placeholder="" />
           </FormRow>
           <FormRow label="Postcode">
             <input className="input" value={form.postcode} onChange={e => setForm(f => ({ ...f, postcode: e.target.value }))} />

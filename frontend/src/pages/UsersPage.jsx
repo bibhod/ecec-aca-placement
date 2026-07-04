@@ -103,7 +103,7 @@ export default function UsersPage() {
             </FormRow>
             <FormRow label="Campus">
               <Select value={form.campus} onChange={v => setForm(f => ({ ...f, campus: v }))}
-                options={['sydney', 'melbourne', 'perth'].map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} placeholder="" />
+                options={(editUser ? ['sydney', 'melbourne', 'perth'] : ['sydney', 'melbourne']).map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} placeholder="" />
             </FormRow>
           </div>
           <FormRow label="Phone"><input className="input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="04xx xxx xxx" /></FormRow>
