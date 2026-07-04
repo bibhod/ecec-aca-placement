@@ -1,5 +1,5 @@
 """
-Communications API — fixed version.
+Communications API - fixed version.
 Bugs fixed:
   - Templates can now be EDITED (PUT /communications/templates/{id})
   - send-template body correctly applied
@@ -170,7 +170,7 @@ def update_template(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Edit an existing email template (Issue 6 — template editing)."""
+    """Edit an existing email template (Issue 6 - template editing)."""
     t = db.query(EmailTemplate).filter(EmailTemplate.id == template_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Template not found")

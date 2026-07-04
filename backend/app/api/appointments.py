@@ -161,7 +161,7 @@ def get_appointment(appt_id: str, db: Session = Depends(get_db), current_user: U
 
 class AppointmentCreate(BaseModel):
     student_id: str
-    trainer_assessor_id: str          # REQUIRED — mandatory field
+    trainer_assessor_id: str          # REQUIRED - mandatory field
     title: str
     appointment_type: str
     visit_type: str = "onsite"

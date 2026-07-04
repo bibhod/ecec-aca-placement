@@ -1,5 +1,5 @@
 """
-Bulk Upload API — Issue 17
+Bulk Upload API - Issue 17
 Upload CSV/Excel for: students, centres, hours, visits/appointments, units.
 Also provides GET endpoints to download blank CSV templates.
 """
@@ -56,7 +56,7 @@ def _resolve_student(db: Session, sid: str, qualification: str = None):
 
     return None, (
         f'Student "{sid}" has multiple enrolments '
-        f'({", ".join(sorted(set(s.qualification for s in matches)))}) — '
+        f'({", ".join(sorted(set(s.qualification for s in matches)))}) - '
         f'add a "qualification" column to this file to disambiguate'
     )
 
@@ -123,7 +123,7 @@ def template_centres():
 def template_hours():
     return _make_csv_response(
         ["student_id", "log_date", "hours", "activity_description"],
-        [["STU2025001", "2025-05-01", "8", "Room 2 — toddler activities"]],
+        [["STU2025001", "2025-05-01", "8", "Room 2 - toddler activities"]],
         "template_hours.csv",
     )
 
@@ -194,7 +194,7 @@ async def import_students(
         if not qual:
             errors.append({"row": i, "field": "qualification", "error": 'Required field "qualification" is empty'}); continue
         if qual not in QUALIFICATION_CHOICES:
-            errors.append({"row": i, "field": "qualification", "error": f'Invalid qualification "{qual}" — valid values: {", ".join(QUALIFICATION_CHOICES)}'}); continue
+            errors.append({"row": i, "field": "qualification", "error": f'Invalid qualification "{qual}" - valid values: {", ".join(QUALIFICATION_CHOICES)}'}); continue
         # Same student ID re-enrolling under a new qualification (e.g. Cert III
         # graduate progressing into the Diploma) is allowed; only skip if this
         # exact student_id + qualification combination already exists.
@@ -215,7 +215,7 @@ async def import_students(
                     parsed_dates[field_name] = date.fromisoformat(str(raw_val).strip())
                 except ValueError:
                     date_error = {"row": i, "field": field_name,
-                                  "error": f'Invalid date format in column "{field_name}" — expected YYYY-MM-DD, got "{raw_val}"'}
+                                  "error": f'Invalid date format in column "{field_name}" - expected YYYY-MM-DD, got "{raw_val}"'}
                     break
         if date_error:
             errors.append(date_error); continue
@@ -313,13 +313,13 @@ async def import_hours(
             parsed_date = date.fromisoformat(log_date)
         except ValueError:
             errors.append({"row": i, "field": "log_date",
-                           "error": f'Invalid date format in "log_date" — expected YYYY-MM-DD, got "{log_date}"'}); continue
+                           "error": f'Invalid date format in "log_date" - expected YYYY-MM-DD, got "{log_date}"'}); continue
 
         try:
             h = float(hrs_raw)
         except ValueError:
             errors.append({"row": i, "field": "hours",
-                           "error": f'Invalid number in "hours" — expected a decimal number, got "{hrs_raw}"'}); continue
+                           "error": f'Invalid number in "hours" - expected a decimal number, got "{hrs_raw}"'}); continue
 
         if h <= 0 or h > 24:
             errors.append({"row": i, "field": "hours",
@@ -449,7 +449,7 @@ async def import_compliance(
             try:
                 return date.fromisoformat(raw), None
             except ValueError:
-                return None, {"row": i, "error": f'Invalid {field_name} "{raw}" — use YYYY-MM-DD'}
+                return None, {"row": i, "error": f'Invalid {field_name} "{raw}" - use YYYY-MM-DD'}
 
         issue_date,  err = _parse_date(issue_raw,  "issue_date");
         if err: errors.append(err); continue

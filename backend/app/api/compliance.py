@@ -1,9 +1,9 @@
 """
 Compliance API
 Fixes:
-  Issue 4  — five specific compliance document types with file upload provision
-  Issue 8  — functional file upload within Add Document (combined create + upload)
-  Issue 12 — document type filter shows only the five required types
+  Issue 4  - five specific compliance document types with file upload provision
+  Issue 8  - functional file upload within Add Document (combined create + upload)
+  Issue 12 - document type filter shows only the five required types
 """
 import os, uuid, shutil
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -78,7 +78,7 @@ def _qualification_label(student) -> str:
 
 def doc_to_dict(d: ComplianceDocument, default_level: Optional[str] = None) -> dict:
     """
-    default_level — the student's own qualification level (Cert III / Diploma),
+    default_level - the student's own qualification level (Cert III / Diploma),
     used as a fallback for WPA/MOU documents that predate qualification-level
     tagging and have no level recorded on the document itself. Non-WPA/MOU
     document types never show a level.
@@ -248,8 +248,8 @@ async def create_document_with_upload(
 ):
     """
     Create a compliance document AND optionally attach a file in one request.
-    Issue 8 — functional file upload within Add Document.
-    qualification — optional, for WPA/MOU rows; prepended to notes if provided.
+    Issue 8 - functional file upload within Add Document.
+    qualification - optional, for WPA/MOU rows; prepended to notes if provided.
     """
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
@@ -367,7 +367,7 @@ def update_document(
     return doc_to_dict(doc)
 
 
-# ─── Compliance Report — per-student document status ─────────────────────────
+# ─── Compliance Report - per-student document status ─────────────────────────
 @router.get("/report")
 def compliance_report(
     campus: Optional[str] = None,
@@ -555,7 +555,7 @@ def _outstanding_docs_for_student(db: Session, s: Student):
     for level in levels:
         level_docs = [d for d in wpa_mou_docs if (_extract_qualification_level(d) or levels[0]) == level]
         level_submitted_types = {d.document_type for d in level_docs}
-        suffix = f" — {level}" if level != "Unspecified" else ""
+        suffix = f" - {level}" if level != "Unspecified" else ""
         for dtype, label in WPA_MOU_TYPES.items():
             if dtype not in level_submitted_types:
                 outstanding.append(f"{ABBREV.get(dtype, label)}{suffix}")

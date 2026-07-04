@@ -1,9 +1,9 @@
 """
 Combined routers for centres, notifications, and reports.
 Fixes:
-  Issue 11 — NQS label change (API returns field; label is in the UI)
-  Issue 12 — export functions produce valid CSV output
-  Issue 17 — bulk import for centres
+  Issue 11 - NQS label change (API returns field; label is in the UI)
+  Issue 12 - export functions produce valid CSV output
+  Issue 17 - bulk import for centres
 """
 import csv, io
 from fastapi import APIRouter, Depends, HTTPException
@@ -38,7 +38,7 @@ def centre_to_dict(c: PlacementCentre) -> dict:
         "supervisor_name": c.supervisor_name,
         "supervisor_email": c.supervisor_email,
         "supervisor_phone": c.supervisor_phone,
-        # Issue 11 — field name unchanged; UI renames the label
+        # Issue 11 - field name unchanged; UI renames the label
         "nqs_rating": c.nqs_rating,
         "max_students": c.max_students,
         "accepted_qualifications": c.accepted_qualifications,
@@ -428,8 +428,8 @@ def export_report_pdf(
             pct = round(s.completed_hours / s.required_hours * 100, 0) if s.required_hours else 0
             rows_data.append([
                 s.student_id, s.full_name, (s.campus or "").title(),
-                s.qualification or "—", s.status.title(),
-                "—",  # compliance computed separately if needed
+                s.qualification or "-", s.status.title(),
+                "-",  # compliance computed separately if needed
                 f"{pct:.0f}%",
             ])
 
@@ -455,7 +455,7 @@ def export_report_pdf(
             pct = round(s.completed_hours / s.required_hours * 100, 0) if s.required_hours else 0
             rows_data.append([
                 s.student_id, s.full_name, (s.campus or "").title(),
-                s.qualification or "—",
+                s.qualification or "-",
                 f"{s.completed_hours:.0f}h", f"{s.required_hours:.0f}h",
                 f"{pct:.0f}%",
             ])
@@ -477,7 +477,7 @@ def export_report_pdf(
             doc_label = d.document_type.replace("_", " ").title()
             rows_data.append([
                 s.full_name if s else "Unknown",
-                (s.campus or "—").title() if s else "—",
+                (s.campus or "-").title() if s else "-",
                 doc_label,
                 str(d.expiry_date),
                 f"{days_left} days",
@@ -505,7 +505,7 @@ def export_report_pdf(
             if missing_only and not missing:
                 continue
             rows_data.append([
-                s.student_id, s.full_name, (s.campus or "").title(), s.qualification or "—",
+                s.student_id, s.full_name, (s.campus or "").title(), s.qualification or "-",
                 f"{len(REQUIRED_4)-len(missing)}/{len(REQUIRED_4)}",
                 "Complete" if not missing else "Incomplete",
                 ", ".join(missing) if missing else "✓ All submitted",
