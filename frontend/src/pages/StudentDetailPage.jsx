@@ -269,7 +269,7 @@ export default function StudentDetailPage() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <button onClick={() => navigate('/students')} className="p-2 text-gray-400 hover:text-navy hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => navigate('/')} className="p-2 text-gray-400 hover:text-navy hover:bg-gray-100 rounded-lg transition-colors">
           <ArrowLeft size={20} />
         </button>
         <div className="flex items-center gap-4 flex-1">
