@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 
 from app.database import get_db
@@ -21,6 +21,10 @@ def user_to_dict(u: User) -> dict:
         "campus": u.campus,
         "phone": u.phone,
         "is_active": u.is_active,
+        # Trainer/Assessor-specific fields (only meaningful when role == "trainer",
+        # but always returned so the User Management form can populate them).
+        "qualifications_delivering": u.qualifications_delivering or [],
+        "max_students": u.max_students,
         "created_at": str(u.created_at) if u.created_at else None,
     }
 
@@ -54,6 +58,9 @@ class UserCreate(BaseModel):
     campus: str = "sydney"
     phone: Optional[str] = None
     username: Optional[str] = None
+    # Trainer/Assessor-specific fields (only used when role == "trainer")
+    qualifications_delivering: Optional[List[str]] = None
+    max_students: Optional[int] = 20
 
 
 @router.post("")
@@ -83,6 +90,8 @@ def create_user(
         campus=data.campus,
         phone=data.phone,
         is_active=True,
+        qualifications_delivering=data.qualifications_delivering or [] if data.role == "trainer" else [],
+        max_students=data.max_students if data.role == "trainer" else None,
     )
     db.add(u)
     db.commit()
@@ -106,6 +115,9 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
+    # Trainer/Assessor-specific fields (only used when role == "trainer")
+    qualifications_delivering: Optional[List[str]] = None
+    max_students: Optional[int] = None
 
 
 @router.put("/{user_id}")
@@ -131,6 +143,10 @@ def update_user(
         u.is_active = data.is_active
     if data.password:
         u.hashed_password = get_password_hash(data.password)
+    if data.qualifications_delivering is not None:
+        u.qualifications_delivering = data.qualifications_delivering
+    if data.max_students is not None:
+        u.max_students = data.max_students
 
     db.commit()
     db.refresh(u)
