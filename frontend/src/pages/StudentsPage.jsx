@@ -12,7 +12,7 @@
  *                automated job - see backend/app/scheduler.py.
  */
 import React, { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Upload, Grid, List, MapPin, Clock, Mail, Eye, FileCheck, Calendar } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
@@ -83,6 +83,7 @@ function StudentCard({ student, onClick }) {
 
 export default function StudentsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const [activeTab, setActiveTab] = useState('list')
@@ -96,7 +97,7 @@ export default function StudentsPage() {
   const [search, setSearch] = useState('')
   const [filterCampus, setFilterCampus] = useState('')
   const [filterQual, setFilterQual] = useState('')
-  const [filterStatus, setFilterStatus] = useState('current')
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'current')
   const [showModal, setShowModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [editStudent, setEditStudent] = useState(null)
@@ -280,7 +281,7 @@ export default function StudentsPage() {
             <Select value={filterCampus} onChange={setFilterCampus} placeholder="All Campuses"
               options={CAMPUSES.map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} />
             <Select value={filterQual} onChange={setFilterQual} placeholder="All Qualifications" options={QUALIFICATIONS} />
-            <Select value={filterStatus} onChange={setFilterStatus} placeholder="All Statuses"
+            <Select value={filterStatus} onChange={v => { setFilterStatus(v); setSearchParams(v ? { status: v } : {}) }} placeholder="All Statuses"
               options={[
                 { value: 'current',   label: 'Current'   },
                 { value: 'completed', label: 'Completed' },
