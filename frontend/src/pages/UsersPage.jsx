@@ -6,6 +6,20 @@ import { PageHeader, Spinner, Badge, Modal, FormRow, Select } from '../component
 import { format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 
+// Trainer/Assessor-specific fields, shown only when role === 'trainer' (the
+// dedicated Trainer/Assessor Profiles page has been removed; these fields now
+// live directly on the user record).
+const ALL_TRAINER_QUALIFICATIONS = [
+  { value: 'CHC30121', label: 'CHC30121 - Certificate III (Superseded)' },
+  { value: 'CHC50121', label: 'CHC50121 - Diploma (Superseded)' },
+  { value: 'CHC30125', label: 'CHC30125 - Certificate III in ECEC' },
+  { value: 'CHC50125', label: 'CHC50125 - Diploma of ECEC' },
+]
+// New trainer accounts may only deliver the current, non-superseded quals.
+const NEW_TRAINER_QUALIFICATIONS = ALL_TRAINER_QUALIFICATIONS.filter(
+  q => q.value === 'CHC30125' || q.value === 'CHC50125'
+)
+
 export default function UsersPage() {
   const { user: currentUser } = useAuth()
   const isAdmin = currentUser?.role === 'admin'
@@ -14,13 +28,18 @@ export default function UsersPage() {
   const [showModal, setShowModal] = useState(false)
   const [editUser, setEditUser] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ email: '', full_name: '', password: '', role: 'coordinator', campus: 'sydney', phone: '' })
+  const [form, setForm] = useState({ email: '', full_name: '', password: '', role: 'coordinator', campus: 'sydney', phone: '', qualifications_delivering: [], max_students: 20 })
 
   const load = () => api.get('/users').then(r => setUsers(r.data)).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
 
-  const openAdd = () => { setEditUser(null); setForm({ email: '', full_name: '', password: '', role: 'coordinator', campus: 'sydney', phone: '' }); setShowModal(true) }
-  const openEdit = u => { setEditUser(u); setForm({ email: u.email, full_name: u.full_name, password: '', role: u.role, campus: u.campus, phone: u.phone || '' }); setShowModal(true) }
+  const openAdd = () => { setEditUser(null); setForm({ email: '', full_name: '', password: '', role: 'coordinator', campus: 'sydney', phone: '', qualifications_delivering: [], max_students: 20 }); setShowModal(true) }
+  const openEdit = u => { setEditUser(u); setForm({ email: u.email, full_name: u.full_name, password: '', role: u.role, campus: u.campus, phone: u.phone || '', qualifications_delivering: u.qualifications_delivering || [], max_students: u.max_students ?? 20 }); setShowModal(true) }
+  const toggleQual = q => setForm(f => ({
+    ...f, qualifications_delivering: f.qualifications_delivering.includes(q)
+      ? f.qualifications_delivering.filter(x => x !== q)
+      : [...f.qualifications_delivering, q],
+  }))
 
   const save = async () => {
     if (!editUser && (!form.email || !form.full_name || !form.password)) return toast.error('Email, name and password required')
@@ -29,6 +48,10 @@ export default function UsersPage() {
       if (editUser) {
         const payload = { full_name: form.full_name, role: form.role, campus: form.campus, phone: form.phone }
         if (form.password) payload.password = form.password
+        if (form.role === 'trainer') {
+          payload.qualifications_delivering = form.qualifications_delivering
+          payload.max_students = form.max_students
+        }
         await api.put(`/users/${editUser.id}`, payload)
         toast.success('User updated')
       } else {
@@ -112,6 +135,29 @@ export default function UsersPage() {
             </FormRow>
           </div>
           <FormRow label="Phone"><input className="input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="04xx xxx xxx" /></FormRow>
+
+          {/* Trainer/Assessor-specific fields - shown only when Role is Trainer/Assessor */}
+          {form.role === 'trainer' && (
+            <div className="border-t border-gray-100 pt-4 mt-1 space-y-4">
+              <p className="text-sm font-medium text-gray-700">Trainer/Assessor Details</p>
+              <FormRow label="Max Students">
+                <input className="input" type="number" min="1" max="100" value={form.max_students}
+                  onChange={e => setForm(f => ({ ...f, max_students: +e.target.value }))} />
+              </FormRow>
+              <FormRow label="Qualifications Delivering">
+                <div className="space-y-1.5">
+                  {(editUser ? ALL_TRAINER_QUALIFICATIONS : NEW_TRAINER_QUALIFICATIONS).map(q => (
+                    <label key={q.value} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" className="w-4 h-4 accent-cyan"
+                        checked={form.qualifications_delivering.includes(q.value)}
+                        onChange={() => toggleQual(q.value)} />
+                      {q.label}
+                    </label>
+                  ))}
+                </div>
+              </FormRow>
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
