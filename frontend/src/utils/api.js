@@ -33,7 +33,7 @@ api.interceptors.response.use(
 )
 
 /**
- * downloadFile — BUG FIX for all broken exports.
+ * downloadFile - BUG FIX for all broken exports.
  * window.location.href / window.open cannot send the Authorization header,
  * so every export returned 401. This helper uses the axios instance (which
  * always includes the token) and streams the response as a Blob download.
@@ -50,7 +50,7 @@ export async function downloadFile(path, filename) {
     link.parentNode.removeChild(link)
     window.URL.revokeObjectURL(url)
   } catch (err) {
-    toast.error('Export failed — please try again')
+    toast.error('Export failed - please try again')
     console.error('Download error:', err)
   }
 }
