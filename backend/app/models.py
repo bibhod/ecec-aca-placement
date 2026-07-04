@@ -21,7 +21,14 @@ def gen_uuid():
 
 
 # ─── Constant lists ───────────────────────────────────────────────────────────
+# All four codes remain valid for lookups/updates so existing students already
+# enrolled under the superseded CHC30121/CHC50121 codes keep working correctly.
 QUALIFICATION_CHOICES = ["CHC30121", "CHC50121", "CHC30125", "CHC50125"]
+
+# New students (via the Add Student form or bulk import) may only be enrolled
+# under the current, non-superseded codes. Existing CHC30121/CHC50121 records
+# are left untouched and remain fully valid for updates.
+NEW_STUDENT_QUALIFICATION_CHOICES = ["CHC30125", "CHC50125"]
 
 APPOINTMENT_TYPE_CHOICES = [
     "cert_iii_1st_visit", "cert_iii_2nd_visit", "cert_iii_3rd_visit",
