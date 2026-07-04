@@ -142,6 +142,32 @@ def migrate_normalise_campus():
         db.close()
 
 
+def apply_legacy_migrations():
+    """
+    Runs the one-off migrations defined in backend/migrate.py (run_migration,
+    run_v31, run_v32) on every startup. These were previously only meant to
+    be run manually ("python migrate.py") and were never actually wired into
+    app startup, so run_v32 in particular (which relaxes the students table's
+    unique constraint from a single column on student_id to a composite
+    (student_id, qualification) constraint) never took effect in production.
+    That is why a Cert III graduate could not be re-enrolled under the
+    Diploma qualification: the database still enforced the old, stricter
+    constraint even though the application code assumed the new one.
+    Each function in migrate.py is already idempotent (checks before
+    altering), so it is safe to call all three on every startup.
+    """
+    try:
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from migrate import run_migration, run_v31, run_v32
+        run_migration()
+        run_v31()
+        run_v32()
+        logger.info("apply_legacy_migrations: run_migration/run_v31/run_v32 complete")
+    except Exception as e:
+        logger.error(f"apply_legacy_migrations failed: {e}")
+
+
 def migrate_active_to_current():
     """
     One-time data migration: rename the legacy status value 'active' → 'current'
@@ -171,6 +197,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_database()
     ensure_admin()              # always runs — guarantees login works
+    apply_legacy_migrations()   # run_migration/run_v31/run_v32 (fixes qualification re-enrolment)
     migrate_normalise_campus()  # lowercase all campus values so filters match
     migrate_active_to_current() # one-time rename 'active' → 'current'
     migrate_add_qualification_level()  # add + backfill qualification_level columns
