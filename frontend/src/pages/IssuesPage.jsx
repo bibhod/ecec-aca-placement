@@ -4,11 +4,14 @@ import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { PageHeader, Spinner, Badge, Modal, FormRow, Select, EmptyState, SearchInput } from '../components/ui/index'
 import { format } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 const ISSUE_TYPES = ['attendance', 'behaviour', 'performance', 'compliance', 'safety', 'communication', 'other']
 const PRIORITIES = ['low', 'medium', 'high', 'critical']
 
 export default function IssuesPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [issues, setIssues] = useState([])
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -65,7 +68,7 @@ export default function IssuesPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <PageHeader title="Issues" subtitle={`${issues.length} issue${issues.length !== 1 ? 's' : ''}`}
-        actions={<button onClick={() => setShowModal(true)} className="btn-primary text-sm"><Plus size={15} /> Raise Issue</button>} />
+        actions={isAdmin && <button onClick={() => setShowModal(true)} className="btn-primary text-sm"><Plus size={15} /> Raise Issue</button>} />
 
       <div className="flex flex-wrap gap-3 mb-6">
         <SearchInput value={search} onChange={setSearch} placeholder="Search issues..." />
@@ -77,7 +80,7 @@ export default function IssuesPage() {
 
       {filtered.length === 0 ? (
         <EmptyState icon={AlertTriangle} title="No issues found" message="No issues match your current filters."
-          action={<button onClick={() => setShowModal(true)} className="btn-primary mx-auto"><Plus size={15} /> Raise Issue</button>} />
+          action={isAdmin ? <button onClick={() => setShowModal(true)} className="btn-primary mx-auto"><Plus size={15} /> Raise Issue</button> : undefined} />
       ) : (
         <div className="space-y-3">
           {filtered.map(issue => (
@@ -101,15 +104,17 @@ export default function IssuesPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col gap-1.5 flex-shrink-0">
-                  {issue.status === 'open' && (
-                    <button onClick={() => updateStatus(issue.id, 'in_progress')} className="btn-secondary text-xs py-1 px-2">In Progress</button>
-                  )}
-                  {['open', 'in_progress'].includes(issue.status) && (
-                    <button onClick={() => { setSelectedIssue(issue); setResolution(''); setShowResolveModal(true) }}
-                      className="btn-primary text-xs py-1 px-2">Resolve</button>
-                  )}
-                </div>
+                {isAdmin && (
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    {issue.status === 'open' && (
+                      <button onClick={() => updateStatus(issue.id, 'in_progress')} className="btn-secondary text-xs py-1 px-2">In Progress</button>
+                    )}
+                    {['open', 'in_progress'].includes(issue.status) && (
+                      <button onClick={() => { setSelectedIssue(issue); setResolution(''); setShowResolveModal(true) }}
+                        className="btn-primary text-xs py-1 px-2">Resolve</button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}

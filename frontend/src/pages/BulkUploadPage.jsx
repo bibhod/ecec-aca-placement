@@ -8,6 +8,7 @@ import { Download, Upload, CheckCircle, AlertTriangle, FileText } from 'lucide-r
 import toast from 'react-hot-toast'
 import api, { downloadFile } from '../utils/api'
 import { PageHeader } from '../components/ui/index'
+import { useAuth } from '../contexts/AuthContext'
 
 const UPLOAD_TYPES = [
   {
@@ -73,6 +74,8 @@ const UPLOAD_TYPES = [
 ]
 
 function UploadCard({ type }) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
   const [importing, setImporting] = useState(false)
@@ -122,8 +125,9 @@ function UploadCard({ type }) {
         </p>
       </div>
 
-      {/* Step 2: Upload - only if type has an import endpoint */}
-      {type.import && (
+      {/* Step 2: Upload - only if type has an import endpoint. Admin-only:
+          coordinator/trainer can view this page but cannot perform imports. */}
+      {type.import && isAdmin && (
         <div className="bg-white/80 rounded-lg p-3">
           <p className="text-xs font-semibold text-gray-600 mb-2">Step 2 - Upload Completed File</p>
           <input

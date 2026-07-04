@@ -10,8 +10,11 @@ import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { PageHeader, Spinner, Modal, FormRow, Select, EmptyState } from '../components/ui/index'
 import { format } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function CommunicationsPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [comms, setComms] = useState([])
   const [students, setStudents] = useState([])
   const [templates, setTemplates] = useState([])
@@ -128,23 +131,25 @@ export default function CommunicationsPage() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <PageHeader title="Communications" subtitle={`${comms.length} messages sent`}
         actions={
-          <>
-            <button onClick={() => setShowEditTemplateModal(true)} className="btn-secondary text-sm">
-              <Edit2 size={15} /> Manage Templates
-            </button>
-            <button onClick={() => setShowTemplateModal(true)} className="btn-secondary text-sm">
-              <MessageSquare size={15} /> Use Template
-            </button>
-            <button onClick={() => setShowEmailModal(true)} className="btn-primary text-sm">
-              <Mail size={15} /> Compose Email
-            </button>
-          </>
+          isAdmin && (
+            <>
+              <button onClick={() => setShowEditTemplateModal(true)} className="btn-secondary text-sm">
+                <Edit2 size={15} /> Manage Templates
+              </button>
+              <button onClick={() => setShowTemplateModal(true)} className="btn-secondary text-sm">
+                <MessageSquare size={15} /> Use Template
+              </button>
+              <button onClick={() => setShowEmailModal(true)} className="btn-primary text-sm">
+                <Mail size={15} /> Compose Email
+              </button>
+            </>
+          )
         }
       />
 
       {comms.length === 0 ? (
         <EmptyState icon={Mail} title="No communications yet"
-          action={<button onClick={() => setShowEmailModal(true)} className="btn-primary mx-auto"><Mail size={15} /> Compose Email</button>} />
+          action={isAdmin ? <button onClick={() => setShowEmailModal(true)} className="btn-primary mx-auto"><Mail size={15} /> Compose Email</button> : undefined} />
       ) : (
         <div className="space-y-3">
           {comms.map(c => (

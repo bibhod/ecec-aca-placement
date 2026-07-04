@@ -8,6 +8,7 @@ import { Plus, Building2, MapPin, Phone, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { PageHeader, Spinner, Badge, Modal, FormRow, Select, EmptyState, SearchInput } from '../components/ui/index'
+import { useAuth } from '../contexts/AuthContext'
 
 const NQS_RATINGS = ['Excellent', 'Exceeding NQS', 'Meeting NQS', 'Working Towards NQS', 'Significant Improvement Required']
 // All states that may already exist on historical centre records (kept
@@ -90,6 +91,8 @@ function AddressAutocomplete({ value, onChange, onPlaceSelected }) {
 }
 
 export default function CentresPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -154,7 +157,7 @@ export default function CentresPage() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <PageHeader title="Placement Centres" subtitle={`${centres.length} approved centres`}
-        actions={<button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Centre</button>} />
+        actions={isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Centre</button>} />
 
       <div className="mb-6">
         <SearchInput value={search} onChange={setSearch} placeholder="Search centres..." />
@@ -162,7 +165,7 @@ export default function CentresPage() {
 
       {filtered.length === 0 ? (
         <EmptyState icon={Building2} title="No centres found"
-          action={<button onClick={openAdd} className="btn-primary mx-auto"><Plus size={15} /> Add Centre</button>} />
+          action={isAdmin ? <button onClick={openAdd} className="btn-primary mx-auto"><Plus size={15} /> Add Centre</button> : undefined} />
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(c => (
@@ -272,7 +275,7 @@ export default function CentresPage() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
-          <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editCentre ? 'Update Centre' : 'Add Centre'}</button>
+          {isAdmin && <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editCentre ? 'Update Centre' : 'Add Centre'}</button>}
         </div>
       </Modal>
     </div>

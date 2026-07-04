@@ -4,8 +4,11 @@ import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { PageHeader, Spinner, Badge, Modal, FormRow, Select } from '../components/ui/index'
 import { format } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth()
+  const isAdmin = currentUser?.role === 'admin'
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -47,7 +50,7 @@ export default function UsersPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <PageHeader title="User Management" subtitle={`${users.length} staff accounts`}
-        actions={<button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add User</button>} />
+        actions={isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add User</button>} />
 
       <div className="card p-0 overflow-hidden">
         <table className="w-full">
@@ -76,12 +79,14 @@ export default function UsersPage() {
                 <td className="px-4 py-3 text-xs text-gray-400">{u.created_at ? format(new Date(u.created_at), 'd MMM yyyy') : '-'}</td>
                 <td className="px-4 py-3"><Badge status={u.is_active ? 'active' : 'withdrawn'} label={u.is_active ? 'Active' : 'Inactive'} /></td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    <button onClick={() => openEdit(u)} className="text-xs text-cyan hover:underline">Edit</button>
-                    <button onClick={() => toggleActive(u)} className={`text-xs hover:underline ${u.is_active ? 'text-red-500' : 'text-green-600'}`}>
-                      {u.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-2">
+                      <button onClick={() => openEdit(u)} className="text-xs text-cyan hover:underline">Edit</button>
+                      <button onClick={() => toggleActive(u)} className={`text-xs hover:underline ${u.is_active ? 'text-red-500' : 'text-green-600'}`}>
+                        {u.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -110,7 +115,7 @@ export default function UsersPage() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
-          <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editUser ? 'Update User' : 'Create User'}</button>
+          {isAdmin && <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editUser ? 'Update User' : 'Create User'}</button>}
         </div>
       </Modal>
     </div>
