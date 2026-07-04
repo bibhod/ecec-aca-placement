@@ -1,8 +1,8 @@
 """
-Background scheduler (APScheduler) — runs email/SMS alerts automatically.
+Background scheduler (APScheduler) - runs email/SMS alerts automatically.
 Issues fixed:
-  Issue 2  — SMS alongside email for appointment reminders
-  Issue 16 — automated alerts:
+  Issue 2  - SMS alongside email for appointment reminders
+  Issue 16 - automated alerts:
               1. Non-submission of log hours
               2. Low attendance (< 50 % hours with < 30 days left)
               3. Upcoming work placement visits (48h / 24h)
@@ -26,7 +26,7 @@ scheduler = BackgroundScheduler()
 # ─── Shared dedup helper ──────────────────────────────────────────────────────
 # check_appointment_reminders() (48h/24h, flag-based) and
 # check_visit_advance_reminders() (14/7/3/1-day, Communication-log-based) both
-# cover the "1 day before" case — 24 hours == 1 day — and would otherwise each
+# cover the "1 day before" case - 24 hours == 1 day - and would otherwise each
 # independently email the student/trainer for the same appointment. Both jobs
 # consult this helper before sending, and both record their send the same way,
 # so whichever job runs first "claims" that appointment + day and the other
@@ -51,14 +51,14 @@ def _mark_visit_reminder_sent(db, appointment, days_ahead: int):
         recipient_email="",
         recipient_name="system",
         message_type="email",
-        subject=f"{days_ahead}-day advance reminder — {appointment.title}",
+        subject=f"{days_ahead}-day advance reminder - {appointment.title}",
         body=f"Automated {days_ahead}-day reminder sent for appointment {appointment.id} on {appointment.scheduled_date}.",
         template_used=dedup_key,
         sent_successfully=True,
     ))
 
 
-# ─── Issue 2 / 16.3 — Appointment reminder (48h and 24h) ────────────────────
+# ─── Issue 2 / 16.3 - Appointment reminder (48h and 24h) ────────────────────
 def check_appointment_reminders():
     """Send 48h and 24h email + optional SMS reminders for upcoming appointments."""
     db = SessionLocal()
@@ -78,7 +78,7 @@ def check_appointment_reminders():
             for appt in appointments:
                 if _visit_reminder_already_sent(db, appt, days_ahead):
                     # Already covered by the other reminder job (or a previous
-                    # run) — just clear this job's own flag so it doesn't keep
+                    # run) - just clear this job's own flag so it doesn't keep
                     # re-checking, without sending a second email.
                     setattr(appt, flag_field, True)
                     db.commit()
@@ -187,7 +187,7 @@ def check_compliance_expiry():
         db.close()
 
 
-# ─── Issue 16.1 — Non-submission of log hours ────────────────────────────────
+# ─── Issue 16.1 - Non-submission of log hours ────────────────────────────────
 def check_hours_non_submission():
     """
     Flag active students who have not logged any hours in the past 14 days.
@@ -211,7 +211,7 @@ def check_hours_non_submission():
                     coordinator = db.query(User).filter(User.id == s.coordinator_id).first()
                     if coordinator and coordinator.email:
                         from app.services.email_service import send_email, base_template
-                        subject = f"Hours Not Logged — {s.full_name}"
+                        subject = f"Hours Not Logged - {s.full_name}"
                         body = (
                             f"<h2>Hours Non-Submission Alert</h2>"
                             f"<p>Dear {coordinator.full_name},</p>"
@@ -233,7 +233,7 @@ def check_hours_non_submission():
         db.close()
 
 
-# ─── Issue 16.2 — Low attendance alert ──────────────────────────────────────
+# ─── Issue 16.2 - Low attendance alert ──────────────────────────────────────
 def check_low_attendance():
     """
     Alert coordinator if a student's hours progress is below 50%
@@ -256,7 +256,7 @@ def check_low_attendance():
                     coordinator = db.query(User).filter(User.id == s.coordinator_id).first()
                     if coordinator and coordinator.email:
                         from app.services.email_service import send_email, base_template
-                        subject = f"Low Attendance Alert — {s.full_name}"
+                        subject = f"Low Attendance Alert - {s.full_name}"
                         body = (
                             f"<h2>Low Attendance Alert</h2>"
                             f"<p>Dear {coordinator.full_name},</p>"
@@ -275,7 +275,7 @@ def check_low_attendance():
         db.close()
 
 
-# ─── Issue 16.4 — Supervisor feedback pending ────────────────────────────────
+# ─── Issue 16.4 - Supervisor feedback pending ────────────────────────────────
 def check_supervisor_feedback():
     """
     After a visit is marked complete, alert the coordinator if no feedback has been recorded
@@ -297,7 +297,7 @@ def check_supervisor_feedback():
                 if ta and ta.email:
                     from app.services.email_service import send_email, base_template
                     student = db.query(Student).filter(Student.id == appt.student_id).first()
-                    subject = f"Feedback Pending — {appt.title}"
+                    subject = f"Feedback Pending - {appt.title}"
                     body = (
                         f"<h2>Supervisor Feedback Pending</h2>"
                         f"<p>Dear {ta.full_name},</p>"
@@ -320,7 +320,7 @@ def check_visit_advance_reminders():
     """
     Send 14-day, 7-day, 3-day, and 1-day advance reminders for upcoming appointments.
     Sends to both the student and assigned trainer/assessor.
-    Uses the Communication log as a dedup gate — each appointment+interval is sent only once,
+    Uses the Communication log as a dedup gate - each appointment+interval is sent only once,
     even if the scheduler restarts.
     """
     db = SessionLocal()
@@ -338,7 +338,7 @@ def check_visit_advance_reminders():
             ).all()
 
             for appt in appointments:
-                # Skip if already sent for this appointment + interval — by this
+                # Skip if already sent for this appointment + interval - by this
                 # job, a previous run, or the 48h/24h job for the 1-day/2-day
                 # overlap case.
                 if _visit_reminder_already_sent(db, appt, days_ahead):
@@ -439,7 +439,7 @@ def auto_complete_students():
         ).all()
 
         for s in students:
-            logger.info(f"Auto-completing student {s.student_id} — course end date {s.course_end_date} has passed")
+            logger.info(f"Auto-completing student {s.student_id} - course end date {s.course_end_date} has passed")
             s.status = "completed"
 
         if students:
@@ -491,7 +491,7 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
     )
-    # Task 2 — 14/7/3/1 day advance visit reminders, runs daily
+    # Task 2 - 14/7/3/1 day advance visit reminders, runs daily
     scheduler.add_job(
         check_visit_advance_reminders,
         trigger=IntervalTrigger(hours=24),

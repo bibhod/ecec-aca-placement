@@ -1,5 +1,5 @@
 """
-ECEC Work Placement Management System — Database Models v3.1
+ECEC Work Placement Management System - Database Models v3.1
 Changes in this version:
   - TrainerProfile model (new dedicated profile page)
   - Appointment.trainer_assessor_id is now NOT NULL (mandatory)
@@ -116,7 +116,7 @@ class User(Base):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TRAINER / ASSESSOR PROFILE  (new — Issue: dedicated profile page)
+# TRAINER / ASSESSOR PROFILE  (new - Issue: dedicated profile page)
 # ─────────────────────────────────────────────────────────────────────────────
 class TrainerProfile(Base):
     """Extended profile for users with role='trainer' (Trainer/Assessor)."""

@@ -1,4 +1,4 @@
-"""ECEC Work Placement Management System — FastAPI v3.1"""
+"""ECEC Work Placement Management System - FastAPI v3.1"""
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,7 +39,7 @@ def ensure_admin():
             user.is_active = True
             user.role = "admin"
             db.commit()
-            logger.info("Admin account verified and password synced — b.dotel@academies.edu.au / aca0022z")
+            logger.info("Admin account verified and password synced - b.dotel@academies.edu.au / aca0022z")
         else:
             # Create from scratch
             new_admin = User(
@@ -55,7 +55,7 @@ def ensure_admin():
             )
             db.add(new_admin)
             db.commit()
-            logger.info("Admin account created — b.dotel@academies.edu.au / aca0022z")
+            logger.info("Admin account created - b.dotel@academies.edu.au / aca0022z")
     except Exception as e:
         logger.error(f"ensure_admin failed: {e}")
         db.rollback()
@@ -66,7 +66,7 @@ def ensure_admin():
 def migrate_add_qualification_level():
     """
     One-time migration: add the qualification_level column to hours_log and
-    compliance_documents (idempotent — safe to run on every startup). Backfills
+    compliance_documents (idempotent - safe to run on every startup). Backfills
     existing compliance_documents rows from the legacy "Qualification: X" notes
     prefix, and existing hours_log rows from the owning student's qualification,
     so historical data reads correctly once the new column is in place.
@@ -120,7 +120,7 @@ def migrate_add_qualification_level():
 def migrate_normalise_campus():
     """
     One-time migration: lowercase all campus values so filters work consistently.
-    Safe to run on every startup — rows already lowercase are unaffected.
+    Safe to run on every startup - rows already lowercase are unaffected.
     """
     from app.models import Student
     from sqlalchemy import text
@@ -172,7 +172,7 @@ def migrate_active_to_current():
     """
     One-time data migration: rename the legacy status value 'active' → 'current'
     for all Student rows that still carry the old value.
-    Safe to run on every startup — does nothing if no rows need updating.
+    Safe to run on every startup - does nothing if no rows need updating.
     """
     from app.models import Student
     db = SessionLocal()
@@ -196,7 +196,7 @@ def migrate_active_to_current():
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_database()
-    ensure_admin()              # always runs — guarantees login works
+    ensure_admin()              # always runs - guarantees login works
     apply_legacy_migrations()   # run_migration/run_v31/run_v32 (fixes qualification re-enrolment)
     migrate_normalise_campus()  # lowercase all campus values so filters match
     migrate_active_to_current() # one-time rename 'active' → 'current'
@@ -242,7 +242,7 @@ def health():
 
 @app.post("/api/setup/reset-admin")
 def reset_admin(db=Depends(get_db)):
-    """Emergency reset — accessible via POST http://localhost/api/setup/reset-admin"""
+    """Emergency reset - accessible via POST http://localhost/api/setup/reset-admin"""
     from app.models import User
     from app.utils.auth import get_password_hash
     user = db.query(User).filter(User.email == "b.dotel@academies.edu.au").first()
