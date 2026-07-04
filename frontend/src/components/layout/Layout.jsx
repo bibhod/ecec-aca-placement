@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Calendar, Clock, FileCheck,
   MessageSquare, AlertTriangle, BarChart3, UserCog,
   Building2, Bell, ChevronDown, LogOut, Menu, X,
-  Shield, ClipboardList, UserCheck, Upload
+  Shield, Upload
 } from 'lucide-react'
 import NotificationPanel from './NotificationPanel'
 
@@ -18,9 +18,6 @@ const NAV = [
   { to: '/communications', label: 'Communications', icon: MessageSquare },
   { to: '/issues', label: 'Issues', icon: AlertTriangle },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
-  null,
-  { to: '/visit-reports', label: 'For Trainer/Assessor', icon: ClipboardList },
-  { to: '/trainer-profiles', label: 'Trainer/Assessor Profiles', icon: UserCheck },
   null,
   { to: '/centres', label: 'Centres', icon: Building2 },
   // These three are visible read-only to admin/coordinator, but fully hidden
