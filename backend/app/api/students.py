@@ -411,17 +411,16 @@ def get_placement_checklist(
     visits_ok = completed_visits >= required_visits
     visits_detail = f"{completed_visits} of {required_visits} required visits completed"
 
-    # 4. No open critical issues
-    open_critical = db.query(Issue).filter(
+    # 4. No open issues of any priority
+    open_issues_count = db.query(Issue).filter(
         Issue.student_id == s.id,
         Issue.status.in_(["open", "in_progress"]),
-        Issue.priority == "critical",
     ).count()
-    issues_ok = open_critical == 0
+    issues_ok = open_issues_count == 0
     issues_detail = (
-        "No open critical issues"
+        "No open issues"
         if issues_ok
-        else f"{open_critical} open critical issue(s) must be resolved"
+        else f"{open_issues_count} open issue(s) must be resolved"
     )
 
     all_green = compliance_ok and hours_ok and visits_ok and issues_ok
@@ -456,7 +455,7 @@ def get_placement_checklist(
             },
             {
                 "id": "issues",
-                "label": "No open critical issues or flags",
+                "label": "No open issues or flags",
                 "ok": issues_ok,
                 "detail": issues_detail,
             },
@@ -512,13 +511,12 @@ def generate_placement_completion(
     if completed_visits < required_visits:
         raise HTTPException(status_code=400, detail=f"Only {completed_visits} of {required_visits} required visits completed")
 
-    open_critical = db.query(Issue).filter(
+    open_issues_count = db.query(Issue).filter(
         Issue.student_id == s.id,
         Issue.status.in_(["open", "in_progress"]),
-        Issue.priority == "critical",
     ).count()
-    if open_critical > 0:
-        raise HTTPException(status_code=400, detail=f"Student has {open_critical} open critical issue(s)")
+    if open_issues_count > 0:
+        raise HTTPException(status_code=400, detail=f"Student has {open_issues_count} open issue(s)")
 
     # Generate sequential reference number
     count = db.query(PlacementCompletion).count() + 1
