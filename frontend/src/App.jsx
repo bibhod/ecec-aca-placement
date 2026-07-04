@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import StudentsPage from './pages/StudentsPage'
 import StudentDetailPage from './pages/StudentDetailPage'
 import AppointmentsPage from './pages/AppointmentsPage'
 import HoursPage from './pages/HoursPage'
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<DashboardPage />} />
+        <Route path="students" element={<StudentsPage />} />
         <Route path="students/:id" element={<StudentDetailPage />} />
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="hours" element={<HoursPage />} />
