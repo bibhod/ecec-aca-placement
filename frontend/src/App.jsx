@@ -29,6 +29,15 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />
 }
 
+// Bulk Upload, User Management, and Audit Trail are fully hidden from the
+// trainer role (RBAC redesign) - block direct navigation to these routes too,
+// not just the nav links.
+function RestrictedRoute({ children }) {
+  const { user } = useAuth()
+  if (user?.role === 'trainer') return <Navigate to="/" replace />
+  return children
+}
+
 function AppRoutes() {
   const { user } = useAuth()
   return (
@@ -44,12 +53,12 @@ function AppRoutes() {
         <Route path="communications" element={<CommunicationsPage />} />
         <Route path="issues" element={<IssuesPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="users" element={<UsersPage />} />
+        <Route path="users" element={<RestrictedRoute><UsersPage /></RestrictedRoute>} />
         <Route path="centres" element={<CentresPage />} />
-        <Route path="audit" element={<AuditPage />} />
+        <Route path="audit" element={<RestrictedRoute><AuditPage /></RestrictedRoute>} />
         <Route path="visit-reports" element={<VisitReportsPage />} />
         <Route path="trainer-profiles" element={<TrainerProfilesPage />} />
-        <Route path="bulk-upload" element={<BulkUploadPage />} />
+        <Route path="bulk-upload" element={<RestrictedRoute><BulkUploadPage /></RestrictedRoute>} />
       </Route>
     </Routes>
   )
