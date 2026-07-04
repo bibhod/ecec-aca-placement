@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models import Issue, Student, User
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
 from app.services.email_service import email_issue_notification
 from app.config import settings
@@ -79,7 +79,7 @@ class IssueCreate(BaseModel):
 def create_issue(
     data: IssueCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     student = db.query(Student).filter(Student.id == data.student_id).first()
     if not student:
@@ -141,7 +141,7 @@ def update_issue(
     issue_id: str,
     data: IssueUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     issue = db.query(Issue).filter(Issue.id == issue_id).first()
     if not issue:
@@ -180,7 +180,7 @@ def update_issue(
 def delete_issue(
     issue_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     issue = db.query(Issue).filter(Issue.id == issue_id).first()
     if not issue:

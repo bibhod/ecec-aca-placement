@@ -11,7 +11,7 @@ import logging
 
 from app.database import get_db
 from app.models import TrainerProfile, User, Appointment, Student, PlacementCentre, QUALIFICATION_CHOICES
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ class ProfileCreate(BaseModel):
 def create_trainer_profile(
     data: ProfileCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     # If linking to a user, check they exist
     if data.user_id:
@@ -120,7 +120,7 @@ def update_trainer_profile(
     profile_id: str,
     data: ProfileCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     p = db.query(TrainerProfile).filter(TrainerProfile.id == profile_id).first()
     if not p:
@@ -140,7 +140,7 @@ def update_trainer_profile(
 def delete_trainer_profile(
     profile_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     p = db.query(TrainerProfile).filter(TrainerProfile.id == profile_id).first()
     if not p:

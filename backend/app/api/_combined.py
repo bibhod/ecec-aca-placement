@@ -14,7 +14,7 @@ from datetime import date
 
 from app.database import get_db
 from app.models import PlacementCentre, Student, Notification, User, HoursLog, ComplianceDocument, Appointment, NEW_ENTRY_STATE_CHOICES
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin, require_coordinator
 from app.api.audit import write_audit
 
 # ─── CENTRES ────────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ class CentreCreate(BaseModel):
 
 
 @centres_router.post("")
-def create_centre(data: CentreCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_centre(data: CentreCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     # New placement centres may only be added in the current Sydney/Melbourne
     # (NSW/VIC) operating area - existing centres elsewhere are untouched.
     if data.state and data.state.upper().strip() not in NEW_ENTRY_STATE_CHOICES:
@@ -116,7 +116,7 @@ def create_centre(data: CentreCreate, db: Session = Depends(get_db), current_use
 
 
 @centres_router.put("/{centre_id}")
-def update_centre(centre_id: str, data: CentreCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_centre(centre_id: str, data: CentreCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     c = db.query(PlacementCentre).filter(PlacementCentre.id == centre_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Centre not found")
@@ -138,7 +138,7 @@ def update_centre(centre_id: str, data: CentreCreate, db: Session = Depends(get_
 
 
 @centres_router.delete("/{centre_id}")
-def delete_centre(centre_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_centre(centre_id: str, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     c = db.query(PlacementCentre).filter(PlacementCentre.id == centre_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Centre not found")
@@ -340,7 +340,7 @@ def export_hours_csv(db: Session = Depends(get_db), current_user: User = Depends
 
 
 @reports_router.get("/export/audit")
-def export_audit_csv(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def export_audit_csv(db: Session = Depends(get_db), current_user: User = Depends(require_coordinator)):
     """Export audit log to CSV (Issue 14)."""
     from fastapi.responses import StreamingResponse
     from app.models import AuditLog

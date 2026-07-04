@@ -15,7 +15,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.models import AuditLog, User
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_coordinator
 
 router = APIRouter()
 
@@ -66,7 +66,7 @@ def list_audit_logs(
     limit: int = 200,
     offset: int = 0,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_coordinator),
 ):
     q = db.query(AuditLog)
     if action:
@@ -108,7 +108,7 @@ def export_audit_csv(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_coordinator),
 ):
     q = db.query(AuditLog)
     if date_from:

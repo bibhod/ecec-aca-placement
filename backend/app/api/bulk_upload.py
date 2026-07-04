@@ -19,7 +19,7 @@ from app.models import (
     UNITS_CHC30125, UNITS_CHC50125,
     qualification_level_for_code, required_hours_for_level,
 )
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, require_admin
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -175,7 +175,7 @@ def template_compliance():
 async def import_students(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     content = await file.read()
     rows = _read_file(content, file.filename)
@@ -260,7 +260,7 @@ async def import_students(
 async def import_centres(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     content = await file.read()
     rows = _read_file(content, file.filename)
@@ -295,7 +295,7 @@ async def import_centres(
 async def import_hours(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     content = await file.read()
     rows = _read_file(content, file.filename)
@@ -360,7 +360,7 @@ async def import_hours(
 async def import_visits(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     content = await file.read()
     rows = _read_file(content, file.filename)
@@ -410,7 +410,7 @@ async def import_visits(
 async def import_compliance(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Bulk-import compliance documents from CSV/XLSX.
