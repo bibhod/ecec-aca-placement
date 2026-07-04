@@ -12,13 +12,19 @@ import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { Modal, Badge, ProgressBar, PageHeader, SearchInput, Select, Spinner, EmptyState, FormRow } from '../components/ui/index'
 
-// Issue 9 - all four qualifications
+// Issue 9 - all four qualifications (existing students may still be enrolled
+// under the superseded codes and need to see/edit that value correctly)
 const QUALIFICATIONS = [
   { value: 'CHC30121', label: 'CHC30121 – Certificate III in ECEC (Superseded)' },
   { value: 'CHC50121', label: 'CHC50121 – Diploma of ECEC (Superseded)' },
   { value: 'CHC30125', label: 'CHC30125 – Certificate III in Early Childhood Education and Care' },
   { value: 'CHC50125', label: 'CHC50125 – Diploma of Early Childhood Education and Care' },
 ]
+
+// New students may only be enrolled under the current, non-superseded codes.
+const NEW_STUDENT_QUALIFICATIONS = QUALIFICATIONS.filter(
+  q => q.value === 'CHC30125' || q.value === 'CHC50125'
+)
 
 const CAMPUSES = ['sydney', 'melbourne', 'perth']
 const STATUSES = ['current', 'completed', 'withdrawn']
@@ -262,7 +268,7 @@ export default function StudentsPage() {
           </FormRow>
           {/* Issue 9 - all four qualifications */}
           <FormRow label="Qualification" required>
-            <Select value={form.qualification} onChange={handleQualChange} options={QUALIFICATIONS} placeholder="" />
+            <Select value={form.qualification} onChange={handleQualChange} options={editStudent ? QUALIFICATIONS : NEW_STUDENT_QUALIFICATIONS} placeholder="" />
           </FormRow>
           <FormRow label="Campus" required>
             <Select value={form.campus} onChange={v => setForm(f => ({ ...f, campus: v }))} options={CAMPUSES.map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} placeholder="" />
