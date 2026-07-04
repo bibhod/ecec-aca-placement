@@ -117,6 +117,45 @@ def migrate_add_qualification_level():
         db.close()
 
 
+def migrate_trainer_profile_fields():
+    """
+    One-time migration: add qualifications_delivering and max_students columns
+    to users (idempotent - safe to run on every startup), and backfill them
+    from any existing trainer_profiles rows so data entered via the old
+    Trainer/Assessor Profiles page (now removed in favour of managing these
+    fields directly on the user record in User Management) isn't lost.
+    """
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        db.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS qualifications_delivering JSON"
+        ))
+        db.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS max_students INTEGER DEFAULT 20"
+        ))
+        db.commit()
+
+        result = db.execute(text("""
+            UPDATE users SET
+                qualifications_delivering = trainer_profiles.qualifications_delivering,
+                max_students = trainer_profiles.max_students
+            FROM trainer_profiles
+            WHERE users.id = trainer_profiles.user_id
+              AND users.qualifications_delivering IS NULL
+        """))
+        db.commit()
+        if result.rowcount:
+            logger.info(f"migrate_trainer_profile_fields: backfilled {result.rowcount} user(s) from trainer_profiles")
+
+        logger.info("migrate_trainer_profile_fields: complete")
+    except Exception as e:
+        logger.error(f"migrate_trainer_profile_fields failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def migrate_normalise_campus():
     """
     One-time migration: lowercase all campus values so filters work consistently.
@@ -201,6 +240,7 @@ async def lifespan(app: FastAPI):
     migrate_normalise_campus()  # lowercase all campus values so filters match
     migrate_active_to_current() # one-time rename 'active' → 'current'
     migrate_add_qualification_level()  # add + backfill qualification_level columns
+    migrate_trainer_profile_fields()   # add + backfill trainer fields on users (Trainer/Assessor Profiles page removed)
     start_scheduler()
     yield
     shutdown_scheduler()

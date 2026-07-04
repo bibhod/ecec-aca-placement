@@ -121,6 +121,12 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Trainer/Assessor operational fields (moved into User Management directly;
+    # the old dedicated Trainer/Assessor Profiles page has been removed).
+    # Shown/edited in the UI only when role == "trainer".
+    qualifications_delivering = Column(JSON, nullable=True, default=list)
+    max_students = Column(Integer, nullable=True, default=20)
+
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     communications_sent = relationship(
         "Communication", back_populates="sender", foreign_keys="Communication.sender_id"
