@@ -1014,7 +1014,7 @@ export default function CompliancePage() {
                     {/* Header */}
                     <div className="grid grid-cols-[1fr_120px_110px_110px_110px] gap-0 bg-gray-50 border-b border-gray-200 px-3 py-2">
                       <p className="text-xs font-medium text-gray-500">Document Type</p>
-                      <p className="text-xs font-medium text-gray-500">Qualification</p>
+                      <p className="text-xs font-medium text-gray-500" title="Only Work Placement Agreement and MOU are qualification-specific - other document types show N/A.">Qualification</p>
                       <p className="text-xs font-medium text-gray-500">Entry Date</p>
                       <p className="text-xs font-medium text-gray-500">Issue Date</p>
                       <p className="text-xs font-medium text-gray-500">Expiry Date</p>
@@ -1049,7 +1049,7 @@ export default function CompliancePage() {
                               ))}
                             </select>
                           ) : (
-                            <span className="text-xs text-gray-400 px-1">N/A</span>
+                            <span className="text-xs text-gray-400 px-1" title="Not qualification-specific - applies regardless of course level.">N/A</span>
                           )}
                         </div>
 

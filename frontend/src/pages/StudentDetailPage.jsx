@@ -36,6 +36,20 @@ function defaultQual(docType) {
   return QUAL_SPECIFIC_SET.has(docType) ? '' : 'N/A'
 }
 
+const QUAL_LEVEL_OPTIONS = [
+  { value: 'Cert III', label: 'Cert III' },
+  { value: 'Diploma',  label: 'Diploma'  },
+]
+
+/** Best-guess qualification level from a student's enrolled qualification code */
+function levelForQualification(code) {
+  if (!code) return ''
+  const c = String(code).toLowerCase()
+  if (c.includes('30')) return 'Cert III'
+  if (c.includes('50')) return 'Diploma'
+  return ''
+}
+
 const ISSUE_TYPES = ['attendance', 'behaviour', 'performance', 'compliance', 'other']
 
 export default function StudentDetailPage() {
@@ -53,7 +67,7 @@ export default function StudentDetailPage() {
 
   // Issue 3 - multi-row log hours
   const [showLogHours, setShowLogHours] = useState(false)
-  const emptyEntry = { log_date: '', hours: '', activity_description: '' }
+  const emptyEntry = { log_date: '', hours: '', qualification_level: levelForQualification(student?.qualification), activity_description: '' }
   const [hoursEntries, setHoursEntries] = useState([{ ...emptyEntry }])
 
   // Compliance modal (Issue 4, 8)
@@ -127,7 +141,7 @@ export default function StudentDetailPage() {
     try {
       const r = await api.post('/hours/bulk', {
         student_id: id,
-        entries: valid.map(e => ({ log_date: e.log_date, hours: +e.hours, activity_description: e.activity_description }))
+        entries: valid.map(e => ({ log_date: e.log_date, hours: +e.hours, qualification_level: e.qualification_level || null, activity_description: e.activity_description }))
       })
       const warnings = (r.data.results || []).flatMap(res => res.warnings || [])
       if (warnings.length > 0) {
@@ -269,7 +283,7 @@ export default function StudentDetailPage() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <button onClick={() => navigate('/')} className="p-2 text-gray-400 hover:text-navy hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => navigate('/students')} className="p-2 text-gray-400 hover:text-navy hover:bg-gray-100 rounded-lg transition-colors">
           <ArrowLeft size={20} />
         </button>
         <div className="flex items-center gap-4 flex-1">
@@ -717,7 +731,7 @@ export default function StudentDetailPage() {
         <div className="space-y-3">
           {hoursEntries.map((entry, idx) => (
             <div key={idx} className="grid grid-cols-12 gap-2 items-start bg-gray-50 p-3 rounded-xl">
-              <div className="col-span-4">
+              <div className="col-span-3">
                 <label className="text-xs text-gray-500 mb-1 block">Date *</label>
                 <input className="input text-sm" type="date" value={entry.log_date}
                   onChange={e => updateHoursRow(idx, 'log_date', e.target.value)} />
@@ -727,7 +741,12 @@ export default function StudentDetailPage() {
                 <input className="input text-sm" type="number" step="0.5" min="0.5" max="24" value={entry.hours}
                   onChange={e => updateHoursRow(idx, 'hours', e.target.value)} placeholder="8" />
               </div>
-              <div className="col-span-5">
+              <div className="col-span-3">
+                <label className="text-xs text-gray-500 mb-1 block">Qualification</label>
+                <Select value={entry.qualification_level} onChange={v => updateHoursRow(idx, 'qualification_level', v)}
+                  options={QUAL_LEVEL_OPTIONS} placeholder="Select level..." className="text-sm" />
+              </div>
+              <div className="col-span-3">
                 <label className="text-xs text-gray-500 mb-1 block">Activity Description</label>
                 <input className="input text-sm" value={entry.activity_description}
                   onChange={e => updateHoursRow(idx, 'activity_description', e.target.value)}
@@ -774,6 +793,11 @@ export default function StudentDetailPage() {
             ) : (
               <input className="input bg-gray-50 text-gray-400 cursor-not-allowed" value="N/A" readOnly />
             )}
+            <p className="text-xs text-gray-400 mt-1.5">
+              {QUAL_SPECIFIC_SET.has(compForm.document_type)
+                ? 'Work Placement Agreements and MOUs are issued per qualification level.'
+                : 'This document type is not qualification-specific, so it applies regardless of course level.'}
+            </p>
           </FormRow>
 
           <div className="grid grid-cols-3 gap-4">
