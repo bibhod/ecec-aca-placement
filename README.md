@@ -1,11 +1,11 @@
 # ECEC Work Placement Management System
-### Academies Australasia — Staff Portal v2.0
+### Academies Australasia - Staff Portal v2.0
 
 A complete, self-hostable work placement management system for the Early Childhood Education and Care (ECEC) program.
 
 ---
 
-## Quick Start (Docker — recommended)
+## Quick Start (Docker - recommended)
 
 ```bash
 # 1. Copy environment file and fill in your values
@@ -45,17 +45,17 @@ npm run dev
 ## Features
 
 ### Core
-- **Dashboard** — live stats, upcoming appointments, expiring docs, campus/qualification charts
-- **Students** — full CRUD, grid/list view, search & filter, hours progress, compliance status
-- **Student Detail** — full profile, hours log, compliance docs, appointments, communications, issues
-- **Appointments** — schedule visits, online/onsite/phone, confirmation emails, 48h/24h auto reminders
-- **Hours Tracking** — log hours, approval workflow, milestone emails at 50% and 100%
-- **Compliance** — document management, expiry tracking, colour-coded status, verification workflow
-- **Communications** — compose emails, email templates, full message log
-- **Issues** — raise issues, priority management, resolution tracking, coordinator email notifications
-- **Reports** — hours by campus/qualification, compliance rates, CSV export
-- **User Management** — staff accounts, roles (admin/coordinator/trainer), activate/deactivate
-- **Centre Management** — placement centres with NQS ratings, supervisor details
+- **Dashboard** - live stats, upcoming appointments, expiring docs, campus/qualification charts
+- **Students** - full CRUD, grid/list view, search & filter, hours progress, compliance status
+- **Student Detail** - full profile, hours log, compliance docs, appointments, communications, issues
+- **Appointments** - schedule visits, online/onsite/phone, confirmation emails, 48h/24h auto reminders
+- **Hours Tracking** - log hours, approval workflow, milestone emails at 50% and 100%
+- **Compliance** - document management, expiry tracking, colour-coded status, verification workflow
+- **Communications** - compose emails, email templates, full message log
+- **Issues** - raise issues, priority management, resolution tracking, coordinator email notifications
+- **Reports** - hours by campus/qualification, compliance rates, CSV export
+- **User Management** - staff accounts, roles (admin/coordinator/trainer), activate/deactivate
+- **Centre Management** - placement centres with NQS ratings, supervisor details
 
 ### Email Notifications (automated)
 | Trigger | Recipients |
@@ -72,13 +72,13 @@ npm run dev
 | Appointment created | Student + Supervisor (confirmation) |
 
 ### Email Configuration
-**Option A — SendGrid (recommended):**
+**Option A - SendGrid (recommended):**
 ```
 SENDGRID_API_KEY=SG.your-key-here
 USE_SMTP=false
 ```
 
-**Option B — SMTP (Gmail etc):**
+**Option B - SMTP (Gmail etc):**
 ```
 USE_SMTP=true
 SMTP_HOST=smtp.gmail.com
@@ -87,7 +87,7 @@ SMTP_USER=your@gmail.com
 SMTP_PASSWORD=your-app-password
 ```
 
-**No email configured:** Emails are logged to console (simulation mode) — app still works fully.
+**No email configured:** Emails are logged to console (simulation mode) - app still works fully.
 
 ---
 
@@ -157,4 +157,4 @@ On first run, the database is automatically seeded with:
 
 ---
 
-*Built for Academies Australasia — ECEC Work Placement Management System v2.0*
+*Built for Academies Australasia - ECEC Work Placement Management System v2.0*
