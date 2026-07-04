@@ -1,5 +1,5 @@
 """
-SMS Service (Issue 2 / 15 / 16) — Twilio integration with simulation fallback.
+SMS Service (Issue 2 / 15 / 16) - Twilio integration with simulation fallback.
 If TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER are not set,
 messages are logged to console so development works without credentials.
 """
@@ -17,7 +17,7 @@ def send_sms(to_phone: str, body: str) -> bool:
     Returns True on success (or simulated success).
     """
     if not to_phone:
-        logger.warning("SMS: no recipient phone — skipping")
+        logger.warning("SMS: no recipient phone - skipping")
         return False
 
     # Normalise Australian mobile numbers if needed
@@ -33,7 +33,7 @@ def send_sms(to_phone: str, body: str) -> bool:
         ):
             return _send_via_twilio(phone, body)
         else:
-            # Simulation mode — log to console
+            # Simulation mode - log to console
             logger.info(f"[SMS SIMULATION] To: {phone}")
             logger.info(f"[SMS BODY] {body[:160]}")
             return True
@@ -54,7 +54,7 @@ def _send_via_twilio(to_phone: str, body: str) -> bool:
     )
     success = msg.status not in ("failed", "undelivered")
     if success:
-        logger.info(f"Twilio SMS sent to {to_phone} — SID: {msg.sid}")
+        logger.info(f"Twilio SMS sent to {to_phone} - SID: {msg.sid}")
     else:
         logger.error(f"Twilio SMS failed to {to_phone}: {msg.status}")
     return success

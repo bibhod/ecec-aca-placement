@@ -33,7 +33,7 @@ def send_email(
             print(f"[EMAIL] Using SMTP: {settings.SMTP_HOST}:{settings.SMTP_PORT}", flush=True)
             return _send_via_smtp(to_email, to_name, subject, html_body, plain_body)
         else:
-            print(f"[EMAIL SIMULATION] No credentials set — email NOT sent to {to_email}", flush=True)
+            print(f"[EMAIL SIMULATION] No credentials set - email NOT sent to {to_email}", flush=True)
             return True
     except Exception as e:
         print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}", flush=True)
@@ -169,7 +169,7 @@ def _base_template(content: str) -> str:
     <hr class="footer-divider">
     <p class="footer-note">
       This is an automated message from the ECEC Work Placement Management System.
-      Please do not reply — contact your coordinator directly with any questions.<br>
+      Please do not reply - contact your coordinator directly with any questions.<br>
       &copy; 2026 Academies Australasia. All rights reserved.
     </p>
   </div>
@@ -257,7 +257,7 @@ def email_welcome_student(
     frontend_url: str
 ) -> bool:
     qual_label = "Certificate III in ECEC" if qualification == "CHC30121" else "Diploma of ECEC"
-    subject = f"Welcome to Academies Australasia — {qual_label}"
+    subject = f"Welcome to Academies Australasia - {qual_label}"
     content = f"""
 <h2>Welcome to Academies Australasia!</h2>
 <p>Dear {student_name},</p>
@@ -314,7 +314,7 @@ def email_issue_notification(
     frontend_url: str
 ) -> bool:
     priority_color = {"critical": "red", "high": "orange", "medium": "#999", "low": "green"}.get(priority, "#333")
-    subject = f"[{priority.upper()}] New Issue Raised: {issue_title} — {student_name}"
+    subject = f"[{priority.upper()}] New Issue Raised: {issue_title} - {student_name}"
     content = f"""
 <h2>New Issue Raised</h2>
 <p>Dear {coordinator_name},</p>
@@ -341,7 +341,7 @@ def email_hours_log_reminder(
     remaining_hours: float,
     frontend_url: str
 ) -> bool:
-    """Hours Log Submission Reminder — sent to students who haven't met their required hours."""
+    """Hours Log Submission Reminder - sent to students who haven't met their required hours."""
     rem_color = "red" if remaining_hours > required_hours * 0.5 else "darkorange"
     subject = "Reminder: Please Submit Your Placement Hours Log"
     content = f"""
