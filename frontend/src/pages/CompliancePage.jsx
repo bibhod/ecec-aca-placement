@@ -1123,10 +1123,12 @@ export default function CompliancePage() {
               <button onClick={() => { setHoursPreviewData(null); setExpandedHoursPreview(null) }} className="btn-secondary">
                 Cancel
               </button>
-              <button onClick={sendHoursReminders} disabled={sendingHoursReminders} className="btn-primary flex items-center gap-2">
-                <Mail size={15} />
-                {sendingHoursReminders ? 'Sending...' : `Send to ${hoursPreviewData.recipient_count} Students`}
-              </button>
+              {isAdmin && (
+                <button onClick={sendHoursReminders} disabled={sendingHoursReminders} className="btn-primary flex items-center gap-2">
+                  <Mail size={15} />
+                  {sendingHoursReminders ? 'Sending...' : `Send to ${hoursPreviewData.recipient_count} Students`}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1249,10 +1251,12 @@ export default function CompliancePage() {
               <button onClick={() => { setPreviewData(null); setExpandedPreview(null) }} className="btn-secondary">
                 Cancel
               </button>
-              <button onClick={sendReminders} disabled={sendingReminders} className="btn-primary flex items-center gap-2">
-                <Mail size={15} />
-                {sendingReminders ? 'Sending...' : `Send to ${previewData.recipient_count} Students`}
-              </button>
+              {isAdmin && (
+                <button onClick={sendReminders} disabled={sendingReminders} className="btn-primary flex items-center gap-2">
+                  <Mail size={15} />
+                  {sendingReminders ? 'Sending...' : `Send to ${previewData.recipient_count} Students`}
+                </button>
+              )}
             </div>
           </div>
         )}

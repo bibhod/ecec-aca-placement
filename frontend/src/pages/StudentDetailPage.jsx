@@ -42,6 +42,7 @@ export default function StudentDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [student, setStudent] = useState(null)
   const [hours, setHours] = useState([])
   const [appointments, setAppointments] = useState([])
@@ -293,12 +294,14 @@ export default function StudentDetailPage() {
         </div>
         {/* Issue 5 - only global action is Email; each section has its own + Add */}
         <div className="flex gap-2">
-          {['admin', 'superadmin'].includes(user?.role) && (
+          {isAdmin && (
             <button onClick={openStatusModal} className="btn-secondary text-sm flex items-center gap-1">
               <UserCog size={15} /> Change Status
             </button>
           )}
-          <button onClick={() => setShowEmailModal(true)} className="btn-secondary text-sm"><Mail size={15} /> Email</button>
+          {isAdmin && (
+            <button onClick={() => setShowEmailModal(true)} className="btn-secondary text-sm"><Mail size={15} /> Email</button>
+          )}
         </div>
       </div>
 
@@ -374,7 +377,7 @@ export default function StudentDetailPage() {
                   <p className="text-xs text-gray-500">Remaining</p>
                 </div>
               </div>
-              <button onClick={() => setShowLogHours(true)} className="btn-primary text-sm mt-3 w-full"><Plus size={14} /> Log Hours</button>
+              {isAdmin && <button onClick={() => setShowLogHours(true)} className="btn-primary text-sm mt-3 w-full"><Plus size={14} /> Log Hours</button>}
             </div>
             <div className="card">
               <h3 className="font-semibold text-navy mb-3">Quick Stats</h3>
@@ -459,7 +462,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Hours Log</h3>
             {/* Issue 5 - Log Hours button lives in the Hours tab */}
-            <button onClick={() => setShowLogHours(true)} className="btn-primary text-sm"><Plus size={14} /> Log Hours</button>
+            {isAdmin && <button onClick={() => setShowLogHours(true)} className="btn-primary text-sm"><Plus size={14} /> Log Hours</button>}
           </div>
           {hours.length === 0 ? <p className="text-center text-gray-400 py-8">No hours logged yet</p> : (
             <div className="overflow-x-auto">
@@ -547,7 +550,7 @@ export default function StudentDetailPage() {
             <div className="card">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-navy">Submitted Documents</h3>
-                <button onClick={() => setShowComplianceModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Document</button>
+                {isAdmin && <button onClick={() => setShowComplianceModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Document</button>}
               </div>
               {allDocs.length === 0
                 ? <p className="text-center text-gray-400 py-8">No compliance documents recorded</p>
@@ -634,7 +637,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Appointments</h3>
             {/* Issue 5 - Appointments section has its own + Add button */}
-            <button onClick={() => setShowApptModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Appointment</button>
+            {isAdmin && <button onClick={() => setShowApptModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Appointment</button>}
           </div>
           {appointments.length === 0 ? <p className="text-center text-gray-400 py-8">No appointments scheduled</p>
             : <div className="space-y-3">
@@ -663,7 +666,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Communications</h3>
             {/* Issue 5 - Communications section has its own + Add button */}
-            <button onClick={() => setShowEmailModal(true)} className="btn-primary text-sm"><Mail size={14} /> Send Email</button>
+            {isAdmin && <button onClick={() => setShowEmailModal(true)} className="btn-primary text-sm"><Mail size={14} /> Send Email</button>}
           </div>
           {comms.length === 0 ? <p className="text-center text-gray-400 py-8">No communications yet</p>
             : <div className="space-y-3">
@@ -688,7 +691,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Issues</h3>
             {/* Issue 5 - Issues section has its own + Add button */}
-            <button onClick={() => setShowIssueModal(true)} className="btn-primary text-sm"><Plus size={14} /> Log Issue</button>
+            {isAdmin && <button onClick={() => setShowIssueModal(true)} className="btn-primary text-sm"><Plus size={14} /> Log Issue</button>}
           </div>
           {issues.length === 0 ? <p className="text-center text-gray-400 py-8">No issues recorded</p>
             : <div className="space-y-3">

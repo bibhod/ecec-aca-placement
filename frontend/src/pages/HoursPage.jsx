@@ -101,7 +101,7 @@ export function HoursPage() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <PageHeader title="Hours Tracking" subtitle={`${logs.length} total log entries`}
-        actions={<button onClick={() => setShowModal(true)} className="btn-primary text-sm"><Plus size={15} /> Log Hours</button>} />
+        actions={isAdmin && <button onClick={() => setShowModal(true)} className="btn-primary text-sm"><Plus size={15} /> Log Hours</button>} />
 
       {pending.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4 flex items-center gap-3">

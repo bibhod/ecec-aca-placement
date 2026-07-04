@@ -11,6 +11,7 @@ import { Plus, Upload, Grid, List, MapPin, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { Modal, Badge, ProgressBar, PageHeader, SearchInput, Select, Spinner, EmptyState, FormRow } from '../components/ui/index'
+import { useAuth } from '../contexts/AuthContext'
 
 // Issue 9 - all four qualifications (existing students may still be enrolled
 // under the superseded codes and need to see/edit that value correctly)
@@ -84,6 +85,8 @@ function StudentCard({ student, onClick }) {
 
 export default function StudentsPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [students, setStudents] = useState([])
   const [centres, setCentres] = useState([])
   const [coordinators, setCoordinators] = useState([])
@@ -187,9 +190,13 @@ export default function StudentsPage() {
         subtitle={`${students.length} student${students.length !== 1 ? 's' : ''} found`}
         actions={
           <>
-            {/* Issue 13 - functional Bulk Import button */}
-            <button onClick={() => { setShowImportModal(true); setImportResult(null) }} className="btn-secondary text-sm"><Upload size={15} /> Bulk Import</button>
-            <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>
+            {/* Issue 13 - functional Bulk Import button. Admin-only: coordinator/trainer are view-only. */}
+            {isAdmin && (
+              <button onClick={() => { setShowImportModal(true); setImportResult(null) }} className="btn-secondary text-sm"><Upload size={15} /> Bulk Import</button>
+            )}
+            {isAdmin && (
+              <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>
+            )}
           </>
         }
       />
@@ -214,7 +221,7 @@ export default function StudentsPage() {
 
       {loading ? <Spinner /> : students.length === 0 ? (
         <EmptyState icon={null} title="No students found" message="Try adjusting your filters or add a new student."
-          action={<button onClick={openAdd} className="btn-primary mx-auto">Add Student</button>} />
+          action={isAdmin ? <button onClick={openAdd} className="btn-primary mx-auto">Add Student</button> : undefined} />
       ) : view === 'grid' ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {students.map(s => <StudentCard key={s.id} student={s} onClick={() => navigate(`/students/${s.id}`)} />)}
@@ -247,7 +254,7 @@ export default function StudentsPage() {
                   <td className="px-4 py-3"><div className="w-32"><ProgressBar value={s.completed_hours} max={s.required_hours} /></div></td>
                   <td className="px-4 py-3"><Badge status={s.compliance_status} /></td>
                   <td className="px-4 py-3"><Badge status={s.status} /></td>
-                  <td className="px-4 py-3"><button onClick={e => openEdit(s, e)} className="text-xs text-cyan hover:underline">Edit</button></td>
+                  <td className="px-4 py-3">{isAdmin && <button onClick={e => openEdit(s, e)} className="text-xs text-cyan hover:underline">Edit</button>}</td>
                 </tr>
               ))}
             </tbody>

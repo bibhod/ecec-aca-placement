@@ -11,6 +11,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { Plus, Calendar, List, Check, X, Bell } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
+import { useAuth } from '../contexts/AuthContext'
 import {
   Modal, Badge, PageHeader, Select, Spinner, EmptyState, FormRow,
 } from '../components/ui/index'
@@ -62,6 +63,8 @@ const emptyForm = {
 }
 
 export default function AppointmentsPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [appointments, setAppointments] = useState([])
   const [students, setStudents] = useState([])
   const [centres, setCentres] = useState([])
@@ -235,7 +238,7 @@ export default function AppointmentsPage() {
           {a.preparation_notes && <p className="text-xs text-gray-500 mt-2 italic">Prep: {a.preparation_notes}</p>}
           {a.feedback && <p className="text-xs text-green-700 mt-2 bg-green-50 p-2 rounded">Feedback: {a.feedback}</p>}
         </div>
-        {a.status === 'scheduled' && (
+        {a.status === 'scheduled' && isAdmin && (
           <div className="flex flex-col gap-1.5 flex-shrink-0">
             <button onClick={() => openEdit(a)} className="btn-secondary text-xs py-1 px-2">Edit</button>
             <button onClick={() => markComplete(a)} className="btn-primary text-xs py-1 px-2"><Check size={12} /> Complete</button>
@@ -251,7 +254,7 @@ export default function AppointmentsPage() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <PageHeader title="Appointments" subtitle={`${appointments.length} total`}
         actions={
-          <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> New Appointment</button>
+          isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> New Appointment</button>
         }
       />
 
@@ -266,7 +269,7 @@ export default function AppointmentsPage() {
 
       {loading ? <Spinner /> : appointments.length === 0 ? (
         <EmptyState icon={Calendar} title="No appointments" message="Create your first appointment."
-          action={<button onClick={openAdd} className="btn-primary mx-auto"><Plus size={15} /> New</button>} />
+          action={isAdmin ? <button onClick={openAdd} className="btn-primary mx-auto"><Plus size={15} /> New</button> : undefined} />
       ) : (
         <>
           {upcoming.length > 0 && (
