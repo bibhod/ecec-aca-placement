@@ -225,7 +225,69 @@ def run_v32():
     logger.info("v3.2 migration complete")
 
 
+# v3.3 - v3.2 only searched information_schema.table_constraints for a named
+# UNIQUE CONSTRAINT on students.student_id and correctly added
+# uq_student_id_qualification. But the live database's actual blocker turned
+# out to be a plain UNIQUE INDEX (ix_students_student_id) left over from an
+# earlier schema version. A unique index created without a backing named
+# constraint does not show up in table_constraints at all, so v3.2 never
+# found or dropped it. It was still silently enforcing single-column
+# uniqueness on student_id, which is why re-enrolling a Cert III graduate
+# under the Diploma (same student_id, new qualification) failed with a 500 /
+# IntegrityError on "ix_students_student_id" even after v3.2 ran successfully.
+def run_v33():
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = True
+    cur = conn.cursor()
+
+    # Find any unique index on students covering ONLY the student_id column.
+    cur.execute("""
+        SELECT ix.relname AS index_name
+        FROM pg_index i
+        JOIN pg_class ix ON ix.oid = i.indexrelid
+        JOIN pg_class t ON t.oid = i.indrelid
+        WHERE t.relname = 'students'
+          AND i.indisunique = true
+          AND i.indnkeyatts = 1
+          AND (
+            SELECT a.attname FROM pg_attribute a
+            WHERE a.attrelid = t.oid AND a.attnum = i.indkey[0]
+          ) = 'student_id'
+    """)
+    rows = cur.fetchall()
+    if not rows:
+        logger.info("  SKIP  no stale single-column unique index found on students.student_id")
+    for (index_name,) in rows:
+        # Defensive: don't touch it if it happens to be the backing index of
+        # a named table constraint (shouldn't happen given indnkeyatts=1, but
+        # a composite constraint's index would have indnkeyatts=2).
+        cur.execute("""
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE table_name = 'students' AND constraint_name = %s
+        """, (index_name,))
+        if cur.fetchone():
+            logger.info(f"  SKIP  {index_name} backs a named constraint, leaving alone")
+            continue
+        cur.execute(f'DROP INDEX IF EXISTS "{index_name}"')
+        logger.info(f"  DROP  stale unique index students.{index_name} (single-column unique on student_id)")
+
+    # Recreate a plain (non-unique) index on student_id for lookup
+    # performance, matching the Student model's index=True declaration.
+    cur.execute("""
+        SELECT 1 FROM pg_indexes WHERE tablename = 'students' AND indexname = 'ix_students_student_id'
+    """)
+    if cur.fetchone():
+        logger.info("  SKIP  ix_students_student_id already exists")
+    else:
+        cur.execute('CREATE INDEX ix_students_student_id ON students (student_id)')
+        logger.info("  ADD   ix_students_student_id (non-unique, for lookup performance)")
+
+    cur.close(); conn.close()
+    logger.info("v3.3 migration complete")
+
+
 if __name__ == "__main__":
     run_migration()
     run_v31()
     run_v32()
+    run_v33()
