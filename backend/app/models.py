@@ -183,6 +183,7 @@ class PlacementCentre(Base):
     nqs_rating = Column(String, nullable=True)
     max_students = Column(Integer, default=5)
     accepted_qualifications = Column(JSON, nullable=True)
+    children_age_groups = Column(JSON, nullable=True, default=list)
     approved = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
