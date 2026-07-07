@@ -40,6 +40,7 @@ def run_migration():
         ("placement_centres", "longitude", "ADD COLUMN longitude FLOAT"),
         ("placement_centres", "max_students", "ADD COLUMN max_students INTEGER DEFAULT 5"),
         ("placement_centres", "accepted_qualifications", "ADD COLUMN accepted_qualifications JSONB"),
+        ("placement_centres", "children_age_groups", "ADD COLUMN children_age_groups JSONB DEFAULT '[]'"),
 
         # ── ComplianceDocument - new columns (Issue 8) ────────────────────────
         ("compliance_documents", "file_name", "ADD COLUMN file_name VARCHAR"),
