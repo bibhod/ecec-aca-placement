@@ -75,7 +75,7 @@ export default function UsersPage() {
       <PageHeader title="User Management" subtitle={`${users.length} staff accounts`}
         actions={isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add User</button>} />
 
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50"><tr>
             {['User', 'Role', 'Campus', 'Phone', 'Created', 'Status', 'Actions'].map(h => (
