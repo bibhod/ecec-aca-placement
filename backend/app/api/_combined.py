@@ -42,6 +42,7 @@ def centre_to_dict(c: PlacementCentre) -> dict:
         "nqs_rating": c.nqs_rating,
         "max_students": c.max_students,
         "accepted_qualifications": c.accepted_qualifications,
+        "children_age_groups": c.children_age_groups,
         "approved": c.approved,
         "notes": c.notes,
         "created_at": str(c.created_at) if c.created_at else None,
@@ -87,6 +88,7 @@ class CentreCreate(BaseModel):
     nqs_rating: Optional[str] = None
     max_students: int = 5
     accepted_qualifications: Optional[list] = None
+    children_age_groups: Optional[list] = None
     approved: bool = True
     notes: Optional[str] = None
 
