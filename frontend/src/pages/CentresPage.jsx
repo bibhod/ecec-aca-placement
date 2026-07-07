@@ -17,6 +17,8 @@ const AU_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT']
 // New placement centres may only be added in the current Sydney/Melbourne
 // (NSW/VIC) operating area.
 const NEW_CENTRE_STATES = ['NSW', 'VIC']
+// Issue: Children Age Group field on placement centres
+const CHILDREN_AGE_GROUPS = ['Under 12 months', 'Over 12 months']
 
 const emptyForm = {
   centre_name: '', address: '', suburb: '', state: 'NSW', postcode: '',
@@ -24,6 +26,7 @@ const emptyForm = {
   supervisor_name: '', supervisor_email: '', supervisor_phone: '',
   nqs_rating: 'Meeting NQS', approved: true, notes: '',
   latitude: null, longitude: null, max_students: 5,
+  children_age_groups: [],
 }
 
 /**
@@ -127,6 +130,7 @@ export default function CentresPage() {
       nqs_rating: c.nqs_rating || 'Meeting NQS', approved: c.approved,
       notes: c.notes || '', latitude: c.latitude || null, longitude: c.longitude || null,
       max_students: c.max_students || 5,
+      children_age_groups: c.children_age_groups || [],
     })
     setShowModal(true)
   }
@@ -191,6 +195,9 @@ export default function CentresPage() {
               )}
               {c.phone && <p className="text-xs text-gray-500 flex items-center gap-1 mb-1"><Phone size={11} />{c.phone}</p>}
               {c.supervisor_name && <p className="text-xs text-gray-500 mt-2">Supervisor: <strong>{c.supervisor_name}</strong></p>}
+              {c.children_age_groups?.length > 0 && (
+                <p className="text-xs text-gray-500 mt-2">{c.children_age_groups.join(' · ')}</p>
+              )}
               {c.nqs_rating && (
                 <div className="mt-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${nqsColor[c.nqs_rating] || 'badge-gray'}`}>
@@ -242,6 +249,29 @@ export default function CentresPage() {
           <FormRow label="Max Students">
             <input className="input" type="number" min="1" max="50" value={form.max_students} onChange={e => setForm(f => ({ ...f, max_students: +e.target.value }))} />
           </FormRow>
+
+          <div className="col-span-full">
+            <FormRow label="Children Age Group">
+              <div className="flex flex-wrap gap-4">
+                {CHILDREN_AGE_GROUPS.map(group => (
+                  <label key={group} className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-cyan"
+                      checked={form.children_age_groups.includes(group)}
+                      onChange={e => setForm(f => ({
+                        ...f,
+                        children_age_groups: e.target.checked
+                          ? [...f.children_age_groups, group]
+                          : f.children_age_groups.filter(g => g !== group),
+                      }))}
+                    />
+                    {group}
+                  </label>
+                ))}
+              </div>
+            </FormRow>
+          </div>
 
           <div className="col-span-full border-t border-gray-100 pt-4 mt-1">
             <p className="text-sm font-medium text-gray-700 mb-3">Director Details</p>
