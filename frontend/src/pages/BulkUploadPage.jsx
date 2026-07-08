@@ -54,7 +54,7 @@ const UPLOAD_TYPES = [
   {
     key: 'compliance',
     label: 'Compliance Documents',
-    description: 'Bulk-import compliance records. Includes: student ID, document type (WWCC, First Aid, WPA, MOU), qualification, expiry date, notes.',
+    description: 'Bulk-import compliance records. Includes: student ID, document type (WWCC, First Aid, WPA, MOU, Geccko Child Safety Training), qualification, expiry date, notes.',
     template: '/bulk/templates/compliance',
     import: '/bulk/import/compliance',
     filename: 'template_compliance.csv',

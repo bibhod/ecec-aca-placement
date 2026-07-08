@@ -44,7 +44,7 @@ APPOINTMENT_TYPE_CHOICES = [
 COMPLIANCE_DOC_TYPE_CHOICES = [
     "working_with_children_check", "national_police_check",
     "first_aid_certificate", "work_placement_agreement",
-    "memorandum_of_understanding",
+    "memorandum_of_understanding", "national_child_safety_training",
 ]
 
 USER_ROLE_CHOICES = ["admin", "coordinator", "trainer"]   # trainer = Trainer/Assessor

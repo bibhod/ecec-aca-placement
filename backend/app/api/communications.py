@@ -48,7 +48,8 @@ _DEFAULT_TEMPLATES = [
             "• National Police Check\n"
             "• Valid First Aid Certificate (including CPR)\n"
             "• Work Placement Agreement\n"
-            "• Memorandum of Understanding (MOU)\n\n"
+            "• Memorandum of Understanding (MOU)\n"
+            "• National Child Safety Training (Geccko)\n\n"
             "Regards,\nAcademies Australasia"
         ),
     },

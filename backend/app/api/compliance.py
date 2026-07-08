@@ -3,7 +3,16 @@ Compliance API
 Fixes:
   Issue 4  - five specific compliance document types with file upload provision
   Issue 8  - functional file upload within Add Document (combined create + upload)
-  Issue 12 - document type filter shows only the five required types
+  Issue 12 - document type filter shows only the required types
+
+Compliance document requirements (mandatory, must be submitted prior to
+commencing work placement):
+  1. Working with Children Check
+  2. Valid First Aid Certificate (including CPR)
+  3. Work Placement Agreement
+  4. Memorandum of Understanding (MOU)
+  5. National Child Safety Training (Geccko) - Education and Care Services
+     National Law Act 2010, s.162B
 """
 import os, uuid, shutil
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -26,12 +35,13 @@ router = APIRouter()
 UPLOAD_DIR = "uploads/compliance"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# The 4 required compliance document types
+# The 5 required compliance document types
 REQUIRED_DOC_TYPES = {
-    "working_with_children_check": "Working with Children Check",
-    "first_aid_certificate":       "Valid First Aid Certificate (including CPR)",
-    "work_placement_agreement":    "Work Placement Agreement",
-    "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
+    "working_with_children_check":    "Working with Children Check",
+    "first_aid_certificate":          "Valid First Aid Certificate (including CPR)",
+    "work_placement_agreement":       "Work Placement Agreement",
+    "memorandum_of_understanding":    "Memorandum of Understanding (MOU)",
+    "national_child_safety_training": "National Child Safety Training (Geccko)",
 }
 
 # Keep legacy label map for backward compatibility with existing data
@@ -402,7 +412,7 @@ def compliance_report(
 ):
     """
     Returns every active student with their compliance status for each of the
-    4 required document types, plus a submitted count and list of outstanding docs.
+    5 required document types, plus a submitted count and list of outstanding docs.
     """
     q = db.query(Student).filter(Student.status == "current")
     if campus:
@@ -546,10 +556,11 @@ def wpa_mou_status_by_level(
 
 # ─── Outstanding-documents helper (qualification-level aware) ────────────────
 ABBREV = {
-    "working_with_children_check": "Working with Children Check (WWCC)",
-    "first_aid_certificate":       "First Aid Certificate (incl. CPR)",
-    "work_placement_agreement":    "Work Placement Agreement (WPA)",
-    "memorandum_of_understanding": "Memorandum of Understanding (MOU)",
+    "working_with_children_check":    "Working with Children Check (WWCC)",
+    "first_aid_certificate":          "First Aid Certificate (incl. CPR)",
+    "work_placement_agreement":       "Work Placement Agreement (WPA)",
+    "memorandum_of_understanding":    "Memorandum of Understanding (MOU)",
+    "national_child_safety_training": "National Child Safety Training (Geccko)",
 }
 
 

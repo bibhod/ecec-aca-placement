@@ -132,6 +132,7 @@ ACTIVITIES = [
 DOC_TYPES = [
     "working_with_children_check","national_police_check",
     "first_aid_certificate","work_placement_agreement","memorandum_of_understanding",
+    "national_child_safety_training",
 ]
 
 ISSUE_TITLES = [
