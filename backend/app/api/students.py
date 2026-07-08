@@ -468,28 +468,33 @@ def get_placement_checklist(
         "student_id": s.id,
         "student_name": s.full_name,
         "all_complete": all_green,
+        # Labels name the requirement/criterion itself rather than asserting it
+        # has been met - "All 5 required compliance documents submitted" read as
+        # a claim of fact even when the item was red with a "Missing: ..."
+        # detail underneath, which was confusing/contradictory. The ok flag
+        # (icon + colour) and "detail" string are what convey pass/fail status.
         "checklist": [
             {
                 "id": "compliance",
-                "label": "All 5 required compliance documents submitted",
+                "label": "Compliance Documents (5 required)",
                 "ok": compliance_ok,
                 "detail": compliance_detail,
             },
             {
                 "id": "hours",
-                "label": f"Required placement hours met ({s.required_hours:.0f}h)",
+                "label": f"Placement Hours ({s.required_hours:.0f}h required)",
                 "ok": hours_ok,
                 "detail": hours_detail,
             },
             {
                 "id": "visits",
-                "label": f"All required workplace visits completed ({required_visits} visits)",
+                "label": f"Workplace Visits ({required_visits} required)",
                 "ok": visits_ok,
                 "detail": visits_detail,
             },
             {
                 "id": "issues",
-                "label": "No open issues or flags",
+                "label": "Open Issues / Flags",
                 "ok": issues_ok,
                 "detail": issues_detail,
             },
