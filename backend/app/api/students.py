@@ -36,20 +36,21 @@ def student_to_dict(s: Student, db: Session, docs: Optional[List[ComplianceDocum
         docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
     today = date.today()
 
-    # A student is only compliant when ALL 4 required doc types are submitted
-    REQUIRED_4 = ['working_with_children_check', 'first_aid_certificate',
-                  'work_placement_agreement', 'memorandum_of_understanding']
+    # A student is only compliant when ALL 5 required doc types are submitted
+    REQUIRED_5 = ['working_with_children_check', 'first_aid_certificate',
+                  'work_placement_agreement', 'memorandum_of_understanding',
+                  'national_child_safety_training']
     submitted_types = {d.document_type for d in docs}
-    required_submitted_count = sum(1 for t in REQUIRED_4 if t in submitted_types)
-    missing_count = len(REQUIRED_4) - required_submitted_count
+    required_submitted_count = sum(1 for t in REQUIRED_5 if t in submitted_types)
+    missing_count = len(REQUIRED_5) - required_submitted_count
 
     if missing_count > 0:
         compliance_status = "pending"
     else:
-        # All 4 submitted - check expiry on the latest per required type
+        # All 5 submitted - check expiry on the latest per required type
         latest_docs: dict = {}
         for d in docs:
-            if d.document_type in REQUIRED_4:
+            if d.document_type in REQUIRED_5:
                 existing = latest_docs.get(d.document_type)
                 if not existing or (d.created_at or date.min) > (existing.created_at or date.min):
                     latest_docs[d.document_type] = d
@@ -409,23 +410,24 @@ def get_placement_checklist(
         raise HTTPException(status_code=404, detail="Student not found")
 
     today = date.today()
-    REQUIRED_4 = [
+    REQUIRED_5 = [
         "working_with_children_check", "first_aid_certificate",
         "work_placement_agreement", "memorandum_of_understanding",
+        "national_child_safety_training",
     ]
 
-    # 1. All 4 compliance docs submitted (not just any doc - all required types)
+    # 1. All 5 compliance docs submitted (not just any doc - all required types)
     submitted_types = {
         d.document_type
         for d in db.query(ComplianceDocument).filter(
             ComplianceDocument.student_id == s.id
         ).all()
     }
-    compliance_ok = all(t in submitted_types for t in REQUIRED_4)
+    compliance_ok = all(t in submitted_types for t in REQUIRED_5)
     compliance_detail = (
-        "All 4 required documents submitted"
+        "All 5 required documents submitted"
         if compliance_ok
-        else f"Missing: {', '.join(t.replace('_', ' ').title() for t in REQUIRED_4 if t not in submitted_types)}"
+        else f"Missing: {', '.join(t.replace('_', ' ').title() for t in REQUIRED_5 if t not in submitted_types)}"
     )
 
     # 2. Required placement hours met
@@ -469,7 +471,7 @@ def get_placement_checklist(
         "checklist": [
             {
                 "id": "compliance",
-                "label": "All 4 required compliance documents submitted",
+                "label": "All 5 required compliance documents submitted",
                 "ok": compliance_ok,
                 "detail": compliance_detail,
             },
@@ -519,9 +521,10 @@ def generate_placement_completion(
         raise HTTPException(status_code=404, detail="Student not found")
 
     today = date.today()
-    REQUIRED_4 = [
+    REQUIRED_5 = [
         "working_with_children_check", "first_aid_certificate",
         "work_placement_agreement", "memorandum_of_understanding",
+        "national_child_safety_training",
     ]
 
     submitted_types = {
@@ -529,7 +532,7 @@ def generate_placement_completion(
             ComplianceDocument.student_id == s.id
         ).all()
     }
-    if not all(t in submitted_types for t in REQUIRED_4):
+    if not all(t in submitted_types for t in REQUIRED_5):
         raise HTTPException(status_code=400, detail="Not all required compliance documents are submitted")
 
     if not (s.required_hours and s.completed_hours >= s.required_hours):

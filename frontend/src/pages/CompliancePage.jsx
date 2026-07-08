@@ -56,10 +56,11 @@ import { format } from 'date-fns'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DOC_TYPES = [
-  { value: 'working_with_children_check', label: 'Working with Children Check',       abbr: 'WWCC',      qualSpecific: false },
-  { value: 'first_aid_certificate',        label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid', qualSpecific: false },
-  { value: 'work_placement_agreement',     label: 'Work Placement Agreement',          abbr: 'WPA',       qualSpecific: true  },
-  { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding',       abbr: 'MOU',       qualSpecific: true  },
+  { value: 'working_with_children_check',    label: 'Working with Children Check',       abbr: 'WWCC',      qualSpecific: false },
+  { value: 'first_aid_certificate',           label: 'First Aid Certificate (incl. CPR)', abbr: 'First Aid', qualSpecific: false },
+  { value: 'work_placement_agreement',        label: 'Work Placement Agreement',          abbr: 'WPA',       qualSpecific: true  },
+  { value: 'memorandum_of_understanding',     label: 'Memorandum of Understanding',       abbr: 'MOU',       qualSpecific: true  },
+  { value: 'national_child_safety_training',  label: 'National Child Safety Training (Geccko)', abbr: 'Geccko', qualSpecific: false },
 ]
 
 const QUAL_OPTIONS = [
@@ -736,6 +737,7 @@ export default function CompliancePage() {
                           'Work Placement Agreement': 'WPA',
                           'Memorandum of Understanding (MOU)': 'MOU',
                           'Memorandum of Understanding': 'MOU',
+                          'National Child Safety Training (Geccko)': 'Geccko',
                         }
                         const outstandingAbbr = r.outstanding.map(o => ABBR_MAP[o] || o)
                         return (

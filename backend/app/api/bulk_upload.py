@@ -160,10 +160,11 @@ def template_compliance():
     return _make_csv_response(
         ["student_id", "student_name", "document_type", "qualification", "entry_date", "issue_date", "expiry_date", "notes"],
         [
-            ["STU2025001", "Jane Smith", "working_with_children_check", "N/A",      today, "", "2027-06-30", "WWCC card scanned"],
-            ["STU2025001", "Jane Smith", "first_aid_certificate",       "N/A",      today, "", "2026-12-31", ""],
-            ["STU2025001", "Jane Smith", "work_placement_agreement",    "Cert III", today, "", "",            ""],
-            ["STU2025001", "Jane Smith", "memorandum_of_understanding", "Cert III", today, "", "",            ""],
+            ["STU2025001", "Jane Smith", "working_with_children_check",    "N/A",      today, "", "2027-06-30", "WWCC card scanned"],
+            ["STU2025001", "Jane Smith", "first_aid_certificate",          "N/A",      today, "", "2026-12-31", ""],
+            ["STU2025001", "Jane Smith", "work_placement_agreement",       "Cert III", today, "", "",            ""],
+            ["STU2025001", "Jane Smith", "memorandum_of_understanding",    "Cert III", today, "", "",            ""],
+            ["STU2025001", "Jane Smith", "national_child_safety_training", "N/A",      today, "", "",            "Geccko Foundation Courses 1 & 2 completed"],
         ],
         "template_compliance.csv",
     )

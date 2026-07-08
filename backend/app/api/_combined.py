@@ -494,18 +494,19 @@ def _build_custom_report_data(
         if campus:
             students = [s for s in students if (s.campus or "").lower() == campus.lower()]
 
-        REQUIRED_4 = ["working_with_children_check", "first_aid_certificate",
-                      "work_placement_agreement", "memorandum_of_understanding"]
+        REQUIRED_5 = ["working_with_children_check", "first_aid_certificate",
+                      "work_placement_agreement", "memorandum_of_understanding",
+                      "national_child_safety_training"]
         headers = ["Student ID", "Name", "Campus", "Qual", "Docs Submitted", "Status", "Outstanding"]
         for s in students:
             docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
             submitted = {d.document_type for d in docs}
-            missing = [t.replace("_", " ").upper()[:4] for t in REQUIRED_4 if t not in submitted]
+            missing = [t.replace("_", " ").upper()[:4] for t in REQUIRED_5 if t not in submitted]
             if missing_only and not missing:
                 continue
             rows_data.append([
                 s.student_id, s.full_name, (s.campus or "").title(), s.qualification or "-",
-                f"{len(REQUIRED_4)-len(missing)}/{len(REQUIRED_4)}",
+                f"{len(REQUIRED_5)-len(missing)}/{len(REQUIRED_5)}",
                 "Complete" if not missing else "Incomplete",
                 ", ".join(missing) if missing else "✓ All submitted",
             ])

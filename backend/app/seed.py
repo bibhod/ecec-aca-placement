@@ -135,7 +135,7 @@ def seed_email_templates():
                 body_template="Dear {student_name},\n\nYour work placement has been confirmed. Please review the details in the student portal and ensure all compliance documents are up to date before your placement commences.\n\nRegards,\nAcademies Australasia"),
             EmailTemplate(name="compliance_reminder", label="Compliance Documents Reminder",
                 subject_template="Action Required: Compliance Documents – {student_name}",
-                body_template="Dear {student_name},\n\nPlease ensure all your compliance documents are current:\n• Working with Children Check\n• National Police Check\n• Valid First Aid Certificate (including CPR)\n• Work Placement Agreement\n• Memorandum of Understanding (MOU)\n\nRegards,\nAcademies Australasia"),
+                body_template="Dear {student_name},\n\nPlease ensure all your compliance documents are current:\n• Working with Children Check\n• National Police Check\n• Valid First Aid Certificate (including CPR)\n• Work Placement Agreement\n• Memorandum of Understanding (MOU)\n• National Child Safety Training (Geccko)\n\nRegards,\nAcademies Australasia"),
             EmailTemplate(name="hours_reminder", label="Hours Log Reminder",
                 subject_template="Reminder: Log Your Placement Hours – {student_name}",
                 body_template="Dear {student_name},\n\nThis is a reminder to log your placement hours regularly in the student portal. Regular updates help your coordinator track your progress.\n\nRegards,\nAcademies Australasia"),

@@ -20,6 +20,7 @@ const COMPLIANCE_DOC_TYPES = [
   { value: 'first_aid_certificate',          label: 'Valid First Aid Certificate (including CPR)', qualSpecific: false },
   { value: 'work_placement_agreement',       label: 'Work Placement Agreement',                 qualSpecific: true  },
   { value: 'memorandum_of_understanding',    label: 'Memorandum of Understanding (MOU)',         qualSpecific: true  },
+  { value: 'national_child_safety_training', label: 'National Child Safety Training (Geccko)',  qualSpecific: false },
 ]
 
 const QUAL_SPECIFIC_SET = new Set(
@@ -431,9 +432,9 @@ export default function StudentDetailPage() {
                 ['Communications', comms.length],
                 ['Compliance', (() => {
                   const types = new Set((student.compliance_documents || []).map(d => d.document_type))
-                  const required = ['working_with_children_check','first_aid_certificate','work_placement_agreement','memorandum_of_understanding']
+                  const required = ['working_with_children_check','first_aid_certificate','work_placement_agreement','memorandum_of_understanding','national_child_safety_training']
                   const done = required.filter(t => types.has(t)).length
-                  return `${done} / 4 required`
+                  return `${done} / 5 required`
                 })()],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2 border-b border-gray-50 last:border-0 text-sm">
@@ -534,10 +535,11 @@ export default function StudentDetailPage() {
       {/* ── Compliance Tab ─────────────────────────────────────────────────── */}
       {activeTab === 'compliance' && (() => {
         const REQUIRED = [
-          { value: 'working_with_children_check', label: 'Working with Children Check' },
-          { value: 'first_aid_certificate',        label: 'Valid First Aid Certificate (including CPR)' },
-          { value: 'work_placement_agreement',     label: 'Work Placement Agreement' },
-          { value: 'memorandum_of_understanding',  label: 'Memorandum of Understanding (MOU)' },
+          { value: 'working_with_children_check',   label: 'Working with Children Check' },
+          { value: 'first_aid_certificate',          label: 'Valid First Aid Certificate (including CPR)' },
+          { value: 'work_placement_agreement',       label: 'Work Placement Agreement' },
+          { value: 'memorandum_of_understanding',    label: 'Memorandum of Understanding (MOU)' },
+          { value: 'national_child_safety_training', label: 'National Child Safety Training (Geccko)' },
         ]
         const allDocs = student.compliance_documents || []
         const submittedTypes = new Set(allDocs.map(d => d.document_type))
