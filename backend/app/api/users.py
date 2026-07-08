@@ -4,7 +4,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import User, NEW_ENTRY_CAMPUS_CHOICES
+from app.models import User, NEW_ENTRY_CAMPUS_CHOICES, Student, Appointment, Communication, Issue
 from app.utils.auth import get_current_user, get_password_hash, require_admin
 from app.api.audit import write_audit
 
@@ -172,22 +172,64 @@ def update_user(
 def delete_user(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_admin),
 ):
+    """
+    Permanently delete a user account. Admin-only (require_admin).
+
+    A user can't be deleted (only deactivated) while they're still
+    referenced elsewhere in the system - as a student's coordinator, an
+    appointment's trainer/assessor/coordinator/creator, a communication
+    sender, or an issue reporter - since the database would otherwise
+    either block the delete with a foreign-key error or silently orphan
+    that history. Reassign or clear those records first, or use
+    PUT /{user_id} with is_active: false to disable the account instead,
+    which keeps the audit trail intact.
+    """
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    u.is_active = False
+
+    blockers = []
+    if db.query(Student).filter(Student.coordinator_id == user_id).count():
+        blockers.append("assigned as a coordinator to one or more students")
+    if db.query(Appointment).filter(
+        (Appointment.trainer_assessor_id == user_id)
+        | (Appointment.coordinator_id == user_id)
+        | (Appointment.created_by == user_id)
+    ).count():
+        blockers.append("linked to one or more appointments")
+    if db.query(Communication).filter(Communication.sender_id == user_id).count():
+        blockers.append("the sender of one or more logged communications")
+    if db.query(Issue).filter(Issue.reported_by == user_id).count():
+        blockers.append("the reporter of one or more logged issues")
+
+    if blockers:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot permanently delete {u.full_name}: this account is still "
+                f"{', and '.join(blockers)}. Reassign those records first, or use "
+                "Deactivate instead to disable the account without losing history."
+            ),
+        )
+
+    user_label = f"{u.full_name} ({u.email})"
+    user_role = u.role
+
+    db.delete(u)
     db.commit()
 
-    # Audit: record user deactivation
+    # Audit: record permanent user deletion (audit_logs.user_id is a plain
+    # string, not a foreign key, so this row safely outlives the deleted user).
     write_audit(
-        db, current_user, "user.deactivate", "user",
-        resource_id=u.id, resource_label=f"{u.full_name} ({u.email})",
-        details={"role": u.role},
+        db, current_user, "user.delete", "user",
+        resource_id=user_id, resource_label=f"{user_label} - permanently deleted",
+        details={"role": user_role},
     )
     db.commit()
 
-    return {"message": "User deactivated"}
+    return {"message": "User permanently deleted"}

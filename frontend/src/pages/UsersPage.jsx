@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Plus, UserCheck, UserX } from 'lucide-react'
+import { Plus, UserCheck, UserX, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { PageHeader, Spinner, Badge, Modal, FormRow, Select } from '../components/ui/index'
@@ -68,6 +68,22 @@ export default function UsersPage() {
     load()
   }
 
+  // Admin-only, permanent removal (distinct from Deactivate above, which just
+  // disables login and keeps the account + its history). The backend blocks
+  // this if the user is still referenced elsewhere (coordinator, trainer on
+  // an appointment, communication sender, issue reporter) and returns a
+  // clear reason instead - surfaced to the admin via the error toast.
+  const removeUser = async (u) => {
+    if (!window.confirm(`Permanently delete ${u.full_name}? This cannot be undone.`)) return
+    try {
+      await api.delete(`/users/${u.id}`)
+      toast.success('User permanently deleted')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete user')
+    }
+  }
+
   if (loading) return <div className="p-8"><Spinner size="lg" /></div>
 
   return (
@@ -103,11 +119,17 @@ export default function UsersPage() {
                 <td className="px-4 py-3"><Badge status={u.is_active ? 'active' : 'withdrawn'} label={u.is_active ? 'Active' : 'Inactive'} /></td>
                 <td className="px-4 py-3">
                   {isAdmin && (
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                       <button onClick={() => openEdit(u)} className="text-xs text-cyan hover:underline">Edit</button>
                       <button onClick={() => toggleActive(u)} className={`text-xs hover:underline ${u.is_active ? 'text-red-500' : 'text-green-600'}`}>
                         {u.is_active ? 'Deactivate' : 'Activate'}
                       </button>
+                      {u.id !== currentUser?.id && (
+                        <button onClick={() => removeUser(u)} title="Permanently delete user"
+                          className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </td>
