@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/LoginPage'
+import ChangePasswordPage from './pages/ChangePasswordPage'
 import DashboardPage from './pages/DashboardPage'
 import StudentsPage from './pages/StudentsPage'
 import StudentDetailPage from './pages/StudentDetailPage'
@@ -24,7 +25,11 @@ function PrivateRoute({ children }) {
       <div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan border-t-transparent" />
     </div>
   )
-  return user ? children : <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
+  // Force-first-login password change: block every other route until the
+  // user sets their own password.
+  if (user.must_change_password) return <Navigate to="/change-password" replace />
+  return children
 }
 
 // Bulk Upload, User Management, and Audit Trail are fully hidden from the
@@ -41,6 +46,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/change-password" element={user ? <ChangePasswordPage /> : <Navigate to="/login" replace />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="students" element={<StudentsPage />} />

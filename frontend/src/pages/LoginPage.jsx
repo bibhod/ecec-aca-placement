@@ -15,9 +15,14 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(form.email, form.password)
-      navigate('/')
-      toast.success('Welcome back!')
+      const data = await login(form.email, form.password)
+      if (data.user?.must_change_password) {
+        navigate('/change-password')
+        toast('Please set a new password to continue', { icon: '\uD83D\uDD10' })
+      } else {
+        navigate('/')
+        toast.success('Welcome back!')
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Invalid email or password')
     } finally {

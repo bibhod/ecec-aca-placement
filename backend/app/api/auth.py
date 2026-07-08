@@ -58,6 +58,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             "role": user.role,
             "campus": user.campus,
             "phone": user.phone,
+            "must_change_password": user.must_change_password,
             "created_at": str(user.created_at)
         }
     }
@@ -73,6 +74,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "role": current_user.role,
         "campus": current_user.campus,
         "phone": current_user.phone,
+        "must_change_password": current_user.must_change_password,
         "created_at": str(current_user.created_at)
     }
 
@@ -93,5 +95,11 @@ def update_me(
         if not data.current_password or not verify_password(data.current_password, current_user.hashed_password):
             raise HTTPException(status_code=400, detail="Current password is incorrect")
         current_user.hashed_password = get_password_hash(data.new_password)
+        # Successfully setting a new password satisfies the forced first-login
+        # password change requirement.
+        current_user.must_change_password = False
     db.commit()
-    return {"message": "Profile updated successfully"}
+    return {
+        "message": "Profile updated successfully",
+        "must_change_password": current_user.must_change_password,
+    }

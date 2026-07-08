@@ -21,6 +21,7 @@ def user_to_dict(u: User) -> dict:
         "campus": u.campus,
         "phone": u.phone,
         "is_active": u.is_active,
+        "must_change_password": u.must_change_password,
         # Trainer/Assessor-specific fields (only meaningful when role == "trainer",
         # but always returned so the User Management form can populate them).
         "qualifications_delivering": u.qualifications_delivering or [],
@@ -90,6 +91,8 @@ def create_user(
         campus=data.campus,
         phone=data.phone,
         is_active=True,
+        # New accounts must change the admin-set password on first login.
+        must_change_password=True,
         qualifications_delivering=data.qualifications_delivering or [] if data.role == "trainer" else [],
         max_students=data.max_students if data.role == "trainer" else None,
     )
@@ -143,6 +146,9 @@ def update_user(
         u.is_active = data.is_active
     if data.password:
         u.hashed_password = get_password_hash(data.password)
+        # Password was reset by an admin - force the user to set their own
+        # new password the next time they log in.
+        u.must_change_password = True
     if data.qualifications_delivering is not None:
         u.qualifications_delivering = data.qualifications_delivering
     if data.max_students is not None:

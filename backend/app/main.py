@@ -156,6 +156,30 @@ def migrate_trainer_profile_fields():
         db.close()
 
 
+def migrate_add_must_change_password():
+    """
+    One-time migration: add the must_change_password column to users
+    (idempotent - safe to run on every startup). Existing accounts default
+    to FALSE (they already have working credentials); new accounts created
+    via the Users page, and any password reset by an admin, explicitly set
+    this to TRUE so that person is forced through the Change Password flow
+    on their next login.
+    """
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        db.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE NOT NULL"
+        ))
+        db.commit()
+        logger.info("migrate_add_must_change_password: complete")
+    except Exception as e:
+        logger.error(f"migrate_add_must_change_password failed: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def migrate_normalise_campus():
     """
     One-time migration: lowercase all campus values so filters work consistently.
@@ -247,6 +271,7 @@ async def lifespan(app: FastAPI):
     migrate_active_to_current() # one-time rename 'active' → 'current'
     migrate_add_qualification_level()  # add + backfill qualification_level columns
     migrate_trainer_profile_fields()   # add + backfill trainer fields on users (Trainer/Assessor Profiles page removed)
+    migrate_add_must_change_password()  # force-password-change-on-first-login support
     start_scheduler()
     yield
     shutdown_scheduler()

@@ -118,6 +118,11 @@ class User(Base):
     campus = Column(String, default="sydney")
     phone = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    # Forces the user through the Change Password flow on their next login.
+    # Set True whenever an admin creates a new account or resets a user's
+    # password; cleared to False once the user successfully sets their own
+    # new password via PUT /auth/me.
+    must_change_password = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

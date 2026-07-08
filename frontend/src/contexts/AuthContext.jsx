@@ -36,8 +36,18 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  // Patches the cached user object (e.g. after clearing must_change_password
+  // once the user sets their own new password) without a full /auth/me refetch.
+  const updateUser = patch => {
+    setUser(u => {
+      const next = { ...u, ...patch }
+      localStorage.setItem('user', JSON.stringify(next))
+      return next
+    })
+  }
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

@@ -120,11 +120,15 @@ export default function StudentDetailPage() {
       api.get(`/issues?student_id=${id}`),
     ]).then(([s, h, a, c, i]) => {
       setStudent(s.data); setHours(h.data); setAppointments(a.data); setComms(c.data); setIssues(i.data)
+      // Refresh the Placement Completion Checklist alongside the rest of the
+      // student's data so it can never drift out of sync with what the
+      // Quick Stats / Compliance tab show (e.g. right after a compliance
+      // document is added, edited, or deleted).
+      loadChecklist()
     }).catch(() => toast.error('Failed to load student')).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [id])
-  useEffect(() => { if (activeTab === 'overview') loadChecklist() }, [id, activeTab])
   useEffect(() => {
     api.get('/centres').then(r => setCentres(r.data)).catch(() => {})
     api.get('/users').then(r => setTrainers(r.data.filter(u => ['coordinator', 'admin', 'trainer'].includes(u.role)))).catch(() => {})
@@ -430,18 +434,42 @@ export default function StudentDetailPage() {
                 ['Appointments', appointments.length],
                 ['Issues', issues.length],
                 ['Communications', comms.length],
-                ['Compliance', (() => {
-                  const types = new Set((student.compliance_documents || []).map(d => d.document_type))
-                  const required = ['working_with_children_check','first_aid_certificate','work_placement_agreement','memorandum_of_understanding','national_child_safety_training']
-                  const done = required.filter(t => types.has(t)).length
-                  return `${done} / 5 required`
-                })()],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2 border-b border-gray-50 last:border-0 text-sm">
                   <span className="text-gray-500">{k}</span>
                   <span className="font-semibold text-gray-900">{v}</span>
                 </div>
               ))}
+              {(() => {
+                const types = new Set((student.compliance_documents || []).map(d => d.document_type))
+                const required = [
+                  { value: 'working_with_children_check',   label: 'Working with Children Check' },
+                  { value: 'first_aid_certificate',          label: 'Valid First Aid Certificate' },
+                  { value: 'work_placement_agreement',       label: 'Work Placement Agreement' },
+                  { value: 'memorandum_of_understanding',    label: 'Memorandum of Understanding (MOU)' },
+                  { value: 'national_child_safety_training', label: 'National Child Safety Training (Geccko)' },
+                ]
+                const missing = required.filter(r => !types.has(r.value))
+                const done = required.length - missing.length
+                return (
+                  <div className="py-2 border-b border-gray-50 last:border-0 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Compliance</span>
+                      <span className={`font-semibold ${missing.length === 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {done} / {required.length} required
+                      </span>
+                    </div>
+                    {/* Issue: "4 / 5 required" alone didn't say which document was
+                        outstanding - name it explicitly so it matches the
+                        Compliance tab and Placement Completion Checklist below. */}
+                    {missing.length > 0 && (
+                      <p className="text-xs text-red-500 mt-1">
+                        Missing: {missing.map(m => m.label).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           </div>
 
