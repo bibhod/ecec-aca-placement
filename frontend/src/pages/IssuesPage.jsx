@@ -12,6 +12,10 @@ const PRIORITIES = ['low', 'medium', 'high', 'critical']
 export default function IssuesPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const isTrainer = user?.role === 'trainer'
+  // Trainers/Assessors can raise and edit issues about students at their
+  // placement centres, but cannot delete issues (delete stays admin-only).
+  const canManage = isAdmin || isTrainer
   const [issues, setIssues] = useState([])
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -24,6 +28,7 @@ export default function IssuesPage() {
   const [resolution, setResolution] = useState('')
   const [form, setForm] = useState({ student_id: '', issue_type: 'other', title: '', description: '', priority: 'medium' })
   const [saving, setSaving] = useState(false)
+  const [editIssue, setEditIssue] = useState(null)
 
   const load = useCallback(() => {
     const p = new URLSearchParams()
@@ -36,12 +41,35 @@ export default function IssuesPage() {
 
   useEffect(() => { load() }, [load])
 
+  const openAdd = () => {
+    setEditIssue(null)
+    setForm({ student_id: '', issue_type: 'other', title: '', description: '', priority: 'medium' })
+    setShowModal(true)
+  }
+
+  const openEdit = issue => {
+    setEditIssue(issue)
+    setForm({
+      student_id: issue.student_id, issue_type: issue.issue_type,
+      title: issue.title, description: issue.description || '', priority: issue.priority,
+    })
+    setShowModal(true)
+  }
+
   const save = async () => {
     if (!form.student_id || !form.title) return toast.error('Student and title required')
     setSaving(true)
     try {
-      await api.post('/issues', form)
-      toast.success('Issue raised'); setShowModal(false); load()
+      if (editIssue) {
+        await api.put(`/issues/${editIssue.id}`, {
+          title: form.title, description: form.description, priority: form.priority,
+        })
+        toast.success('Issue updated')
+      } else {
+        await api.post('/issues', form)
+        toast.success('Issue raised')
+      }
+      setShowModal(false); load()
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed') } finally { setSaving(false) }
   }
 
@@ -68,7 +96,7 @@ export default function IssuesPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <PageHeader title="Issues" subtitle={`${issues.length} issue${issues.length !== 1 ? 's' : ''}`}
-        actions={isAdmin && <button onClick={() => setShowModal(true)} className="btn-primary text-sm"><Plus size={15} /> Raise Issue</button>} />
+        actions={canManage && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Raise Issue</button>} />
 
       <div className="flex flex-wrap gap-3 mb-6">
         <SearchInput value={search} onChange={setSearch} placeholder="Search issues..." />
@@ -80,7 +108,7 @@ export default function IssuesPage() {
 
       {filtered.length === 0 ? (
         <EmptyState icon={AlertTriangle} title="No issues found" message="No issues match your current filters."
-          action={isAdmin ? <button onClick={() => setShowModal(true)} className="btn-primary mx-auto"><Plus size={15} /> Raise Issue</button> : undefined} />
+          action={canManage ? <button onClick={openAdd} className="btn-primary mx-auto"><Plus size={15} /> Raise Issue</button> : undefined} />
       ) : (
         <div className="space-y-3">
           {filtered.map(issue => (
@@ -104,8 +132,9 @@ export default function IssuesPage() {
                     </div>
                   )}
                 </div>
-                {isAdmin && (
+                {canManage && (
                   <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <button onClick={() => openEdit(issue)} className="btn-secondary text-xs py-1 px-2">Edit</button>
                     {issue.status === 'open' && (
                       <button onClick={() => updateStatus(issue.id, 'in_progress')} className="btn-secondary text-xs py-1 px-2">In Progress</button>
                     )}
@@ -121,11 +150,12 @@ export default function IssuesPage() {
         </div>
       )}
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Raise New Issue" size="md">
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editIssue ? 'Edit Issue' : 'Raise New Issue'} size="md">
         <div className="space-y-4">
           <FormRow label="Student" required>
             <Select value={form.student_id} onChange={v => setForm(f => ({ ...f, student_id: v }))}
-              options={students.map(s => ({ value: s.id, label: `${s.full_name} (${s.student_id})` }))} placeholder="Select student..." />
+              options={students.map(s => ({ value: s.id, label: `${s.full_name} (${s.student_id})` }))}
+              placeholder="Select student..." disabled={!!editIssue} />
           </FormRow>
           <div className="grid grid-cols-2 gap-4">
             <FormRow label="Issue Type">
@@ -142,7 +172,9 @@ export default function IssuesPage() {
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
           <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
-          <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Raising...' : 'Raise Issue'}</button>
+          <button onClick={save} disabled={saving} className="btn-primary">
+            {saving ? 'Saving...' : editIssue ? 'Update Issue' : 'Raise Issue'}
+          </button>
         </div>
       </Modal>
 

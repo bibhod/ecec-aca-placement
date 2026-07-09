@@ -70,3 +70,14 @@ def require_coordinator(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in ["admin", "coordinator"]:
         raise HTTPException(status_code=403, detail="Coordinator access required")
     return current_user
+
+
+def require_admin_or_trainer(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Admins have unrestricted access. Trainers/Assessors are also allowed through
+    this gate, but individual endpoints are responsible for scoping trainers to
+    their own records (e.g. appointments where they are the assigned trainer).
+    """
+    if current_user.role not in ["admin", "trainer"]:
+        raise HTTPException(status_code=403, detail="Admin or Trainer/Assessor access required")
+    return current_user

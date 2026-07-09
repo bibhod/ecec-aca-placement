@@ -15,7 +15,7 @@ import logging
 
 from app.database import get_db
 from app.models import Communication, Student, User, EmailTemplate
-from app.utils.auth import get_current_user, require_admin
+from app.utils.auth import get_current_user, require_admin, require_admin_or_trainer
 from app.api.audit import write_audit
 from app.services.email_service import send_email, base_template as _base_template
 from app.services.sms_service import send_sms
@@ -249,8 +249,17 @@ class SendEmailRequest(BaseModel):
 def send_communication(
     data: SendEmailRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_trainer),
 ):
+    # Trainers/Assessors may only email students directly (not supervisors,
+    # coordinators, or arbitrary addresses) - and only via their own send.
+    if current_user.role == "trainer":
+        if not data.student_id:
+            raise HTTPException(403, "Trainers/Assessors can only email students")
+        student = db.query(Student).filter(Student.id == data.student_id).first()
+        if not student or not student.email or student.email.strip().lower() != data.recipient_email.strip().lower():
+            raise HTTPException(403, "Trainers/Assessors can only email the student's own address on file")
+
     html_body = _base_template(
         f"<h2>{data.subject}</h2><p>{data.body.replace(chr(10), '<br>')}</p>"
     )

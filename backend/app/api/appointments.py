@@ -20,7 +20,7 @@ from app.models import (
     APPOINTMENT_TYPE_CHOICES, QUALIFICATION_UNITS_MAP,
     UNITS_CHC30125, UNITS_CHC50125, VISIT_LIMITS,
 )
-from app.utils.auth import get_current_user, require_admin
+from app.utils.auth import get_current_user, require_admin, require_admin_or_trainer
 from app.api.audit import write_audit
 from app.services.email_service import email_appointment_reminder
 from app.services.sms_service import sms_appointment_reminder
@@ -183,8 +183,13 @@ class AppointmentCreate(BaseModel):
 def create_appointment(
     data: AppointmentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_trainer),
 ):
+    # Trainers/Assessors may only schedule appointments against their own login -
+    # i.e. they must be the assigned trainer_assessor on the appointment.
+    if current_user.role == "trainer" and data.trainer_assessor_id != current_user.id:
+        raise HTTPException(403, "Trainers/Assessors can only schedule appointments for themselves")
+
     # Validate student
     student = db.query(Student).filter(Student.id == data.student_id).first()
     if not student: raise HTTPException(404, "Student not found")
@@ -333,14 +338,43 @@ class AppointmentUpdate(BaseModel):
     admin_approved: Optional[bool] = None
 
 
+# Fields a Trainer/Assessor is allowed to touch on their own appointments.
+# Reassigning ownership (trainer_assessor_id) or admin-approval flags stays
+# admin-only, and trainers cannot delete appointments (no delete permission).
+TRAINER_EDITABLE_FIELDS = {
+    "title", "appointment_type", "visit_type", "placement_centre_id",
+    "location_address", "scheduled_date", "scheduled_time", "duration_hours",
+    "units_assessed", "preparation_notes", "status", "completed",
+    "cancelled", "feedback",
+}
+
+
 @router.put("/{appt_id}")
 def update_appointment(
     appt_id: str, data: AppointmentUpdate,
-    db: Session = Depends(get_db), current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_trainer),
 ):
     a = db.query(Appointment).filter(Appointment.id == appt_id).first()
     if not a: raise HTTPException(404, "Not found")
-    for f, v in data.dict(exclude_none=True).items():
+
+    update_fields = data.dict(exclude_none=True)
+
+    if current_user.role == "trainer":
+        # Trainers can only edit appointments where they are the assigned trainer.
+        if a.trainer_assessor_id != current_user.id:
+            raise HTTPException(403, "You can only edit your own appointments")
+        # Block edits to fields outside their allowed scope (e.g. reassigning
+        # the appointment to someone else, or approving over-limit visits).
+        disallowed = set(update_fields.keys()) - TRAINER_EDITABLE_FIELDS
+        if disallowed:
+            raise HTTPException(403, f"Trainers/Assessors cannot edit: {', '.join(sorted(disallowed))}")
+        # If the visit didn't take place, require a note explaining why.
+        resulting_status = update_fields.get("status", a.status)
+        resulting_feedback = update_fields.get("feedback", a.feedback)
+        if resulting_status == "not_completed" and not (resulting_feedback or "").strip():
+            raise HTTPException(400, "Please add a note explaining why the visit didn't take place")
+
+    for f, v in update_fields.items():
         if f == "scheduled_date": a.scheduled_date = date.fromisoformat(v)
         elif hasattr(a, f): setattr(a, f, v)
     db.commit(); db.refresh(a)

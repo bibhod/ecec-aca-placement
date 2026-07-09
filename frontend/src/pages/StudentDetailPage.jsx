@@ -58,6 +58,12 @@ export default function StudentDetailPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const isTrainer = user?.role === 'trainer'
+  // Trainers/Assessors can schedule their own appointments, log/edit issues,
+  // and email the student - but cannot edit student records or delete anything.
+  const canManageAppt = isAdmin || isTrainer
+  const canManageIssue = isAdmin || isTrainer
+  const canEmail = isAdmin || isTrainer
   const [student, setStudent] = useState(null)
   const [hours, setHours] = useState([])
   const [appointments, setAppointments] = useState([])
@@ -143,6 +149,8 @@ export default function StudentDetailPage() {
       recipient_name: student?.full_name || '',
       template: '', subject: '', body: '',
     })
+    // (Trainers/Assessors are restricted server-side to the student's own
+    // email on file - see the locked field in the Email Modal below.)
     setShowEmailModal(true)
   }
 
@@ -211,8 +219,23 @@ export default function StudentDetailPage() {
   }
 
   // ── Appointment add from student profile ────────────────────────────────
+  const openApptModal = () => {
+    setApptForm({
+      appointment_type: 'cert_iii_1st_visit', placement_centre_id: '',
+      // Trainers/Assessors can only schedule appointments against their own login.
+      trainer_assessor_id: isTrainer ? user.id : '',
+      scheduled_date: '', scheduled_time: '09:00', duration_hours: 1,
+      preparation_notes: '', send_confirmation_email: true,
+    })
+    setShowApptModal(true)
+  }
+
   const addAppointment = async () => {
     if (!apptForm.scheduled_date) return toast.error('Date is required')
+    // Trainers/Assessors can only schedule appointments against their own login.
+    if (isTrainer && apptForm.trainer_assessor_id !== user.id) {
+      return toast.error('Trainers/Assessors can only schedule appointments for themselves')
+    }
     const APPT_LABELS = {
       'cert_iii_1st_visit': 'Cert III – 1st Visit', 'cert_iii_2nd_visit': 'Cert III – 2nd Visit',
       'cert_iii_3rd_visit': 'Cert III – 3rd Visit', 'diploma_1st_visit': 'Diploma – 1st Visit',
@@ -348,7 +371,7 @@ export default function StudentDetailPage() {
               <UserCog size={15} /> Change Status
             </button>
           )}
-          {isAdmin && (
+          {canEmail && (
             <button onClick={openEmailModal} className="btn-secondary text-sm"><Mail size={15} /> Email</button>
           )}
         </div>
@@ -699,7 +722,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Appointments</h3>
             {/* Issue 5 - Appointments section has its own + Add button */}
-            {isAdmin && <button onClick={() => setShowApptModal(true)} className="btn-primary text-sm"><Plus size={14} /> Add Appointment</button>}
+            {canManageAppt && <button onClick={openApptModal} className="btn-primary text-sm"><Plus size={14} /> Add Appointment</button>}
           </div>
           {appointments.length === 0 ? <p className="text-center text-gray-400 py-8">No appointments scheduled</p>
             : <div className="space-y-3">
@@ -728,7 +751,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Communications</h3>
             {/* Issue 5 - Communications section has its own + Add button */}
-            {isAdmin && <button onClick={openEmailModal} className="btn-primary text-sm"><Mail size={14} /> Send Email</button>}
+            {canEmail && <button onClick={openEmailModal} className="btn-primary text-sm"><Mail size={14} /> Send Email</button>}
           </div>
           {comms.length === 0 ? <p className="text-center text-gray-400 py-8">No communications yet</p>
             : <div className="space-y-3">
@@ -753,7 +776,7 @@ export default function StudentDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-navy">Issues</h3>
             {/* Issue 5 - Issues section has its own + Add button */}
-            {isAdmin && <button onClick={() => setShowIssueModal(true)} className="btn-primary text-sm"><Plus size={14} /> Log Issue</button>}
+            {canManageIssue && <button onClick={() => setShowIssueModal(true)} className="btn-primary text-sm"><Plus size={14} /> Log Issue</button>}
           </div>
           {issues.length === 0 ? <p className="text-center text-gray-400 py-8">No issues recorded</p>
             : <div className="space-y-3">
@@ -886,8 +909,13 @@ export default function StudentDetailPage() {
               options={centres.map(c => ({ value: c.id, label: c.centre_name }))} placeholder="Select centre..." />
           </FormRow>
           <FormRow label="Trainer and Assessor">
-            <Select value={apptForm.trainer_assessor_id || ''} onChange={v => setApptForm(f => ({ ...f, trainer_assessor_id: v }))}
-              options={trainers.map(t => ({ value: t.id, label: t.full_name }))} placeholder="Select trainer..." />
+            {isTrainer ? (
+              <input className="input bg-gray-50 text-gray-500" value={user.full_name} disabled
+                title="Trainers/Assessors can only schedule appointments for themselves" />
+            ) : (
+              <Select value={apptForm.trainer_assessor_id || ''} onChange={v => setApptForm(f => ({ ...f, trainer_assessor_id: v }))}
+                options={trainers.map(t => ({ value: t.id, label: t.full_name }))} placeholder="Select trainer..." />
+            )}
           </FormRow>
           <div className="grid grid-cols-2 gap-4">
             <FormRow label="Date" required><input className="input" type="date" value={apptForm.scheduled_date} onChange={e => setApptForm(f => ({ ...f, scheduled_date: e.target.value }))} /></FormRow>
@@ -916,10 +944,13 @@ export default function StudentDetailPage() {
         <div className="space-y-4">
           <FormRow label="Recipient Email" required>
             <input className="input" type="email" value={emailForm.recipient_email}
+              disabled={isTrainer}
               onChange={e => setEmailForm(f => ({ ...f, recipient_email: e.target.value }))}
               placeholder="name@example.com" />
             <p className="text-xs text-gray-400 mt-1.5">
-              Defaults to the email on file{student.email ? ` (${student.email})` : ''} - change it to send elsewhere instead.
+              {isTrainer
+                ? 'Trainers/Assessors can only email the student at their address on file.'
+                : `Defaults to the email on file${student.email ? ` (${student.email})` : ''} - change it to send elsewhere instead.`}
             </p>
           </FormRow>
           <FormRow label="Template (optional)">

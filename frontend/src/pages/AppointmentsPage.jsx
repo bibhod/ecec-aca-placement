@@ -65,6 +65,9 @@ const emptyForm = {
 export default function AppointmentsPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const isTrainer = user?.role === 'trainer'
+  // Trainers/Assessors can schedule and edit appointments, but only their own.
+  const canManage = isAdmin || isTrainer
   const [appointments, setAppointments] = useState([])
   const [students, setStudents] = useState([])
   const [centres, setCentres] = useState([])
@@ -81,6 +84,9 @@ export default function AppointmentsPage() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [feedbackAppt, setFeedbackAppt] = useState(null)
   const [feedback, setFeedback] = useState('')
+  const [showNotCompletedModal, setShowNotCompletedModal] = useState(false)
+  const [notCompletedAppt, setNotCompletedAppt] = useState(null)
+  const [notCompletedReason, setNotCompletedReason] = useState('')
 
   const load = useCallback(() => {
     const p = new URLSearchParams()
@@ -125,7 +131,10 @@ export default function AppointmentsPage() {
   }, [students])
 
   const openAdd = () => {
-    setEditAppt(null); setForm(emptyForm); setAvailableUnits([]); setShowModal(true)
+    setEditAppt(null)
+    // Trainers/Assessors can only schedule appointments against their own login.
+    setForm(isTrainer ? { ...emptyForm, trainer_assessor_id: user.id } : emptyForm)
+    setAvailableUnits([]); setShowModal(true)
   }
 
   const openEdit = appt => {
@@ -196,6 +205,18 @@ export default function AppointmentsPage() {
     toast.success('Marked as completed'); setShowFeedbackModal(false); load()
   }
 
+  const markNotCompleted = appt => { setNotCompletedAppt(appt); setNotCompletedReason(''); setShowNotCompletedModal(true) }
+
+  const submitNotCompleted = async () => {
+    if (!notCompletedReason.trim()) return toast.error("Please explain why the visit didn't take place")
+    try {
+      await api.put(`/appointments/${notCompletedAppt.id}`, {
+        status: 'not_completed', completed: false, feedback: notCompletedReason,
+      })
+      toast.success('Visit marked as not completed'); setShowNotCompletedModal(false); load()
+    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save') }
+  }
+
   const sendReminder = async (id) => {
     try {
       const r = await api.post(`/appointments/${id}/send-reminder`)
@@ -212,8 +233,11 @@ export default function AppointmentsPage() {
   const past = appointments.filter(a => a.completed || a.cancelled || new Date(a.scheduled_date) < new Date())
   const selectedCentre = centres.find(c => c.id === form.placement_centre_id)
 
-  const ApptCard = ({ a }) => (
-    <div className={`card mb-3 border-l-4 ${a.status==='completed'?'border-green-400':a.status==='cancelled'?'border-gray-300':'border-cyan'}`}>
+  const ApptCard = ({ a }) => {
+    // Trainers/Assessors can only manage appointments where they are the assigned trainer.
+    const canManageThis = isAdmin || (isTrainer && a.trainer_assessor_id === user?.id)
+    return (
+    <div className={`card mb-3 border-l-4 ${a.status==='completed'?'border-green-400':a.status==='not_completed'?'border-amber-400':a.status==='cancelled'?'border-gray-300':'border-cyan'}`}>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -236,31 +260,33 @@ export default function AppointmentsPage() {
             </div>
           )}
           {a.preparation_notes && <p className="text-xs text-gray-500 mt-2 italic">Prep: {a.preparation_notes}</p>}
-          {a.feedback && <p className="text-xs text-green-700 mt-2 bg-green-50 p-2 rounded">Feedback: {a.feedback}</p>}
+          {a.feedback && a.status === 'completed' && <p className="text-xs text-green-700 mt-2 bg-green-50 p-2 rounded">Feedback: {a.feedback}</p>}
+          {a.feedback && a.status === 'not_completed' && <p className="text-xs text-amber-700 mt-2 bg-amber-50 p-2 rounded">Not completed - reason: {a.feedback}</p>}
         </div>
-        {a.status === 'scheduled' && isAdmin && (
+        {a.status === 'scheduled' && canManageThis && (
           <div className="flex flex-col gap-1.5 flex-shrink-0">
             <button onClick={() => openEdit(a)} className="btn-secondary text-xs py-1 px-2">Edit</button>
             <button onClick={() => markComplete(a)} className="btn-primary text-xs py-1 px-2"><Check size={12} /> Complete</button>
-            <button onClick={() => sendReminder(a.id)} className="text-xs text-cyan hover:underline flex items-center gap-1"><Bell size={11} /> Remind</button>
-            <button onClick={() => cancel(a.id)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><X size={11} /> Cancel</button>
+            <button onClick={() => markNotCompleted(a)} className="text-xs text-amber-600 hover:underline flex items-center gap-1"><X size={11} /> Didn't Happen</button>
+            {isAdmin && <button onClick={() => sendReminder(a.id)} className="text-xs text-cyan hover:underline flex items-center gap-1"><Bell size={11} /> Remind</button>}
+            {isAdmin && <button onClick={() => cancel(a.id)} className="text-xs text-red-500 hover:underline flex items-center gap-1"><X size={11} /> Cancel</button>}
           </div>
         )}
       </div>
     </div>
-  )
+  )}
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <PageHeader title="Appointments" subtitle={`${appointments.length} total`}
         actions={
-          isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> New Appointment</button>
+          canManage && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> New Appointment</button>
         }
       />
 
       <div className="flex flex-wrap gap-3 mb-6">
         <Select value={filterStatus} onChange={setFilterStatus} placeholder="All Statuses"
-          options={['scheduled','completed','cancelled','rescheduled'].map(s => ({ value: s, label: s.charAt(0).toUpperCase()+s.slice(1) }))} />
+          options={['scheduled','completed','not_completed','cancelled','rescheduled'].map(s => ({ value: s, label: s.replace(/_/g,' ').replace(/\b\w/g, l => l.toUpperCase()) }))} />
         <Select value={filterType} onChange={setFilterType} placeholder="All Types" options={APPT_TYPES} />
         {(filterStatus||filterType) && (
           <button onClick={() => {setFilterStatus('');setFilterType('')}} className="text-sm text-gray-400 hover:text-navy underline">Clear</button>
@@ -269,7 +295,7 @@ export default function AppointmentsPage() {
 
       {loading ? <Spinner /> : appointments.length === 0 ? (
         <EmptyState icon={Calendar} title="No appointments" message="Create your first appointment."
-          action={isAdmin ? <button onClick={openAdd} className="btn-primary mx-auto"><Plus size={15} /> New</button> : undefined} />
+          action={canManage ? <button onClick={openAdd} className="btn-primary mx-auto"><Plus size={15} /> New</button> : undefined} />
       ) : (
         <>
           {upcoming.length > 0 && (
@@ -307,10 +333,15 @@ export default function AppointmentsPage() {
           </FormRow>
 
           <FormRow label="Trainer and Assessor" required>
-            <Select value={form.trainer_assessor_id}
-              onChange={v => setForm(f => ({ ...f, trainer_assessor_id: v }))}
-              options={trainers.map(c => ({ value: c.id, label: c.full_name }))}
-              placeholder="Select trainer/assessor…" />
+            {isTrainer ? (
+              <input className="input bg-gray-50 text-gray-500" value={user.full_name} disabled
+                title="Trainers/Assessors can only schedule appointments for themselves" />
+            ) : (
+              <Select value={form.trainer_assessor_id}
+                onChange={v => setForm(f => ({ ...f, trainer_assessor_id: v }))}
+                options={trainers.map(c => ({ value: c.id, label: c.full_name }))}
+                placeholder="Select trainer/assessor…" />
+            )}
           </FormRow>
 
           <div className="col-span-full">
@@ -436,6 +467,18 @@ export default function AppointmentsPage() {
         <div className="flex justify-end gap-3 mt-4">
           <button onClick={() => setShowFeedbackModal(false)} className="btn-secondary">Cancel</button>
           <button onClick={submitFeedback} className="btn-primary"><Check size={15} /> Mark Complete</button>
+        </div>
+      </Modal>
+
+      {/* Not Completed Modal - a mandatory note is required explaining why the visit didn't take place */}
+      <Modal open={showNotCompletedModal} onClose={() => setShowNotCompletedModal(false)} title="Visit Didn't Take Place" size="sm">
+        <p className="text-sm text-gray-600 mb-4">Please explain why this visit didn't happen:</p>
+        <textarea className="input h-28 resize-none w-full" value={notCompletedReason}
+          onChange={e => setNotCompletedReason(e.target.value)}
+          placeholder="e.g. student unavailable, centre closed, rescheduled…" />
+        <div className="flex justify-end gap-3 mt-4">
+          <button onClick={() => setShowNotCompletedModal(false)} className="btn-secondary">Cancel</button>
+          <button onClick={submitNotCompleted} className="btn-primary"><X size={15} /> Mark Not Completed</button>
         </div>
       </Modal>
     </div>
