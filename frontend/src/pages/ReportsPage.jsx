@@ -14,8 +14,8 @@
  * JSON from /reports/data and renders it as a table) with a separate
  * "Download PDF" action alongside it, rather than only ever producing a PDF.
  */
-import React, { useState } from 'react'
-import { Download, MapPin, Eye } from 'lucide-react'
+import React, { useState, useMemo } from 'react'
+import { Download, MapPin, Eye, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api, { downloadFile } from '../utils/api'
 import { PageHeader, FormRow, Select, Spinner } from '../components/ui/index'
@@ -85,6 +85,8 @@ export default function ReportsPage() {
   const [downloading, setDownloading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)   // { title, filter_desc, headers, rows, row_count }
+  const [sortCol, setSortCol] = useState(null) // header index currently sorted on (date columns only)
+  const [sortDir, setSortDir] = useState('asc')
 
   const meta = REPORT_TYPES.find(r => r.value === reportType)
   const showQualification = reportType === 'enrollment_summary' || reportType === 'placement_hours'
@@ -111,6 +113,8 @@ export default function ReportsPage() {
   const viewReport = async () => {
     setLoading(true)
     setResult(null)
+    setSortCol(null)
+    setSortDir('asc')
     try {
       const params = buildParams()
       const r = await api.get(`/reports/data?${params}`)
@@ -119,6 +123,48 @@ export default function ReportsPage() {
       toast.error(err.response?.data?.detail || 'Failed to load report')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Every report here has at least one "...Date" column (Course Start Date,
+  // Course End Date, Expiry Date); those are the only columns sortable
+  // on-screen since the rest (names, hours, percentages) don't need it.
+  const dateColIndexes = useMemo(() => {
+    if (!result) return []
+    return result.headers.reduce((acc, h, i) => {
+      if (h.toLowerCase().includes('date')) acc.push(i)
+      return acc
+    }, [])
+  }, [result])
+
+  const parseDisplayDate = (str) => {
+    if (!str || str === '-') return null
+    const [d, m, y] = String(str).split('/').map(Number)
+    if (!d || !m || !y) return null
+    return new Date(y, m - 1, d).getTime()
+  }
+
+  const displayRows = useMemo(() => {
+    if (!result) return []
+    if (sortCol == null) return result.rows
+    const rows = [...result.rows]
+    rows.sort((a, b) => {
+      const av = parseDisplayDate(a[sortCol])
+      const bv = parseDisplayDate(b[sortCol])
+      if (av == null && bv == null) return 0
+      if (av == null) return 1   // rows with no date on this column sort last
+      if (bv == null) return -1
+      return sortDir === 'asc' ? av - bv : bv - av
+    })
+    return rows
+  }, [result, sortCol, sortDir])
+
+  const toggleSort = (i) => {
+    if (sortCol === i) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(i)
+      setSortDir('asc')
     }
   }
 
@@ -264,13 +310,29 @@ export default function ReportsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                   <tr>
-                    {result.headers.map((h, i) => (
-                      <th key={i} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>
-                    ))}
+                    {result.headers.map((h, i) => {
+                      const isDateCol = dateColIndexes.includes(i)
+                      return (
+                        <th key={i} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">
+                          {isDateCol ? (
+                            <button
+                              onClick={() => toggleSort(i)}
+                              className="flex items-center gap-1 hover:text-navy"
+                              title={`Sort by ${h}`}
+                            >
+                              {h}
+                              {sortCol === i
+                                ? (sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
+                                : <ArrowUpDown size={12} className="text-gray-300" />}
+                            </button>
+                          ) : h}
+                        </th>
+                      )
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {result.rows.map((row, i) => (
+                  {displayRows.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50">
                       {row.map((cell, j) => (
                         <td key={j} className="px-4 py-3 text-gray-700 whitespace-nowrap">{cell}</td>
