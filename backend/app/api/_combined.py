@@ -408,7 +408,7 @@ def _build_custom_report_data(
         return (s.completed_hours or 0) / req * 100 if req else 0
 
     COMPLETED_BUCKET_LABELS = {
-        "lt25": "Less than 25%", "gt25": "More than 25%", "50": "50% or more",
+        "lt25": "Less than 25%", "gt25": "More than 25%", "gt50": "More than 50%",
         "gt75": "More than 75%", "100": "100% or more",
     }
 
@@ -416,7 +416,7 @@ def _build_custom_report_data(
         pct = _completed_pct(s)
         if bucket == "lt25":  return pct < 25
         if bucket == "gt25":  return pct > 25
-        if bucket == "50":    return pct >= 50
+        if bucket == "gt50":  return pct > 50
         if bucket == "gt75":  return pct > 75
         if bucket == "100":   return pct >= 100
         return True

@@ -67,7 +67,7 @@ const DIPLOMA_REQUIRED_HOURS = 280
 const COMPLETED_HOURS_OPTIONS = [
   { value: 'lt25', label: 'Less than 25%' },
   { value: 'gt25', label: 'More than 25%' },
-  { value: '50',   label: '50%' },
+  { value: 'gt50', label: 'More than 50%' },
   { value: 'gt75', label: 'More than 75%' },
   { value: '100',  label: '100%' },
 ]
