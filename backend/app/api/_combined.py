@@ -371,6 +371,14 @@ def _build_custom_report_data(
     days: str,
     missing_only: bool,
     db: Session,
+    start_date_from: str = "",
+    start_date_to: str = "",
+    finish_date_from: str = "",
+    finish_date_to: str = "",
+    required_hours_min: str = "",
+    required_hours_max: str = "",
+    completed_hours_min: str = "",
+    completed_hours_max: str = "",
 ):
     """
     Shared data builder for the "Custom Report" - used by both the on-screen
@@ -383,6 +391,18 @@ def _build_custom_report_data(
 
     def _fmt_date(d):
         return d.strftime("%d/%m/%Y") if d else None
+
+    def _parse_date(s):
+        try:
+            return date.fromisoformat(s) if s else None
+        except ValueError:
+            return None
+
+    def _parse_num(s):
+        try:
+            return float(s) if s not in (None, "") else None
+        except ValueError:
+            return None
 
     def _qual_match(s_qual):
         if not qualification:
@@ -410,23 +430,31 @@ def _build_custom_report_data(
         if qualification:
             students = [s for s in students if _qual_match(s.qualification)]
 
-        headers = ["Student ID", "Name", "Campus", "Qualification", "Status", "Course Start Date", "Course End Date", "Compliance", "Hours %"]
+        headers = ["Student ID", "Name", "Qualification", "Status", "Course Start Date", "Course End Date"]
         for s in students:
-            pct = round(s.completed_hours / s.required_hours * 100, 0) if s.required_hours else 0
             rows_data.append([
-                s.student_id, s.full_name, (s.campus or "").title(),
+                s.student_id, s.full_name,
                 s.qualification or "-", s.status.title(),
                 _fmt_date(s.course_start_date) or "-",
                 _fmt_date(s.course_end_date) or "-",
-                "-",  # compliance computed separately if needed
-                f"{pct:.0f}%",
             ])
 
     elif report_type == "placement_hours":
         title = "Placement Hours Summary"
+        sdf, sdt = _parse_date(start_date_from), _parse_date(start_date_to)
+        fdf, fdt = _parse_date(finish_date_from), _parse_date(finish_date_to)
+        rhmin, rhmax = _parse_num(required_hours_min), _parse_num(required_hours_max)
+        chmin, chmax = _parse_num(completed_hours_min), _parse_num(completed_hours_max)
+
         filter_parts = []
         if campus:   filter_parts.append(f"Campus: {campus.title()}")
         if qualification: filter_parts.append(f"Qualification: {qualification}")
+        if sdf or sdt: filter_parts.append(f"Start Date: {sdf or '...'} to {sdt or '...'}")
+        if fdf or fdt: filter_parts.append(f"Finish Date: {fdf or '...'} to {fdt or '...'}")
+        if rhmin is not None or rhmax is not None:
+            filter_parts.append(f"Required Hours: {rhmin if rhmin is not None else '...'} to {rhmax if rhmax is not None else '...'}")
+        if chmin is not None or chmax is not None:
+            filter_parts.append(f"Completed Hours: {chmin if chmin is not None else '...'} to {chmax if chmax is not None else '...'}")
         filter_desc = "  |  ".join(filter_parts) if filter_parts else "All current students"
 
         q = db.query(Student)
@@ -437,13 +465,29 @@ def _build_custom_report_data(
             students = [s for s in students if (s.campus or "").lower() == campus.lower()]
         if qualification:
             students = [s for s in students if _qual_match(s.qualification)]
+        if sdf:
+            students = [s for s in students if s.course_start_date and s.course_start_date >= sdf]
+        if sdt:
+            students = [s for s in students if s.course_start_date and s.course_start_date <= sdt]
+        if fdf:
+            students = [s for s in students if s.course_end_date and s.course_end_date >= fdf]
+        if fdt:
+            students = [s for s in students if s.course_end_date and s.course_end_date <= fdt]
+        if rhmin is not None:
+            students = [s for s in students if (s.required_hours or 0) >= rhmin]
+        if rhmax is not None:
+            students = [s for s in students if (s.required_hours or 0) <= rhmax]
+        if chmin is not None:
+            students = [s for s in students if (s.completed_hours or 0) >= chmin]
+        if chmax is not None:
+            students = [s for s in students if (s.completed_hours or 0) <= chmax]
         students = sorted(students, key=lambda s: s.completed_hours / (s.required_hours or 1))
 
-        headers = ["Student ID", "Name", "Campus", "Qualification", "Course Start Date", "Course End Date", "Completed", "Required", "Progress"]
+        headers = ["Student ID", "Name", "Qualification", "Course Start Date", "Course End Date", "Completed", "Required", "Progress"]
         for s in students:
             pct = round(s.completed_hours / s.required_hours * 100, 0) if s.required_hours else 0
             rows_data.append([
-                s.student_id, s.full_name, (s.campus or "").title(),
+                s.student_id, s.full_name,
                 s.qualification or "-",
                 _fmt_date(s.course_start_date) or "-",
                 _fmt_date(s.course_end_date) or "-",
@@ -474,7 +518,7 @@ def _build_custom_report_data(
             s.id: s for s in db.query(Student).filter(Student.id.in_(student_ids)).all()
         } if student_ids else {}
 
-        headers = ["Student", "Campus", "Document Type", "Expiry Date", "Days Left", "Verified"]
+        headers = ["Student", "Qualification", "Status", "Course Start Date", "Course End Date", "Document Type", "Expiry Date", "Days Left", "Verified"]
         for d in docs:
             s = students_by_id.get(d.student_id)
             if campus and (not s or (s.campus or "").lower() != campus.lower()):
@@ -483,9 +527,12 @@ def _build_custom_report_data(
             doc_label = d.document_type.replace("_", " ").title()
             rows_data.append([
                 s.full_name if s else "Unknown",
-                (s.campus or "-").title() if s else "-",
+                (s.qualification or "-") if s else "-",
+                (s.status.title() if s.status else "-") if s else "-",
+                (_fmt_date(s.course_start_date) or "-") if s else "-",
+                (_fmt_date(s.course_end_date) or "-") if s else "-",
                 doc_label,
-                str(d.expiry_date),
+                _fmt_date(d.expiry_date) or "-",
                 f"{days_left} days",
                 "Yes" if d.verified else "No",
             ])
@@ -504,7 +551,7 @@ def _build_custom_report_data(
         REQUIRED_5 = ["working_with_children_check", "first_aid_certificate",
                       "work_placement_agreement", "memorandum_of_understanding",
                       "national_child_safety_training"]
-        headers = ["Student ID", "Name", "Campus", "Qual", "Docs Submitted", "Status", "Outstanding"]
+        headers = ["Student ID", "Name", "Qual", "Status", "Course Start Date", "Course End Date", "Docs Submitted", "Status", "Outstanding"]
         for s in students:
             docs = db.query(ComplianceDocument).filter(ComplianceDocument.student_id == s.id).all()
             submitted = {d.document_type for d in docs}
@@ -512,7 +559,10 @@ def _build_custom_report_data(
             if missing_only and not missing:
                 continue
             rows_data.append([
-                s.student_id, s.full_name, (s.campus or "").title(), s.qualification or "-",
+                s.student_id, s.full_name, s.qualification or "-",
+                s.status.title(),
+                _fmt_date(s.course_start_date) or "-",
+                _fmt_date(s.course_end_date) or "-",
                 f"{len(REQUIRED_5)-len(missing)}/{len(REQUIRED_5)}",
                 "Complete" if not missing else "Incomplete",
                 ", ".join(missing) if missing else "✓ All submitted",
@@ -535,6 +585,14 @@ def get_custom_report_data(
     status: str = "current",
     days: str = "30",
     missing_only: bool = False,
+    start_date_from: str = "",
+    start_date_to: str = "",
+    finish_date_from: str = "",
+    finish_date_to: str = "",
+    required_hours_min: str = "",
+    required_hours_max: str = "",
+    completed_hours_min: str = "",
+    completed_hours_max: str = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -544,6 +602,8 @@ def get_custom_report_data(
     """
     title, filter_desc, headers, rows_data = _build_custom_report_data(
         report_type, campus, qualification, status, days, missing_only, db,
+        start_date_from, start_date_to, finish_date_from, finish_date_to,
+        required_hours_min, required_hours_max, completed_hours_min, completed_hours_max,
     )
     return {
         "title": title,
@@ -562,6 +622,14 @@ def export_report_pdf(
     status: str = "current",
     days: str = "30",
     missing_only: bool = False,
+    start_date_from: str = "",
+    start_date_to: str = "",
+    finish_date_from: str = "",
+    finish_date_to: str = "",
+    required_hours_min: str = "",
+    required_hours_max: str = "",
+    completed_hours_min: str = "",
+    completed_hours_max: str = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -596,6 +664,8 @@ def export_report_pdf(
 
     title, filter_desc, headers, rows_data = _build_custom_report_data(
         report_type, campus, qualification, status, days, missing_only, db,
+        start_date_from, start_date_to, finish_date_from, finish_date_to,
+        required_hours_min, required_hours_max, completed_hours_min, completed_hours_max,
     )
 
     # ── Build PDF ─────────────────────────────────────────────────────────────

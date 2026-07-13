@@ -39,6 +39,14 @@ export default function ReportsPage() {
   const [status, setStatus] = useState('current')
   const [days, setDays] = useState(30)
   const [missingOnly, setMissingOnly] = useState(false)
+  const [startDateFrom, setStartDateFrom] = useState('')
+  const [startDateTo, setStartDateTo] = useState('')
+  const [finishDateFrom, setFinishDateFrom] = useState('')
+  const [finishDateTo, setFinishDateTo] = useState('')
+  const [requiredHoursMin, setRequiredHoursMin] = useState('')
+  const [requiredHoursMax, setRequiredHoursMax] = useState('')
+  const [completedHoursMin, setCompletedHoursMin] = useState('')
+  const [completedHoursMax, setCompletedHoursMax] = useState('')
   const [downloading, setDownloading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)   // { title, filter_desc, headers, rows, row_count }
@@ -48,6 +56,7 @@ export default function ReportsPage() {
   const showStatus = reportType === 'enrollment_summary' || reportType === 'placement_hours'
   const showDays = reportType === 'expiring_documents'
   const showMissingOnly = reportType === 'compliance_status'
+  const showHoursFilters = reportType === 'placement_hours'
 
   const buildParams = () => {
     const params = new URLSearchParams({ report_type: reportType })
@@ -56,6 +65,16 @@ export default function ReportsPage() {
     if (showStatus) params.append('status', status)
     if (showDays) params.append('days', String(days))
     if (showMissingOnly) params.append('missing_only', String(missingOnly))
+    if (showHoursFilters) {
+      if (startDateFrom) params.append('start_date_from', startDateFrom)
+      if (startDateTo) params.append('start_date_to', startDateTo)
+      if (finishDateFrom) params.append('finish_date_from', finishDateFrom)
+      if (finishDateTo) params.append('finish_date_to', finishDateTo)
+      if (requiredHoursMin) params.append('required_hours_min', requiredHoursMin)
+      if (requiredHoursMax) params.append('required_hours_max', requiredHoursMax)
+      if (completedHoursMin) params.append('completed_hours_min', completedHoursMin)
+      if (completedHoursMax) params.append('completed_hours_max', completedHoursMax)
+    }
     return params
   }
 
@@ -149,6 +168,39 @@ export default function ReportsPage() {
           )}
         </div>
 
+        {showHoursFilters && (
+          <div className="grid grid-cols-2 gap-4 pt-1 border-t border-gray-100">
+            <FormRow label="Start Date">
+              <div className="flex items-center gap-2">
+                <input className="input" type="date" value={startDateFrom} onChange={e => setStartDateFrom(e.target.value)} />
+                <span className="text-xs text-gray-400">to</span>
+                <input className="input" type="date" value={startDateTo} onChange={e => setStartDateTo(e.target.value)} />
+              </div>
+            </FormRow>
+            <FormRow label="Finish Date">
+              <div className="flex items-center gap-2">
+                <input className="input" type="date" value={finishDateFrom} onChange={e => setFinishDateFrom(e.target.value)} />
+                <span className="text-xs text-gray-400">to</span>
+                <input className="input" type="date" value={finishDateTo} onChange={e => setFinishDateTo(e.target.value)} />
+              </div>
+            </FormRow>
+            <FormRow label="Required Hours">
+              <div className="flex items-center gap-2">
+                <input className="input" type="number" min="0" placeholder="Min" value={requiredHoursMin} onChange={e => setRequiredHoursMin(e.target.value)} />
+                <span className="text-xs text-gray-400">to</span>
+                <input className="input" type="number" min="0" placeholder="Max" value={requiredHoursMax} onChange={e => setRequiredHoursMax(e.target.value)} />
+              </div>
+            </FormRow>
+            <FormRow label="Completed Hours">
+              <div className="flex items-center gap-2">
+                <input className="input" type="number" min="0" placeholder="Min" value={completedHoursMin} onChange={e => setCompletedHoursMin(e.target.value)} />
+                <span className="text-xs text-gray-400">to</span>
+                <input className="input" type="number" min="0" placeholder="Max" value={completedHoursMax} onChange={e => setCompletedHoursMax(e.target.value)} />
+              </div>
+            </FormRow>
+          </div>
+        )}
+
         {showMissingOnly && (
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input type="checkbox" checked={missingOnly} onChange={e => setMissingOnly(e.target.checked)} className="rounded" />
@@ -183,8 +235,8 @@ export default function ReportsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                   <tr>
-                    {result.headers.map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>
+                    {result.headers.map((h, i) => (
+                      <th key={i} className="px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap bg-gray-50">{h}</th>
                     ))}
                   </tr>
                 </thead>
