@@ -381,6 +381,9 @@ def _build_custom_report_data(
     today = date.today()
     rows_data, headers, title, filter_desc = [], [], "", ""
 
+    def _fmt_date(d):
+        return d.strftime("%d/%m/%Y") if d else None
+
     def _qual_match(s_qual):
         if not qualification:
             return True
@@ -413,8 +416,8 @@ def _build_custom_report_data(
             rows_data.append([
                 s.student_id, s.full_name, (s.campus or "").title(),
                 s.qualification or "-", s.status.title(),
-                str(s.course_start_date) if s.course_start_date else "-",
-                str(s.course_end_date) if s.course_end_date else "-",
+                _fmt_date(s.course_start_date) or "-",
+                _fmt_date(s.course_end_date) or "-",
                 "-",  # compliance computed separately if needed
                 f"{pct:.0f}%",
             ])
@@ -442,8 +445,8 @@ def _build_custom_report_data(
             rows_data.append([
                 s.student_id, s.full_name, (s.campus or "").title(),
                 s.qualification or "-",
-                str(s.course_start_date) if s.course_start_date else "-",
-                str(s.course_end_date) if s.course_end_date else "-",
+                _fmt_date(s.course_start_date) or "-",
+                _fmt_date(s.course_end_date) or "-",
                 f"{s.completed_hours:.0f}h", f"{s.required_hours:.0f}h",
                 f"{pct:.0f}%",
             ])
