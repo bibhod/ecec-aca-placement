@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Grid, List, MapPin, Clock, Eye } from 'lucide-react'
+import { Plus, Grid, List, MapPin, Clock, Eye, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { Modal, Badge, ProgressBar, PageHeader, SearchInput, Select, Spinner, EmptyState, FormRow } from '../components/ui/index'
@@ -162,6 +162,11 @@ export default function StudentsPage() {
         subtitle={`${students.length} student${students.length !== 1 ? 's' : ''} found`}
         actions={isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>}
       />
+
+          <p className="flex items-center gap-1.5 text-xs text-gray-400 mb-4 -mt-2">
+            <Info size={13} className="flex-shrink-0" />
+            Status automatically changes to Completed once a student's Course End Date has passed.
+          </p>
 
           <div className="flex flex-wrap gap-3 mb-6">
             <SearchInput value={search} onChange={setSearch} placeholder="Search by name, ID, email..." />
