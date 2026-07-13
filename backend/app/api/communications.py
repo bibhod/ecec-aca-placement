@@ -439,8 +439,8 @@ _AUTOMATED_REMINDER_CATALOG = [
     },
     {
         "name": "Visit Imminent Reminder (Site Supervisor)",
-        "recipients": "Site supervisor (placement centre contact)",
-        "frequency": "48 hours and 24 hours before each scheduled appointment",
+        "recipients": "Site supervisor (placement centre contact), Student, trainer/assessor",
+        "frequency": "24 hours before each scheduled appointment",
         "template_name": "auto_appointment_reminder_supervisor",
     },
     {
@@ -511,18 +511,23 @@ _AUTOMATED_TEMPLATE_DEFAULTS = {
     },
     "auto_appointment_reminder_supervisor": {
         "label": "Visit Reminder - Site Supervisor",
-        "subject_template": "{time_label} Reminder: Trainer/Assessor Visit for {student_name}",
+        "subject_template": "Just a Reminder Upcoming Placement Visit for {student_name} ({time_label})",
         "body_template": (
             "Dear {recipient_name},\n\n"
-            "This is a reminder that a Trainer/Assessor is scheduled to visit your centre in {time_label} "
-            "as part of a work placement assessment.\n\n"
+            "Thank you for hosting {student_name} on their work placement with us. We wanted to let you know "
+            "that a Trainer/Assessor from Academies Australasia is scheduled to visit your centre in {time_label}.\n\n"
             "Student: {student_name}\n"
             "Visit: {appointment_title}\n"
             "Date: {scheduled_date}\n"
             "Time: {scheduled_time}\n"
             "Location: {location_detail}\n\n"
-            "Please ensure the student is available and a suitable space is arranged for the visit.\n\n"
-            "If you have any questions or need to reschedule, please contact the placement team at Academies Australasia."
+            "If you could kindly have {student_name} available and a quiet space on hand for the visit, we'd "
+            "really appreciate it.\n\n"
+            "Please don't hesitate to get in touch with our placement team if you have any questions or need to "
+            "reschedule.\n\n"
+            "Thank you again for your support of our students.\n\n"
+            "Warm regards,\n"
+            "Academies Australasia Placement Team"
         ),
     },
     "auto_compliance_expiry": {

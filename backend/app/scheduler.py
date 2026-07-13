@@ -122,9 +122,10 @@ def check_appointment_reminders():
                 if student.email:
                     _send_imminent(student.full_name, student.email)
 
-                # Email supervisor - uses its own externally-facing template, not the
-                # student/trainer one (no portal link, no "your coordinator" phrasing).
-                if centre and centre.supervisor_email:
+                # Email supervisor - only at the 24h mark (not 48h), using its own
+                # externally-facing template, not the student/trainer one (no portal
+                # link, no "your coordinator" phrasing).
+                if centre and centre.supervisor_email and hours_ahead == 24:
                     sup_subject, sup_body = render_auto_template(
                         db, "auto_appointment_reminder_supervisor",
                         recipient_name=centre.supervisor_name or "Supervisor",
