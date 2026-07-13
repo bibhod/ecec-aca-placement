@@ -428,18 +428,12 @@ _AUTOMATED_REMINDER_CATALOG = [
     {
         "name": "Visit Advance Reminder",
         "recipients": "Student, trainer/assessor",
-        "frequency": "14 and 7 days before each scheduled appointment (3-day and 1-day notice are covered by Visit Imminent Reminder below)",
-        "template_name": "auto_appointment_reminder",
-    },
-    {
-        "name": "Visit Imminent Reminder",
-        "recipients": "Student, trainer/assessor",
-        "frequency": "48 hours and 24 hours before each scheduled appointment",
+        "frequency": "14, 7, and 3 days before each scheduled appointment",
         "template_name": "auto_appointment_reminder",
     },
     {
         "name": "Upcoming Placement Visit (Site Supervisor)",
-        "recipients": "Site supervisor, Student, trainer/assessor",
+        "recipients": "Site supervisor",
         "frequency": "24 hours before each scheduled appointment",
         "template_name": "auto_appointment_reminder_supervisor",
     },
@@ -468,12 +462,6 @@ _AUTOMATED_REMINDER_CATALOG = [
         "template_name": "auto_hours_log_reminder",
     },
     {
-        "name": "Monthly Visit Reminder",
-        "recipients": "Student, trainer/assessor",
-        "frequency": "1st of each month, for any visit scheduled in the next 30 days",
-        "template_name": "auto_appointment_reminder",
-    },
-    {
         "name": "Compliance Documents Reminder (Bulk)",
         "recipients": "Student",
         "frequency": "1st of each month, to any student missing compliance documents",
@@ -481,10 +469,9 @@ _AUTOMATED_REMINDER_CATALOG = [
     },
 ]
 
-# Note: Visit Advance Reminder, Visit Imminent Reminder, and Monthly Visit
-# Reminder all render through the same underlying "auto_appointment_reminder"
-# template (they share one code path) - editing it updates the email content
-# for all three.
+# Note: Visit Advance Reminder renders through the "auto_appointment_reminder"
+# template. (Visit Imminent Reminder and Monthly Visit Reminder used to share
+# this same template but have since been removed.)
 
 class _SafeFormatDict(dict):
     def __missing__(self, key):
@@ -639,6 +626,7 @@ _REMINDER_LABELS = {
     "compliance_reminder_bulk": "Compliance Documents Reminder (Bulk)",
 }
 _VISIT_RE = re.compile(r"^visit_reminder_.+_(\d+)d$")
+_SUPERVISOR_VISIT_RE = re.compile(r"^visit_reminder_supervisor_.+_\d+d$")
 _FEEDBACK_RE = re.compile(r"^feedback_pending_.+_(\d+)d$")
 _MONTHLY_VISIT_RE = re.compile(r"^monthly_visit_reminder_.+_\d{4}-\d{2}$")
 
@@ -649,6 +637,8 @@ def _classify_reminder(template_used: Optional[str]) -> Optional[str]:
         return None
     if template_used in _REMINDER_LABELS:
         return _REMINDER_LABELS[template_used]
+    if _SUPERVISOR_VISIT_RE.match(template_used):
+        return "Upcoming Placement Visit (Site Supervisor)"
     m = _VISIT_RE.match(template_used)
     if m:
         days = int(m.group(1))

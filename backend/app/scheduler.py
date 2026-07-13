@@ -2,12 +2,13 @@
 Background scheduler (APScheduler) - runs automated email alerts.
 
 Automated reminders:
-  1. Upcoming work placement visits - 14/7 days advance, plus 48h/24h imminent
+  1. Upcoming work placement visits - 14/7/3 days advance to student + trainer/assessor,
+     plus a 24h notice to the site supervisor
   2. Compliance document expiry - 30-day notice, sent directly to the student
   3. Low attendance (< 50 % hours with < 30 days left) - sent directly to the student
   4. Supervisor feedback pending - 3/7/14 days after a completed visit with no feedback logged
   5. Placement Hours Log Reminder - fortnightly, to students behind on hours
-  6. Monthly bulk compliance + upcoming-visit reminders
+  6. Monthly bulk compliance reminders
 """
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -24,24 +25,14 @@ logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
 
 
-# ─── Shared dedup helper ──────────────────────────────────────────────────────
-# check_appointment_reminders() (48h/24h, flag-based) and
-# check_visit_advance_reminders() (14/7/3/1-day, Communication-log-based) both
-# cover the "1 day before" case - 24 hours == 1 day - and would otherwise each
-# independently email the student/trainer for the same appointment. Both jobs
-# consult this helper before sending, and both record their send the same way,
-# so whichever job runs first "claims" that appointment + day and the other
-# skips it.
+# ─── Dedup helper ─────────────────────────────────────────────────────────────
+# Used by check_visit_advance_reminders() (14/7/3-day, Communication-log-based)
+# as a restart-safe dedup gate, so each appointment + interval is only ever
+# emailed once even if the scheduler restarts mid-day.
 def _visit_reminder_already_sent(db, appointment, days_ahead: int) -> bool:
     from app.models import Communication
     dedup_key = f"visit_reminder_{appointment.id}_{days_ahead}d"
-    if db.query(Communication).filter(Communication.template_used == dedup_key).first():
-        return True
-    if days_ahead == 2 and getattr(appointment, "email_sent_48h", False):
-        return True
-    if days_ahead == 1 and getattr(appointment, "email_sent_24h", False):
-        return True
-    return False
+    return db.query(Communication).filter(Communication.template_used == dedup_key).first() is not None
 
 
 def _mark_visit_reminder_sent(db, appointment, days_ahead: int):
@@ -59,93 +50,72 @@ def _mark_visit_reminder_sent(db, appointment, days_ahead: int):
     ))
 
 
-# ─── Issue 2 / 16.3 - Appointment reminder (48h and 24h) ────────────────────
+# ─── Site-supervisor 24h visit reminder ──────────────────────────────────────
 def check_appointment_reminders():
-    """Send 48h and 24h email reminders for upcoming appointments."""
+    """
+    Send the 24-hour "Upcoming Placement Visit" reminder to the site supervisor
+    for imminent appointments. (The 48h/24h student/trainer "Visit Imminent
+    Reminder" was removed - Visit Advance Reminder's 14/7/3-day notices cover
+    those recipients instead.)
+    """
     db = SessionLocal()
     try:
         today = date.today()
-        for hours_ahead, flag_field in [(48, "email_sent_48h"), (24, "email_sent_24h")]:
-            target_date = today + timedelta(hours=hours_ahead)
-            appointments = db.query(Appointment).filter(
-                Appointment.scheduled_date == target_date,
-                Appointment.status == "scheduled",
-                Appointment.cancelled == False,
-                getattr(Appointment, flag_field) == False,
-            ).all()
+        hours_ahead = 24
+        target_date = today + timedelta(hours=hours_ahead)
+        appointments = db.query(Appointment).filter(
+            Appointment.scheduled_date == target_date,
+            Appointment.status == "scheduled",
+            Appointment.cancelled == False,
+            Appointment.email_sent_24h == False,
+        ).all()
 
-            days_ahead = hours_ahead // 24
+        for appt in appointments:
+            student = db.query(Student).filter(Student.id == appt.student_id).first()
+            if not student:
+                continue
 
-            for appt in appointments:
-                if _visit_reminder_already_sent(db, appt, days_ahead):
-                    # Already covered by the other reminder job (or a previous
-                    # run) - just clear this job's own flag so it doesn't keep
-                    # re-checking, without sending a second email.
-                    setattr(appt, flag_field, True)
-                    db.commit()
-                    continue
+            from app.models import PlacementCentre
+            centre = db.query(PlacementCentre).filter(PlacementCentre.id == appt.placement_centre_id).first() if appt.placement_centre_id else None
+            location_detail = (
+                ", ".join(filter(None, [centre.address, centre.suburb, centre.state, centre.postcode]))
+                if centre else (appt.location_address or "To be confirmed")
+            )
 
-                student = db.query(Student).filter(Student.id == appt.student_id).first()
-                if not student:
-                    continue
-
-                from app.models import PlacementCentre
-                centre = db.query(PlacementCentre).filter(PlacementCentre.id == appt.placement_centre_id).first() if appt.placement_centre_id else None
-                location_detail = (
-                    ", ".join(filter(None, [centre.address, centre.suburb, centre.state, centre.postcode]))
-                    if centre else (appt.location_address or "To be confirmed")
-                )
-
+            if centre and centre.supervisor_email:
                 from app.api.communications import render_auto_template
+                from app.api.compliance import _strip_html_tags
+                from app.models import Communication
+
                 time_label = f"{hours_ahead}-Hour"
-                prep_text = f"Preparation Notes: {appt.preparation_notes}\n\n" if appt.preparation_notes else ""
+                sup_subject, sup_body = render_auto_template(
+                    db, "auto_appointment_reminder_supervisor",
+                    recipient_name=centre.supervisor_name or "Supervisor",
+                    student_name=student.full_name, appointment_title=appt.title,
+                    scheduled_date=str(appt.scheduled_date), scheduled_time=appt.scheduled_time,
+                    location_detail=location_detail, time_label=time_label,
+                )
+                ok = send_email(centre.supervisor_email, centre.supervisor_name or "Supervisor", sup_subject, base_template(sup_body))
+                db.add(Communication(
+                    student_id=student.id,
+                    recipient_email=centre.supervisor_email,
+                    recipient_name=centre.supervisor_name or "Supervisor",
+                    message_type="email",
+                    subject=sup_subject,
+                    body=_strip_html_tags(sup_body),
+                    template_used=f"visit_reminder_supervisor_{appt.id}_1d",
+                    sent_successfully=ok,
+                ))
+                logger.info(f"Sent 24h site-supervisor reminder for appointment {appt.id}")
 
-                def _send_imminent(recipient_name, recipient_email):
-                    subject, body = render_auto_template(
-                        db, "auto_appointment_reminder",
-                        recipient_name=recipient_name, student_name=student.full_name,
-                        appointment_title=appt.title, scheduled_date=str(appt.scheduled_date),
-                        scheduled_time=appt.scheduled_time, location_type="Onsite",
-                        location_detail=location_detail, preparation_notes_text=prep_text,
-                        time_label=time_label, frontend_url=settings.FRONTEND_URL,
-                    )
-                    send_email(recipient_email, recipient_name, subject, base_template(body))
-
-                # Email coordinator / trainer
-                ta_id = getattr(appt, "trainer_assessor_id", None) or appt.coordinator_id
-                if ta_id:
-                    ta = db.query(User).filter(User.id == ta_id).first()
-                    if ta and ta.email:
-                        _send_imminent(ta.full_name, ta.email)
-
-                # Email student
-                if student.email:
-                    _send_imminent(student.full_name, student.email)
-
-                # Email supervisor - only at the 24h mark (not 48h), using its own
-                # externally-facing template, not the student/trainer one (no portal
-                # link, no "your coordinator" phrasing).
-                if centre and centre.supervisor_email and hours_ahead == 24:
-                    sup_subject, sup_body = render_auto_template(
-                        db, "auto_appointment_reminder_supervisor",
-                        recipient_name=centre.supervisor_name or "Supervisor",
-                        student_name=student.full_name, appointment_title=appt.title,
-                        scheduled_date=str(appt.scheduled_date), scheduled_time=appt.scheduled_time,
-                        location_detail=location_detail, time_label=time_label,
-                    )
-                    send_email(centre.supervisor_email, centre.supervisor_name or "Supervisor", sup_subject, base_template(sup_body))
-
-                _mark_visit_reminder_sent(db, appt, days_ahead)
-                setattr(appt, flag_field, True)
-                db.commit()
-                logger.info(f"Sent {hours_ahead}h reminder for appointment {appt.id}")
+            appt.email_sent_24h = True
+            db.commit()
 
     except Exception as e:
         logger.error(f"Appointment reminder job error: {e}")
         db.rollback()
     finally:
         db.close()
-
 
 # ─── Compliance expiry alerts ────────────────────────────────────────────────
 def check_compliance_expiry():
@@ -321,9 +291,7 @@ def check_supervisor_feedback():
 
 def check_visit_advance_reminders():
     """
-    Send 14-day and 7-day advance reminders for upcoming appointments (3-day and
-    1-day notice are covered by check_appointment_reminders' 48h/24h Visit
-    Imminent Reminder instead, so they're not repeated here).
+    Send 14-day, 7-day, and 3-day advance reminders for upcoming appointments.
     Sends to both the student and assigned trainer/assessor.
     Uses the Communication log as a dedup gate - each appointment+interval is sent only once,
     even if the scheduler restarts.
@@ -334,7 +302,7 @@ def check_visit_advance_reminders():
         from app.models import PlacementCentre
         from app.api.communications import render_auto_template
 
-        for days_ahead in [14, 7]:
+        for days_ahead in [14, 7, 3]:
             target_date = today + timedelta(days=days_ahead)
             appointments = db.query(Appointment).filter(
                 Appointment.scheduled_date == target_date,
@@ -452,13 +420,14 @@ def auto_complete_students():
 def send_monthly_reminders():
     """
     Runs on the 1st of every month. Reuses the existing, already-working manual
-    reminder functions (rather than duplicating their email wording /
-    Communication-log behaviour) to notify:
-      1. Students missing compliance documents
-      2. Students + trainers with a visit scheduled in the next 30 days
+    reminder function (rather than duplicating its email wording /
+    Communication-log behaviour) to notify students missing compliance
+    documents.
 
-    (The placement-hours-log reminder used to run here too; it now runs on its
-    own fortnightly schedule - see send_hours_log_reminders_fortnightly below.)
+    (The placement-hours-log reminder runs on its own fortnightly schedule -
+    see send_hours_log_reminders_fortnightly below. The monthly upcoming-visit
+    reminder that used to run here was removed - Visit Advance Reminder's
+    14/7/3-day notices cover this instead.)
     """
     db = SessionLocal()
     try:
@@ -477,44 +446,6 @@ def send_monthly_reminders():
         except Exception as e:
             logger.error(f"Monthly compliance reminders failed: {e}")
             db.rollback()
-
-        try:
-            from app.models import Communication
-            from app.api.appointments import send_reminder
-
-            today = date.today()
-            month_ahead = today + timedelta(days=30)
-            month_key = today.strftime("%Y-%m")
-            upcoming = db.query(Appointment).filter(
-                Appointment.scheduled_date >= today,
-                Appointment.scheduled_date <= month_ahead,
-                Appointment.status == "scheduled",
-                Appointment.cancelled == False,
-            ).all()
-
-            sent_count = 0
-            for appt in upcoming:
-                dedup_key = f"monthly_visit_reminder_{appt.id}_{month_key}"
-                if db.query(Communication).filter(Communication.template_used == dedup_key).first():
-                    continue
-                try:
-                    send_reminder(appt_id=appt.id, send_sms_flag=False, db=db, current_user=system_user)
-                    db.add(Communication(
-                        student_id=appt.student_id,
-                        recipient_email="", recipient_name="system",
-                        message_type="email",
-                        subject=f"Monthly visit reminder - {appt.title}",
-                        body=f"Automated monthly reminder sent for appointment {appt.id} on {appt.scheduled_date}.",
-                        template_used=dedup_key,
-                        sent_successfully=True,
-                    ))
-                    db.commit()
-                    sent_count += 1
-                except Exception as e:
-                    logger.warning(f"Monthly visit reminder failed for appointment {appt.id}: {e}")
-            logger.info(f"Monthly visit reminders: sent for {sent_count} upcoming appointment(s)")
-        except Exception as e:
-            logger.error(f"Monthly visit reminders failed: {e}")
 
     except Exception as e:
         logger.error(f"Monthly reminders job error: {e}")
@@ -579,7 +510,7 @@ def start_scheduler():
         replace_existing=True,
         max_instances=1,
     )
-    # 14/7/3/1 day advance visit reminders, runs daily
+    # 14/7/3 day advance visit reminders, runs daily
     scheduler.add_job(
         check_visit_advance_reminders,
         trigger=IntervalTrigger(hours=24),
