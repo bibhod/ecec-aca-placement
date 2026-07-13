@@ -654,24 +654,58 @@ def export_report_pdf(
     if rows_data:
         col_count = len(headers)
         page_w = A4[0] - 3*cm
-        col_w = page_w / col_count
 
-        table_data = [headers] + rows_data
-        tbl = Table(table_data, colWidths=[col_w] * col_count, repeatRows=1)
+        # Plain strings in a reportlab Table never wrap - if a cell's text is
+        # wider than its column, it just draws past the column boundary and
+        # overlaps the next column (this was the cause of the garbled/
+        # overlapping PDF layout). Wrapping every cell in a Paragraph makes
+        # long values wrap onto multiple lines and grow the row height
+        # instead of bleeding into neighbouring columns.
+        header_cell_style = ParagraphStyle(
+            "pdfHeaderCell", parent=styles["Normal"],
+            fontSize=7, leading=8.5, textColor=WHITE, fontName="Helvetica-Bold",
+            alignment=TA_CENTER,
+        )
+        body_cell_style = ParagraphStyle(
+            "pdfBodyCell", parent=styles["Normal"],
+            fontSize=7, leading=9, textColor=DGRAY, fontName="Helvetica",
+            alignment=TA_LEFT,
+        )
+
+        # Equal-width columns also contributed to the overlap: a "Name" or
+        # "Outstanding" column needs much more room than "Student ID" or
+        # "Progress". Give each column a width proportional to how much text
+        # it typically holds, instead of dividing the page evenly.
+        COLUMN_WEIGHTS = {
+            "Student ID": 1.0, "Student": 1.6, "Name": 1.5, "Campus": 1.0,
+            "Qualification": 1.4, "Qual": 0.7, "Status": 0.9,
+            "Course Start Date": 1.3, "Course End Date": 1.3,
+            "Compliance": 1.0, "Hours %": 0.85, "Completed": 1.15,
+            "Required": 1.05, "Progress": 1.05, "Document Type": 1.5,
+            "Expiry Date": 1.1, "Days Left": 1.0, "Verified": 0.9,
+            "Docs Submitted": 1.3, "Outstanding": 1.8,
+        }
+        col_weights = [COLUMN_WEIGHTS.get(h, 1.0) for h in headers]
+        total_weight = sum(col_weights)
+        col_widths = [page_w * w / total_weight for w in col_weights]
+
+        header_row = [Paragraph(str(h), header_cell_style) for h in headers]
+        body_rows = [
+            [Paragraph(str(v) if v is not None else "", body_cell_style) for v in row]
+            for row in rows_data
+        ]
+        table_data = [header_row] + body_rows
+        tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
         tbl.setStyle(TableStyle([
             # Header row
             ("BACKGROUND",   (0, 0), (-1, 0), NAVY),
-            ("TEXTCOLOR",    (0, 0), (-1, 0), WHITE),
-            ("FONTNAME",     (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE",     (0, 0), (-1, 0), 8),
-            ("ALIGN",        (0, 0), (-1, 0), "CENTER"),
+            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
             ("BOTTOMPADDING",(0, 0), (-1, 0), 8),
             ("TOPPADDING",   (0, 0), (-1, 0), 8),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             # Data rows
-            ("FONTNAME",     (0, 1), (-1, -1), "Helvetica"),
-            ("FONTSIZE",     (0, 1), (-1, -1), 7),
             ("ROWBACKGROUNDS",(0, 1), (-1, -1), [WHITE, LGRAY]),
-            ("ALIGN",        (0, 1), (-1, -1), "LEFT"),
             ("TOPPADDING",   (0, 1), (-1, -1), 5),
             ("BOTTOMPADDING",(0, 1), (-1, -1), 5),
             # Grid
