@@ -146,7 +146,7 @@ export default function StudentsPage() {
 
   const handleQualChange = val => {
     const isPostgrad = ['CHC50121', 'CHC50125'].includes(val)
-    setForm(f => ({ ...f, qualification: val, required_hours: isPostgrad ? 288 : 160 }))
+    setForm(f => ({ ...f, qualification: val, required_hours: isPostgrad ? 280 : 160 }))
   }
 
   const save = async () => {

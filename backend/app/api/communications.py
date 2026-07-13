@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
+import re
 
 from app.database import get_db
 from app.models import Communication, Student, User, EmailTemplate
@@ -416,3 +417,133 @@ def send_template_email(
         "success": success,
         "error": error_msg,
     }
+
+
+# ─── Automated Reminder Email catalog + summary log ──────────────────────────
+# Static description of every automated (scheduler-driven) reminder email,
+# shown under Communications -> Automated Reminder Email. Kept separate from
+# the editable EmailTemplate rows above, since these are scheduler-triggered
+# system emails, not manually-composed templates.
+_AUTOMATED_REMINDER_CATALOG = [
+    {
+        "name": "Visit Advance Reminder",
+        "recipients": "Student, trainer/assessor",
+        "frequency": "14, 7, 3, and 1 day before each scheduled appointment",
+    },
+    {
+        "name": "Visit Imminent Reminder",
+        "recipients": "Student, trainer/assessor, site supervisor",
+        "frequency": "48 hours and 24 hours before each scheduled appointment",
+    },
+    {
+        "name": "Compliance Document Expiring",
+        "recipients": "Student",
+        "frequency": "30-day notice before a compliance document expires",
+    },
+    {
+        "name": "Low Attendance Alert",
+        "recipients": "Student",
+        "frequency": "Checked daily - sent when hours completed are under 50% with under 30 days left in placement",
+    },
+    {
+        "name": "Supervisor Feedback Pending",
+        "recipients": "Trainer/assessor",
+        "frequency": "3, 7, and 14 days after a completed visit with no feedback logged (stops once feedback is entered)",
+    },
+    {
+        "name": "Placement Hours Log Reminder",
+        "recipients": "Student",
+        "frequency": "Fortnightly (every 14 days), to any student behind on required placement hours",
+    },
+    {
+        "name": "Monthly Visit Reminder",
+        "recipients": "Student, trainer/assessor",
+        "frequency": "1st of each month, for any visit scheduled in the next 30 days",
+    },
+    {
+        "name": "Compliance Documents Reminder (Bulk)",
+        "recipients": "Student",
+        "frequency": "1st of each month, to any student missing compliance documents",
+    },
+]
+
+_REMINDER_LABELS = {
+    "hours_log_reminder": "Placement Hours Log Reminder",
+    "compliance_expiry_30d": "Compliance Document Expiring",
+    "low_attendance_alert": "Low Attendance Alert",
+    "compliance_reminder_bulk": "Compliance Documents Reminder (Bulk)",
+}
+_VISIT_RE = re.compile(r"^visit_reminder_.+_(\d+)d$")
+_FEEDBACK_RE = re.compile(r"^feedback_pending_.+_(\d+)d$")
+_MONTHLY_VISIT_RE = re.compile(r"^monthly_visit_reminder_.+_\d{4}-\d{2}$")
+
+
+def _classify_reminder(template_used: Optional[str]) -> Optional[str]:
+    """Map a Communication.template_used dedup key to a human-readable reminder name."""
+    if not template_used:
+        return None
+    if template_used in _REMINDER_LABELS:
+        return _REMINDER_LABELS[template_used]
+    m = _VISIT_RE.match(template_used)
+    if m:
+        days = int(m.group(1))
+        return "Visit Imminent Reminder" if days in (1, 2) else "Visit Advance Reminder"
+    m = _FEEDBACK_RE.match(template_used)
+    if m:
+        return "Supervisor Feedback Pending"
+    if _MONTHLY_VISIT_RE.match(template_used):
+        return "Monthly Visit Reminder"
+    return None
+
+
+@router.get("/reminder-catalog")
+def get_reminder_catalog(
+    current_user: User = Depends(get_current_user),
+):
+    """Static list of every automated reminder email and how often it's sent."""
+    return {"reminders": _AUTOMATED_REMINDER_CATALOG}
+
+
+@router.get("/reminder-summary")
+def get_reminder_summary(
+    days: int = 90,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Aggregated log of automated reminder sends - one row per reminder type per
+    day, with how many distinct students were reminded. Detailed per-student
+    records remain available in the regular Communications list below.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = db.query(Communication).filter(Communication.sent_at >= cutoff).all()
+
+    buckets = {}
+    for c in rows:
+        label = _classify_reminder(c.template_used)
+        if not label:
+            continue
+        day_key = c.sent_at.date().isoformat() if c.sent_at else "unknown"
+        key = (label, day_key)
+        b = buckets.setdefault(key, {"student_ids": set(), "last_sent_at": None, "success_count": 0, "total": 0})
+        if c.student_id:
+            b["student_ids"].add(c.student_id)
+        b["total"] += 1
+        if c.sent_successfully:
+            b["success_count"] += 1
+        if c.sent_at and (b["last_sent_at"] is None or c.sent_at > b["last_sent_at"]):
+            b["last_sent_at"] = c.sent_at
+
+    summary = []
+    for (label, day_key), b in buckets.items():
+        summary.append({
+            "reminder": label,
+            "date": day_key,
+            "sent_at": str(b["last_sent_at"]) if b["last_sent_at"] else None,
+            "student_count": len(b["student_ids"]),
+            "total_sent": b["total"],
+            "success_count": b["success_count"],
+        })
+
+    summary.sort(key=lambda r: (r["date"], r["reminder"]), reverse=True)
+    return {"summary": summary}

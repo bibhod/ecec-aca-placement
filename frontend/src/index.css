@@ -42,7 +42,7 @@
 /* Modal backdrop */
 .modal-backdrop { @apply fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4; }
 
-/* Issue 18 — Mobile-friendly responsive improvements */
+/* Issue 18 - Mobile-friendly responsive improvements */
 @media (max-width: 640px) {
   .card { @apply rounded-xl p-4; }
   .btn-primary, .btn-secondary { @apply py-2 px-3 text-xs; }

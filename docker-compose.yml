@@ -44,7 +44,7 @@ services:
       FROM_EMAIL: noreply@academies.edu.au
       FROM_NAME: Academies Australasia
 
-      # ── SMS — Twilio ──────────────────────────────────────────────────────
+      # ── SMS - Twilio ──────────────────────────────────────────────────────
       # Sign up at twilio.com, get a number, then fill these in
       TWILIO_ACCOUNT_SID: ""
       TWILIO_AUTH_TOKEN: ""

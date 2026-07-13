@@ -214,36 +214,32 @@ def email_appointment_reminder(
     return send_email(recipient_email, recipient_name, subject, _base_template(content))
 
 
-def email_compliance_expiry(
+def email_compliance_expiry_student(
     student_name: str,
     student_email: str,
-    coordinator_name: str,
-    coordinator_email: str,
     document_type: str,
     expiry_date: str,
     days_until_expiry: int,
     frontend_url: str
 ) -> bool:
-    urgency = "URGENT: " if days_until_expiry <= 7 else ""
+    """Compliance document expiry reminder - sent directly to the student (30-day notice)."""
     doc_label = document_type.replace("_", " ").title()
-    subject = f"{urgency}Compliance Document Expiring: {doc_label} - {student_name}"
+    subject = f"Compliance Document Expiring Soon: {doc_label}"
     content = f"""
-<h2>{'⚠️ Urgent: ' if days_until_expiry <= 7 else ''}Compliance Document Expiring Soon</h2>
-<p>Dear {coordinator_name},</p>
-<p>Please note that the following compliance document for student <strong>{student_name}</strong> is 
-{'<strong style="color:red">expiring in {days_until_expiry} days</strong>' if days_until_expiry <= 7 else f'expiring in <strong>{days_until_expiry} days</strong>'}.</p>
+<h2>Compliance Document Expiring Soon</h2>
+<p>Dear {student_name},</p>
+<p>Please note that your <strong>{doc_label}</strong> is expiring in <strong>{days_until_expiry} days</strong> (on {expiry_date}).</p>
 <div class="highlight">
   <table>
-    <tr><th>Student</th><td>{student_name}</td></tr>
     <tr><th>Document</th><td>{doc_label}</td></tr>
     <tr><th>Expiry Date</th><td>{expiry_date}</td></tr>
-    <tr><th>Days Remaining</th><td style="color:{'red' if days_until_expiry <= 7 else 'orange'}">{days_until_expiry} days</td></tr>
+    <tr><th>Days Remaining</th><td>{days_until_expiry} days</td></tr>
   </table>
 </div>
-<p>Please contact the student to arrange renewal of this document before placement activities are affected.</p>
-<a href="{frontend_url}/compliance" class="btn">View Compliance Dashboard</a>
+<p>Please arrange renewal of this document as soon as possible so your placement is not affected. If you have any questions, contact your coordinator.</p>
+<a href="{frontend_url}/compliance" class="btn">View Compliance in Portal</a>
 """
-    return send_email(coordinator_email, coordinator_name, subject, _base_template(content))
+    return send_email(student_email, student_name, subject, _base_template(content))
 
 
 def email_welcome_student(

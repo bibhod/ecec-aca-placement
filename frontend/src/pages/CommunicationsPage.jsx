@@ -5,7 +5,7 @@
  *   Issue 15: Email + SMS sending errors now surfaced to user
  */
 import React, { useEffect, useState } from 'react'
-import { Mail, Send, MessageSquare, Phone, Edit2, Check, X } from 'lucide-react'
+import { Mail, Send, MessageSquare, Phone, Edit2, Check, X, Bell, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { PageHeader, Spinner, Modal, FormRow, Select, EmptyState } from '../components/ui/index'
@@ -19,6 +19,11 @@ export default function CommunicationsPage() {
   const [students, setStudents] = useState([])
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // Automated Reminder Email section
+  const [tab, setTab] = useState('log') // 'log' | 'reminders'
+  const [reminderCatalog, setReminderCatalog] = useState([])
+  const [reminderSummary, setReminderSummary] = useState([])
 
   // Email modal
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -41,8 +46,12 @@ export default function CommunicationsPage() {
       api.get('/communications'),
       api.get('/students'),
       api.get('/communications/templates'),
-    ]).then(([c, s, t]) => {
+      api.get('/communications/reminder-catalog'),
+      api.get('/communications/reminder-summary'),
+    ]).then(([c, s, t, rc, rs]) => {
       setComms(c.data); setStudents(s.data); setTemplates(t.data || [])
+      setReminderCatalog(rc.data?.reminders || [])
+      setReminderSummary(rs.data?.summary || [])
     }).finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
@@ -147,7 +156,75 @@ export default function CommunicationsPage() {
         }
       />
 
-      {comms.length === 0 ? (
+      {/* ── Section tabs: Message Log / Automated Reminder Email ────────────── */}
+      <div className="flex gap-2 border-b border-gray-200 mb-5">
+        <button
+          onClick={() => setTab('log')}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'log' ? 'border-navy text-navy' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+        >
+          Message Log
+        </button>
+        <button
+          onClick={() => setTab('reminders')}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${tab === 'reminders' ? 'border-navy text-navy' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+        >
+          <Bell size={14} /> Automated Reminder Email
+        </button>
+      </div>
+
+      {tab === 'reminders' ? (
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Reminder Templates & Frequency</h3>
+            <div className="card overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
+                    <th className="pb-2 pr-4">Reminder</th>
+                    <th className="pb-2 pr-4">Recipients</th>
+                    <th className="pb-2">Frequency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reminderCatalog.map((r, i) => (
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="py-2.5 pr-4 font-medium text-gray-900 whitespace-nowrap">{r.name}</td>
+                      <td className="py-2.5 pr-4 text-gray-600 whitespace-nowrap">{r.recipients}</td>
+                      <td className="py-2.5 text-gray-600">{r.frequency}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+              <Clock size={14} /> Reminder Send Log
+            </h3>
+            {reminderSummary.length === 0 ? (
+              <EmptyState icon={Bell} title="No automated reminders sent yet" />
+            ) : (
+              <div className="space-y-2">
+                {reminderSummary.map((r, i) => (
+                  <div key={i} className="card flex items-center justify-between py-3">
+                    <div>
+                      <p className="font-medium text-sm text-gray-900">{r.reminder}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Sent to {r.student_count} student{r.student_count === 1 ? '' : 's'}
+                        {r.sent_at ? ` · on ${format(new Date(r.sent_at), 'd MMMM yyyy \'at\' h:mm a')}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-gray-400 mt-3">
+              For the detailed per-student record of each send, see the Message Log tab.
+            </p>
+          </div>
+        </div>
+      ) : comms.length === 0 ? (
         <EmptyState icon={Mail} title="No communications yet"
           action={isAdmin ? <button onClick={() => setShowEmailModal(true)} className="btn-primary mx-auto"><Mail size={15} /> Compose Email</button> : undefined} />
       ) : (

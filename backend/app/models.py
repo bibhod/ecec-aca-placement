@@ -85,7 +85,7 @@ VISIT_LIMITS = {"CHC30121": 3, "CHC30125": 3, "CHC50121": 2, "CHC50125": 2}
 # vocabulary already used for WPA/MOU qualification tagging in the frontend.
 QUALIFICATION_LEVEL_CHOICES = ["Cert III", "Diploma"]
 
-REQUIRED_HOURS_BY_LEVEL = {"Cert III": 160.0, "Diploma": 288.0}
+REQUIRED_HOURS_BY_LEVEL = {"Cert III": 160.0, "Diploma": 280.0}
 
 
 def qualification_level_for_code(code):

@@ -743,7 +743,7 @@ def get_hours_reminder_preview(
     Returns the list of students who have not yet met their required placement
     hours, including a personalised email preview for each. No emails are sent.
     Cert III (qualification contains '30') = 160 h required.
-    Diploma  (qualification contains '50') = 288 h required.
+    Diploma  (qualification contains '50') = 280 h required.
     """
     students_list = db.query(Student).filter(Student.status == "current").all()
     recipients, met_count, no_email_count = [], 0, 0
