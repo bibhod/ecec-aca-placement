@@ -3,7 +3,7 @@ Background scheduler (APScheduler) - runs automated email alerts.
 
 Automated reminders:
   1. Upcoming work placement visits - 14/7/3 days advance to student + trainer/assessor,
-     plus a 24h notice to the site supervisor
+     plus a 24h notice to student, trainer/assessor, and the site supervisor together
   2. Compliance document expiry - 30-day notice, sent directly to the student
   3. Low attendance (< 50 % hours with < 30 days left) - sent directly to the student
   4. Supervisor feedback pending - 3/7/14 days after a completed visit with no feedback logged
@@ -50,13 +50,15 @@ def _mark_visit_reminder_sent(db, appointment, days_ahead: int):
     ))
 
 
-# ─── Site-supervisor 24h visit reminder ──────────────────────────────────────
+# ─── 24h "Upcoming Placement Visit" reminder (student + trainer + supervisor) ─
 def check_appointment_reminders():
     """
-    Send the 24-hour "Upcoming Placement Visit" reminder to the site supervisor
-    for imminent appointments. (The 48h/24h student/trainer "Visit Imminent
-    Reminder" was removed - Visit Advance Reminder's 14/7/3-day notices cover
-    those recipients instead.)
+    Send the 24-hour "Upcoming Placement Visit" reminder for imminent
+    appointments to the student, trainer/assessor, and site supervisor
+    together. (The 48h "Visit Imminent Reminder" step was removed - Visit
+    Advance Reminder's 14/7/3-day notices are the earlier touchpoint for the
+    student and trainer/assessor; this job now covers just the final 24h
+    notice, to all three recipients.)
     """
     db = SessionLocal()
     try:
@@ -70,24 +72,68 @@ def check_appointment_reminders():
             Appointment.email_sent_24h == False,
         ).all()
 
+        from app.models import PlacementCentre, Communication
+        from app.api.communications import render_auto_template
+        from app.api.compliance import _strip_html_tags
+
         for appt in appointments:
             student = db.query(Student).filter(Student.id == appt.student_id).first()
             if not student:
                 continue
 
-            from app.models import PlacementCentre
             centre = db.query(PlacementCentre).filter(PlacementCentre.id == appt.placement_centre_id).first() if appt.placement_centre_id else None
             location_detail = (
                 ", ".join(filter(None, [centre.address, centre.suburb, centre.state, centre.postcode]))
                 if centre else (appt.location_address or "To be confirmed")
             )
+            time_label = f"{hours_ahead}-Hour"
+            prep_text = f"Preparation Notes: {appt.preparation_notes}\n\n" if appt.preparation_notes else ""
+            dedup_key = f"visit_reminder_supervisor_{appt.id}_1d"
 
+            def _log(recipient_name, recipient_email, subject, html_body, ok):
+                db.add(Communication(
+                    student_id=student.id,
+                    recipient_email=recipient_email,
+                    recipient_name=recipient_name,
+                    message_type="email",
+                    subject=subject,
+                    body=_strip_html_tags(html_body),
+                    template_used=dedup_key,
+                    sent_successfully=ok,
+                ))
+
+            # Student
+            if student.email:
+                subject, body = render_auto_template(
+                    db, "auto_appointment_reminder",
+                    recipient_name=student.full_name, student_name=student.full_name,
+                    appointment_title=appt.title, scheduled_date=str(appt.scheduled_date),
+                    scheduled_time=appt.scheduled_time, location_type="Onsite",
+                    location_detail=location_detail, preparation_notes_text=prep_text,
+                    time_label=time_label, frontend_url=settings.FRONTEND_URL,
+                )
+                ok = send_email(student.email, student.full_name, subject, base_template(body))
+                _log(student.full_name, student.email, subject, body, ok)
+
+            # Trainer / assessor
+            ta_id = getattr(appt, "trainer_assessor_id", None) or appt.coordinator_id
+            if ta_id:
+                ta = db.query(User).filter(User.id == ta_id).first()
+                if ta and ta.email:
+                    subject, body = render_auto_template(
+                        db, "auto_appointment_reminder",
+                        recipient_name=ta.full_name, student_name=student.full_name,
+                        appointment_title=appt.title, scheduled_date=str(appt.scheduled_date),
+                        scheduled_time=appt.scheduled_time, location_type="Onsite",
+                        location_detail=location_detail, preparation_notes_text=prep_text,
+                        time_label=time_label, frontend_url=settings.FRONTEND_URL,
+                    )
+                    ok = send_email(ta.email, ta.full_name, subject, base_template(body))
+                    _log(ta.full_name, ta.email, subject, body, ok)
+
+            # Site supervisor - own externally-facing template (no portal link,
+            # no "your coordinator" phrasing).
             if centre and centre.supervisor_email:
-                from app.api.communications import render_auto_template
-                from app.api.compliance import _strip_html_tags
-                from app.models import Communication
-
-                time_label = f"{hours_ahead}-Hour"
                 sup_subject, sup_body = render_auto_template(
                     db, "auto_appointment_reminder_supervisor",
                     recipient_name=centre.supervisor_name or "Supervisor",
@@ -96,26 +142,18 @@ def check_appointment_reminders():
                     location_detail=location_detail, time_label=time_label,
                 )
                 ok = send_email(centre.supervisor_email, centre.supervisor_name or "Supervisor", sup_subject, base_template(sup_body))
-                db.add(Communication(
-                    student_id=student.id,
-                    recipient_email=centre.supervisor_email,
-                    recipient_name=centre.supervisor_name or "Supervisor",
-                    message_type="email",
-                    subject=sup_subject,
-                    body=_strip_html_tags(sup_body),
-                    template_used=f"visit_reminder_supervisor_{appt.id}_1d",
-                    sent_successfully=ok,
-                ))
-                logger.info(f"Sent 24h site-supervisor reminder for appointment {appt.id}")
+                _log(centre.supervisor_name or "Supervisor", centre.supervisor_email, sup_subject, sup_body, ok)
 
             appt.email_sent_24h = True
             db.commit()
+            logger.info(f"Sent 24h Upcoming Placement Visit reminders for appointment {appt.id}")
 
     except Exception as e:
         logger.error(f"Appointment reminder job error: {e}")
         db.rollback()
     finally:
         db.close()
+
 
 # ─── Compliance expiry alerts ────────────────────────────────────────────────
 def check_compliance_expiry():

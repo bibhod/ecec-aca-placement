@@ -1,19 +1,13 @@
 /**
- * StudentsPage - restored as its own left-nav section (was briefly merged
- * into the Dashboard; moved back out per direct request).
+ * StudentsPage - the list/search/filter/add/import screen.
  *
- * Two tabs:
- *   - Students:  the list/search/filter/add/import screen (unchanged from
- *                before the merge).
- *   - Reminders: compliance + hours reminders, surfaced here since they were
- *                previously buried inside the Compliance page's tabs (which
- *                are no longer in the left nav). Visit reminders are handled
- *                automatically (see note in that tab) plus a new monthly
- *                automated job - see backend/app/scheduler.py.
+ * The manual "Reminders" tab (Compliance Reminders + Hours Reminders send-now
+ * buttons) was removed - that's covered by Communications > Automated
+ * Reminder Email, which lists both as automated catalog entries.
  */
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Grid, List, MapPin, Clock, Mail, Eye, FileCheck, Calendar } from 'lucide-react'
+import { Plus, Grid, List, MapPin, Clock, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../utils/api'
 import { Modal, Badge, ProgressBar, PageHeader, SearchInput, Select, Spinner, EmptyState, FormRow } from '../components/ui/index'
@@ -86,7 +80,6 @@ export default function StudentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const [activeTab, setActiveTab] = useState('list')
 
   // ── Student list state ────────────────────────────────────────────────────
   const [students, setStudents] = useState([])
@@ -162,94 +155,14 @@ export default function StudentsPage() {
     finally { setSaving(false) }
   }
 
-  // ── Reminders state ───────────────────────────────────────────────────────
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewData, setPreviewData] = useState(null)
-  const [sendingReminders, setSendingReminders] = useState(false)
-  const [reminderResults, setReminderResults] = useState(null)
-
-  const [hoursPreviewLoading, setHoursPreviewLoading] = useState(false)
-  const [hoursPreviewData, setHoursPreviewData] = useState(null)
-  const [sendingHoursReminders, setSendingHoursReminders] = useState(false)
-  const [hoursReminderResults, setHoursReminderResults] = useState(null)
-
-  const openReminderPreview = async () => {
-    setPreviewLoading(true)
-    setReminderResults(null)
-    try {
-      const res = await api.get('/compliance/reminder-preview')
-      if (res.data.recipient_count === 0) {
-        toast.success('All active students are fully compliant - no reminders needed!')
-        setPreviewData(null)
-      } else {
-        setPreviewData(res.data)
-      }
-    } catch { toast.error('Failed to load preview') }
-    finally { setPreviewLoading(false) }
-  }
-
-  const sendReminders = async () => {
-    setSendingReminders(true)
-    try {
-      const res = await api.post('/compliance/send-reminders')
-      setPreviewData(null)
-      setReminderResults(res.data)
-    } catch { toast.error('Failed to send reminders') }
-    finally { setSendingReminders(false) }
-  }
-
-  const openHoursReminderPreview = async () => {
-    setHoursPreviewLoading(true)
-    setHoursReminderResults(null)
-    try {
-      const res = await api.get('/compliance/hours-reminder-preview')
-      if (res.data.recipient_count === 0) {
-        toast.success('All active students have met their required placement hours - no reminders needed!')
-        setHoursPreviewData(null)
-      } else {
-        setHoursPreviewData(res.data)
-      }
-    } catch { toast.error('Failed to load preview') }
-    finally { setHoursPreviewLoading(false) }
-  }
-
-  const sendHoursReminders = async () => {
-    setSendingHoursReminders(true)
-    try {
-      const res = await api.post('/compliance/send-hours-reminders')
-      setHoursPreviewData(null)
-      setHoursReminderResults(res.data)
-    } catch { toast.error('Failed to send reminders') }
-    finally { setSendingHoursReminders(false) }
-  }
-
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <PageHeader
         title="Students"
-        subtitle={activeTab === 'list' ? `${students.length} student${students.length !== 1 ? 's' : ''} found` : 'Send reminder emails to students'}
-        actions={activeTab === 'list' ? (
-          isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>
-        ) : null}
+        subtitle={`${students.length} student${students.length !== 1 ? 's' : ''} found`}
+        actions={isAdmin && <button onClick={openAdd} className="btn-primary text-sm"><Plus size={15} /> Add Student</button>}
       />
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-6 w-fit">
-        {[
-          { key: 'list', label: 'Students' },
-          { key: 'reminders', label: 'Reminders' },
-        ].map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all
-              ${activeTab === t.key ? 'bg-white text-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Students Tab ─────────────────────────────────────────────────────── */}
-      {activeTab === 'list' && (
-        <>
           <div className="flex flex-wrap gap-3 mb-6">
             <SearchInput value={search} onChange={setSearch} placeholder="Search by name, ID, email..." />
             <Select value={filterCampus} onChange={setFilterCampus} placeholder="All Campuses"
@@ -363,111 +276,6 @@ export default function StudentsPage() {
               <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editStudent ? 'Update Student' : 'Add Student'}</button>
             </div>
           </Modal>
-        </>
-      )}
-
-      {/* ── Reminders Tab ────────────────────────────────────────────────────── */}
-      {activeTab === 'reminders' && (
-        <div className="space-y-6 max-w-4xl">
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800 flex items-start gap-2">
-            <Calendar size={16} className="flex-shrink-0 mt-0.5" />
-            <span>
-              Scheduled visit reminders are sent automatically (14/7/3/1 days before each visit, to both
-              the student and trainer/assessor), and now also automatically on the 1st of every month for
-              any visit coming up in the next 30 days. You can also manually resend a reminder for one
-              appointment from the Appointments page.
-            </span>
-          </div>
-
-          {/* Compliance Reminders */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-navy flex items-center gap-2"><FileCheck size={16} /> Compliance Reminders</h3>
-              <button onClick={openReminderPreview} disabled={previewLoading} className="btn-secondary text-sm flex items-center gap-1">
-                <Mail size={15} /> {previewLoading ? 'Loading...' : 'Preview'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mb-1">
-              Emails every current student with outstanding/missing compliance documents. Also sent
-              automatically on the 1st of each month.
-            </p>
-
-            {previewData && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="grid grid-cols-3 gap-3 mb-4 text-center">
-                  <div className="bg-blue-50 rounded-xl p-3"><p className="text-xl font-bold text-blue-600">{previewData.recipient_count}</p><p className="text-xs text-gray-500">Will be emailed</p></div>
-                  <div className="bg-green-50 rounded-xl p-3"><p className="text-xl font-bold text-green-600">{previewData.compliant_count}</p><p className="text-xs text-gray-500">Fully compliant</p></div>
-                  <div className="bg-gray-50 rounded-xl p-3"><p className="text-xl font-bold text-gray-500">{previewData.no_email_count}</p><p className="text-xs text-gray-500">No email on file</p></div>
-                </div>
-                <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
-                  {previewData.recipients.map(r => (
-                    <div key={r.student_id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
-                      <div>
-                        <p className="font-medium text-gray-800">{r.student_name}</p>
-                        <p className="text-xs text-gray-400">{r.outstanding.join(', ')}</p>
-                      </div>
-                      <span className="text-xs text-gray-400">{r.submitted_count} submitted</span>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={sendReminders} disabled={sendingReminders} className="btn-primary text-sm">
-                  <Mail size={14} /> {sendingReminders ? 'Sending...' : `Send to ${previewData.recipient_count} Students`}
-                </button>
-              </div>
-            )}
-
-            {reminderResults && (
-              <div className="mt-4 pt-4 border-t border-gray-100 text-sm">
-                <p className="text-green-700 font-medium">Sent to {reminderResults.sent?.length || 0} students - {reminderResults.skipped?.length || 0} skipped</p>
-              </div>
-            )}
-          </div>
-
-          {/* Hours Reminders */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-navy flex items-center gap-2"><Clock size={16} /> Hours Reminders</h3>
-              <button onClick={openHoursReminderPreview} disabled={hoursPreviewLoading} className="btn-secondary text-sm flex items-center gap-1">
-                <Mail size={15} /> {hoursPreviewLoading ? 'Loading...' : 'Preview'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mb-1">
-              Emails every current student who hasn't yet met their required placement hours. Also sent
-              automatically on the 1st of each month.
-            </p>
-
-            {hoursPreviewData && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="grid grid-cols-3 gap-3 mb-4 text-center">
-                  <div className="bg-blue-50 rounded-xl p-3"><p className="text-xl font-bold text-blue-600">{hoursPreviewData.recipient_count}</p><p className="text-xs text-gray-500">Will be emailed</p></div>
-                  <div className="bg-green-50 rounded-xl p-3"><p className="text-xl font-bold text-green-600">{hoursPreviewData.met_count}</p><p className="text-xs text-gray-500">Requirement met</p></div>
-                  <div className="bg-gray-50 rounded-xl p-3"><p className="text-xl font-bold text-gray-500">{hoursPreviewData.no_email_count}</p><p className="text-xs text-gray-500">No email on file</p></div>
-                </div>
-                <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
-                  {hoursPreviewData.recipients.map(r => (
-                    <div key={r.student_id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
-                      <div>
-                        <p className="font-medium text-gray-800">{r.student_name}</p>
-                        <p className="text-xs text-gray-400">{r.qualification}</p>
-                      </div>
-                      <span className="text-xs text-gray-400">{r.completed_hours.toFixed(0)} / {r.required_hours.toFixed(0)}h</span>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={sendHoursReminders} disabled={sendingHoursReminders} className="btn-primary text-sm">
-                  <Mail size={14} /> {sendingHoursReminders ? 'Sending...' : `Send to ${hoursPreviewData.recipient_count} Students`}
-                </button>
-              </div>
-            )}
-
-            {hoursReminderResults && (
-              <div className="mt-4 pt-4 border-t border-gray-100 text-sm">
-                <p className="text-green-700 font-medium">Sent to {hoursReminderResults.sent?.length || 0} students - {hoursReminderResults.skipped?.length || 0} skipped</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

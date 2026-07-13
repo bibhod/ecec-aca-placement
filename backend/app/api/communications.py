@@ -433,7 +433,7 @@ _AUTOMATED_REMINDER_CATALOG = [
     },
     {
         "name": "Upcoming Placement Visit (Site Supervisor)",
-        "recipients": "Site supervisor",
+        "recipients": "Site supervisor, Student, trainer/assessor",
         "frequency": "24 hours before each scheduled appointment",
         "template_name": "auto_appointment_reminder_supervisor",
     },
@@ -721,3 +721,65 @@ def get_reminder_summary(
 
     summary.sort(key=lambda r: (r["date"], r["reminder"]), reverse=True)
     return {"summary": summary}
+
+
+@router.get("/reminder-detail")
+def get_reminder_detail(
+    reminder: str,
+    date: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Detail behind one Reminder Send Log row (one reminder type, one calendar
+    day) - used by the "View in Detail" link. Returns stat-card totals plus
+    the individual recipients that were emailed.
+    """
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date, expected YYYY-MM-DD")
+
+    day_start = datetime.combine(day, datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+    rows = db.query(Communication).filter(
+        Communication.sent_at >= day_start,
+        Communication.sent_at < day_end,
+    ).all()
+
+    student_cache = {}
+    items = []
+    for c in rows:
+        if _classify_reminder(c.template_used) != reminder:
+            continue
+        student_name = None
+        if c.student_id:
+            if c.student_id not in student_cache:
+                student_cache[c.student_id] = db.query(Student).filter(Student.id == c.student_id).first()
+            s = student_cache[c.student_id]
+            student_name = s.full_name if s else None
+        display_name = student_name or (c.recipient_name if c.recipient_name and c.recipient_name != "system" else "Unknown recipient")
+        items.append({
+            "student_name": display_name,
+            "recipient_name": c.recipient_name,
+            "recipient_email": c.recipient_email or None,
+            "subject": c.subject,
+            "sent_successfully": c.sent_successfully,
+            "sent_at": str(c.sent_at) if c.sent_at else None,
+        })
+
+    delivered = sum(1 for i in items if i["sent_successfully"])
+    failed = len(items) - delivered
+    students_count = len({i["student_name"] for i in items if i["student_name"] and i["student_name"] != "Unknown recipient"})
+
+    items.sort(key=lambda i: i["sent_at"] or "", reverse=True)
+
+    return {
+        "reminder": reminder,
+        "date": date,
+        "total_sent": len(items),
+        "delivered": delivered,
+        "failed": failed,
+        "students_count": students_count,
+        "items": items,
+    }

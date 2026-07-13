@@ -26,6 +26,23 @@ export default function CommunicationsPage() {
   const [reminderSummary, setReminderSummary] = useState([])
   const [editingAutoTemplate, setEditingAutoTemplate] = useState(null)
   const [savingAutoTemplate, setSavingAutoTemplate] = useState(false)
+  const [viewingDetailFor, setViewingDetailFor] = useState(null) // { reminder, date }
+  const [reminderDetail, setReminderDetail] = useState(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+
+  const openReminderDetail = async (r) => {
+    setViewingDetailFor({ reminder: r.reminder, date: r.date })
+    setReminderDetail(null)
+    setLoadingDetail(true)
+    try {
+      const res = await api.get('/communications/reminder-detail', { params: { reminder: r.reminder, date: r.date } })
+      setReminderDetail(res.data)
+    } catch {
+      toast.error('Failed to load detail')
+    } finally {
+      setLoadingDetail(false)
+    }
+  }
 
   // Email modal
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -243,6 +260,10 @@ export default function CommunicationsPage() {
                       <p className="text-xs text-gray-500 mt-0.5">
                         Sent to {r.student_count} student{r.student_count === 1 ? '' : 's'}
                         {r.sent_at ? ` · on ${format(new Date(r.sent_at), 'd MMMM yyyy \'at\' h:mm a')}` : ''}
+                        {' · '}
+                        <button onClick={() => openReminderDetail(r)} className="text-cyan hover:underline font-medium">
+                          View in Detail
+                        </button>
                       </p>
                     </div>
                   </div>
@@ -427,6 +448,39 @@ export default function CommunicationsPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Reminder Send Log - View in Detail modal */}
+      <Modal open={!!viewingDetailFor} onClose={() => { setViewingDetailFor(null); setReminderDetail(null) }}
+        title={viewingDetailFor ? `${viewingDetailFor.reminder} - ${viewingDetailFor.date}` : 'Reminder Detail'} size="lg">
+        {loadingDetail ? (
+          <div className="py-10 flex justify-center"><Spinner /></div>
+        ) : reminderDetail ? (
+          <div>
+            <div className="grid grid-cols-3 gap-3 mb-4 text-center">
+              <div className="bg-blue-50 rounded-xl p-3"><p className="text-xl font-bold text-blue-600">{reminderDetail.total_sent}</p><p className="text-xs text-gray-500">Total Sent</p></div>
+              <div className="bg-green-50 rounded-xl p-3"><p className="text-xl font-bold text-green-600">{reminderDetail.delivered}</p><p className="text-xs text-gray-500">Delivered</p></div>
+              <div className="bg-gray-50 rounded-xl p-3"><p className="text-xl font-bold text-gray-500">{reminderDetail.failed}</p><p className="text-xs text-gray-500">Failed</p></div>
+            </div>
+            {reminderDetail.items.length === 0 ? (
+              <EmptyState icon={Bell} title="No recipient details found for this entry" />
+            ) : (
+              <div className="max-h-96 overflow-y-auto space-y-2">
+                {reminderDetail.items.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
+                    <div>
+                      <p className="font-medium text-gray-800">{item.student_name}</p>
+                      <p className="text-xs text-gray-400">{item.recipient_email || 'No email on file'}</p>
+                    </div>
+                    <span className={`text-xs font-medium ${item.sent_successfully ? 'text-green-600' : 'text-red-500'}`}>
+                      {item.sent_successfully ? 'Sent' : 'Failed'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
       </Modal>
     </div>
   )
