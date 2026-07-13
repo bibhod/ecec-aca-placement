@@ -195,7 +195,13 @@ export default function CommunicationsPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Reminder Templates & Frequency</h3>
             <div className="card overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
+                <colgroup>
+                  <col className="w-[14%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[52%]" />
+                  <col className="w-[18%]" />
+                </colgroup>
                 <thead>
                   <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
                     <th className="pb-2 pr-4">Reminder</th>
@@ -207,8 +213,8 @@ export default function CommunicationsPage() {
                 <tbody>
                   {reminderCatalog.map((r, i) => (
                     <tr key={i} className="border-t border-gray-100">
-                      <td className="py-2.5 pr-4 font-medium text-gray-900 whitespace-nowrap">{r.name}</td>
-                      <td className="py-2.5 pr-4 text-gray-600 whitespace-nowrap">{r.recipients}</td>
+                      <td className="py-2.5 pr-4 font-medium text-gray-900">{r.name}</td>
+                      <td className="py-2.5 pr-4 text-gray-600">{r.recipients}</td>
                       <td className="py-2.5 pr-4 text-gray-600">{r.frequency}</td>
                       <td className="py-2.5">
                         <button onClick={() => setEditingAutoTemplate({ ...r })} className="btn-secondary text-xs py-1 px-2.5 whitespace-nowrap">

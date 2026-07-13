@@ -438,8 +438,8 @@ _AUTOMATED_REMINDER_CATALOG = [
         "template_name": "auto_appointment_reminder",
     },
     {
-        "name": "Visit Imminent Reminder (Site Supervisor)",
-        "recipients": "Site supervisor (placement centre contact), Student, trainer/assessor",
+        "name": "Upcoming Placement Visit (Site Supervisor)",
+        "recipients": "Site supervisor, Student, trainer/assessor",
         "frequency": "24 hours before each scheduled appointment",
         "template_name": "auto_appointment_reminder_supervisor",
     },
@@ -510,7 +510,7 @@ _AUTOMATED_TEMPLATE_DEFAULTS = {
         ),
     },
     "auto_appointment_reminder_supervisor": {
-        "label": "Visit Reminder - Site Supervisor",
+        "label": "Upcoming Placement Visit - Site Supervisor",
         "subject_template": "Just a Reminder Upcoming Placement Visit for {student_name} ({time_label})",
         "body_template": (
             "Dear {recipient_name},\n\n"
