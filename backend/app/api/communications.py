@@ -18,7 +18,7 @@ from app.database import get_db
 from app.models import Communication, Student, User, EmailTemplate
 from app.utils.auth import get_current_user, require_admin, require_admin_or_trainer
 from app.api.audit import write_audit
-from app.services.email_service import send_email, base_template as _base_template
+from app.services.email_service import send_email, send_email_verbose, base_template as _base_template
 from app.services.sms_service import send_sms
 
 router = APIRouter()
@@ -264,13 +264,9 @@ def send_communication(
     html_body = _base_template(
         f"<h2>{data.subject}</h2><p>{data.body.replace(chr(10), '<br>')}</p>"
     )
-    error_msg = None
-    try:
-        success = send_email(data.recipient_email, data.recipient_name, data.subject, html_body, data.body)
-    except Exception as exc:
-        success = False
-        error_msg = str(exc)
-        logger.error(f"send_communication error: {exc}")
+    success, error_msg = send_email_verbose(data.recipient_email, data.recipient_name, data.subject, html_body, data.body)
+    if not success:
+        logger.error(f"send_communication error: {error_msg}")
 
     comm = Communication(
         student_id=data.student_id or None,
@@ -380,14 +376,10 @@ def send_template_email(
     if not student.email:
         return {"message": "Student has no email address on file", "success": False}
 
-    error_msg = None
-    try:
-        html = _base_template(f"<h2>{subject}</h2><p>{body.replace(chr(10), '<br>')}</p>")
-        success = send_email(student.email, student.full_name, subject, html, body)
-    except Exception as exc:
-        success = False
-        error_msg = str(exc)
-        logger.error(f"Template email error: {exc}")
+    html = _base_template(f"<h2>{subject}</h2><p>{body.replace(chr(10), '<br>')}</p>")
+    success, error_msg = send_email_verbose(student.email, student.full_name, subject, html, body)
+    if not success:
+        logger.error(f"Template email error: {error_msg}")
 
     comm = Communication(
         student_id=data.student_id,
@@ -765,6 +757,7 @@ def get_reminder_detail(
             "recipient_email": c.recipient_email or None,
             "subject": c.subject,
             "sent_successfully": c.sent_successfully,
+            "error_message": c.error_message,
             "sent_at": str(c.sent_at) if c.sent_at else None,
         })
 

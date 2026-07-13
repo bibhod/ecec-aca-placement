@@ -18,7 +18,7 @@ import logging
 
 from app.database import SessionLocal
 from app.models import Appointment, ComplianceDocument, Student, User
-from app.services.email_service import send_email, base_template
+from app.services.email_service import send_email, send_email_verbose, base_template
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ def check_appointment_reminders():
             prep_text = f"Preparation Notes: {appt.preparation_notes}\n\n" if appt.preparation_notes else ""
             dedup_key = f"visit_reminder_supervisor_{appt.id}_1d"
 
-            def _log(recipient_name, recipient_email, subject, html_body, ok):
+            def _log(recipient_name, recipient_email, subject, html_body, ok, err=None):
                 db.add(Communication(
                     student_id=student.id,
                     recipient_email=recipient_email,
@@ -100,6 +100,7 @@ def check_appointment_reminders():
                     body=_strip_html_tags(html_body),
                     template_used=dedup_key,
                     sent_successfully=ok,
+                    error_message=err,
                 ))
 
             # Student
@@ -112,8 +113,8 @@ def check_appointment_reminders():
                     location_detail=location_detail, preparation_notes_text=prep_text,
                     time_label=time_label, frontend_url=settings.FRONTEND_URL,
                 )
-                ok = send_email(student.email, student.full_name, subject, base_template(body))
-                _log(student.full_name, student.email, subject, body, ok)
+                ok, err = send_email_verbose(student.email, student.full_name, subject, base_template(body))
+                _log(student.full_name, student.email, subject, body, ok, err)
 
             # Trainer / assessor
             ta_id = getattr(appt, "trainer_assessor_id", None) or appt.coordinator_id
@@ -128,8 +129,8 @@ def check_appointment_reminders():
                         location_detail=location_detail, preparation_notes_text=prep_text,
                         time_label=time_label, frontend_url=settings.FRONTEND_URL,
                     )
-                    ok = send_email(ta.email, ta.full_name, subject, base_template(body))
-                    _log(ta.full_name, ta.email, subject, body, ok)
+                    ok, err = send_email_verbose(ta.email, ta.full_name, subject, base_template(body))
+                    _log(ta.full_name, ta.email, subject, body, ok, err)
 
             # Site supervisor - own externally-facing template (no portal link,
             # no "your coordinator" phrasing).
@@ -141,8 +142,8 @@ def check_appointment_reminders():
                     scheduled_date=str(appt.scheduled_date), scheduled_time=appt.scheduled_time,
                     location_detail=location_detail, time_label=time_label,
                 )
-                ok = send_email(centre.supervisor_email, centre.supervisor_name or "Supervisor", sup_subject, base_template(sup_body))
-                _log(centre.supervisor_name or "Supervisor", centre.supervisor_email, sup_subject, sup_body, ok)
+                ok, err = send_email_verbose(centre.supervisor_email, centre.supervisor_name or "Supervisor", sup_subject, base_template(sup_body))
+                _log(centre.supervisor_name or "Supervisor", centre.supervisor_email, sup_subject, sup_body, ok, err)
 
             appt.email_sent_24h = True
             db.commit()
@@ -184,7 +185,7 @@ def check_compliance_expiry():
                     expiry_date=str(doc.expiry_date), days_until_expiry=days_ahead,
                     frontend_url=settings.FRONTEND_URL,
                 )
-                ok = send_email(student.email, student.full_name, subject, base_template(body))
+                ok, err = send_email_verbose(student.email, student.full_name, subject, base_template(body))
                 db.add(Communication(
                     student_id=student.id,
                     recipient_email=student.email,
@@ -194,6 +195,7 @@ def check_compliance_expiry():
                     body=f"Automated 30-day compliance expiry reminder sent for document {doc.id}.",
                     template_used="compliance_expiry_30d",
                     sent_successfully=ok,
+                    error_message=err,
                 ))
 
             doc.alert_sent = True
@@ -237,7 +239,7 @@ def check_low_attendance():
                     pct=f"{pct:.0f}",
                     placement_end_date=str(s.placement_end_date),
                 )
-                ok = send_email(s.email, s.full_name, subject, base_template(body))
+                ok, err = send_email_verbose(s.email, s.full_name, subject, base_template(body))
                 db.add(Communication(
                     student_id=s.id,
                     recipient_email=s.email,
@@ -247,6 +249,7 @@ def check_low_attendance():
                     body=f"Automated low-attendance alert ({pct:.0f}% of required hours).",
                     template_used="low_attendance_alert",
                     sent_successfully=ok,
+                    error_message=err,
                 ))
                 db.commit()
 

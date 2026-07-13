@@ -253,21 +253,33 @@ export default function CommunicationsPage() {
               <EmptyState icon={Bell} title="No automated reminders sent yet" />
             ) : (
               <div className="space-y-2">
-                {reminderSummary.map((r, i) => (
-                  <div key={i} className="card flex items-center justify-between py-3">
-                    <div>
-                      <p className="font-medium text-sm text-gray-900">{r.reminder}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        Sent to {r.student_count} student{r.student_count === 1 ? '' : 's'}
-                        {r.sent_at ? ` · on ${format(new Date(r.sent_at), 'd MMMM yyyy \'at\' h:mm a')}` : ''}
-                        {' · '}
-                        <button onClick={() => openReminderDetail(r)} className="text-cyan hover:underline font-medium">
-                          View in Detail
-                        </button>
-                      </p>
+                {reminderSummary.map((r, i) => {
+                  const hasFailures = r.success_count < r.total_sent
+                  return (
+                    <div key={i} className="card flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium text-sm text-gray-900 flex items-center gap-2">
+                          {r.reminder}
+                          {hasFailures && (
+                            <span className="text-xs font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                              {r.total_sent - r.success_count} failed
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {hasFailures
+                            ? `Attempted for ${r.student_count} student${r.student_count === 1 ? '' : 's'} · ${r.success_count} delivered, ${r.total_sent - r.success_count} failed`
+                            : `Sent to ${r.student_count} student${r.student_count === 1 ? '' : 's'}`}
+                          {r.sent_at ? ` · on ${format(new Date(r.sent_at), 'd MMMM yyyy \'at\' h:mm a')}` : ''}
+                          {' · '}
+                          <button onClick={() => openReminderDetail(r)} className="text-cyan hover:underline font-medium">
+                            View in Detail
+                          </button>
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <p className="text-xs text-gray-400 mt-3">
@@ -471,8 +483,11 @@ export default function CommunicationsPage() {
                     <div>
                       <p className="font-medium text-gray-800">{item.student_name}</p>
                       <p className="text-xs text-gray-400">{item.recipient_email || 'No email on file'}</p>
+                      {!item.sent_successfully && item.error_message && (
+                        <p className="text-xs text-red-500 mt-0.5">{item.error_message}</p>
+                      )}
                     </div>
-                    <span className={`text-xs font-medium ${item.sent_successfully ? 'text-green-600' : 'text-red-500'}`}>
+                    <span className={`text-xs font-medium whitespace-nowrap pl-3 ${item.sent_successfully ? 'text-green-600' : 'text-red-500'}`}>
                       {item.sent_successfully ? 'Sent' : 'Failed'}
                     </span>
                   </div>

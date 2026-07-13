@@ -1,4 +1,5 @@
 import smtplib
+import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
@@ -8,6 +9,59 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# A single failed send used to be permanent - no retry, and the reason was
+# only ever visible in application logs (not stored anywhere). This caused a
+# whole batch to fail outright during a brief provider outage/rate limit,
+# with no way to tell why after the fact. send_email_verbose() retries
+# transient failures a couple of times and returns the actual error message
+# so callers can store it (see Communication.error_message).
+MAX_SEND_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 2
+
+
+def send_email_verbose(
+    to_email: str,
+    to_name: str,
+    subject: str,
+    html_body: str,
+    plain_body: Optional[str] = None,
+) -> "tuple[bool, Optional[str]]":
+    """
+    Send email via Brevo/SendGrid/SMTP fallback, retrying transient failures
+    up to MAX_SEND_ATTEMPTS times. Returns (success, error_message) - the
+    error message is None on success, otherwise the last failure's reason.
+    """
+    if not to_email:
+        logger.warning("No recipient email provided, skipping send")
+        return False, "No recipient email address on file"
+
+    last_error = "Unknown error"
+    for attempt in range(1, MAX_SEND_ATTEMPTS + 1):
+        print(f"[EMAIL] Attempt {attempt}/{MAX_SEND_ATTEMPTS} to: {to_email} | Subject: {subject}", flush=True)
+        try:
+            if settings.BREVO_API_KEY:
+                _send_via_brevo(to_email, to_name, subject, html_body, plain_body)
+                return True, None
+            elif settings.SENDGRID_API_KEY and not settings.USE_SMTP:
+                if _send_via_sendgrid(to_email, to_name, subject, html_body, plain_body):
+                    return True, None
+                last_error = "SendGrid rejected the send (non-2xx response)"
+            elif settings.SMTP_USER and settings.SMTP_PASSWORD:
+                _send_via_smtp(to_email, to_name, subject, html_body, plain_body)
+                return True, None
+            else:
+                print(f"[EMAIL SIMULATION] No credentials set - email NOT sent to {to_email}", flush=True)
+                return True, None
+        except Exception as e:
+            last_error = str(e)
+            print(f"[EMAIL ERROR] Attempt {attempt}/{MAX_SEND_ATTEMPTS} failed for {to_email}: {e}", flush=True)
+            logger.error(f"Email send failed (attempt {attempt}/{MAX_SEND_ATTEMPTS}) to {to_email}: {e}")
+
+        if attempt < MAX_SEND_ATTEMPTS:
+            time.sleep(RETRY_DELAY_SECONDS)
+
+    return False, last_error
+
 
 def send_email(
     to_email: str,
@@ -16,29 +70,9 @@ def send_email(
     html_body: str,
     plain_body: Optional[str] = None
 ) -> bool:
-    """Send email via SendGrid or SMTP fallback. Returns True on success."""
-    if not to_email:
-        logger.warning("No recipient email provided, skipping send")
-        return False
-
-    print(f"[EMAIL] Attempting to send to: {to_email} | Subject: {subject}", flush=True)
-    try:
-        if settings.BREVO_API_KEY:
-            print(f"[EMAIL] Using Brevo", flush=True)
-            return _send_via_brevo(to_email, to_name, subject, html_body, plain_body)
-        elif settings.SENDGRID_API_KEY and not settings.USE_SMTP:
-            print(f"[EMAIL] Using SendGrid", flush=True)
-            return _send_via_sendgrid(to_email, to_name, subject, html_body, plain_body)
-        elif settings.SMTP_USER and settings.SMTP_PASSWORD:
-            print(f"[EMAIL] Using SMTP: {settings.SMTP_HOST}:{settings.SMTP_PORT}", flush=True)
-            return _send_via_smtp(to_email, to_name, subject, html_body, plain_body)
-        else:
-            print(f"[EMAIL SIMULATION] No credentials set - email NOT sent to {to_email}", flush=True)
-            return True
-    except Exception as e:
-        print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}", flush=True)
-        logger.error(f"Email send failed to {to_email}: {e}")
-        return False
+    """Send email via Brevo/SendGrid/SMTP fallback (with retry). Returns True on success."""
+    ok, _ = send_email_verbose(to_email, to_name, subject, html_body, plain_body)
+    return ok
 
 
 def _send_via_brevo(to_email, to_name, subject, html_body, plain_body):

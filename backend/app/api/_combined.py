@@ -407,12 +407,14 @@ def _build_custom_report_data(
         if qualification:
             students = [s for s in students if _qual_match(s.qualification)]
 
-        headers = ["Student ID", "Name", "Campus", "Qualification", "Status", "Compliance", "Hours %"]
+        headers = ["Student ID", "Name", "Campus", "Qualification", "Status", "Course Start Date", "Course End Date", "Compliance", "Hours %"]
         for s in students:
             pct = round(s.completed_hours / s.required_hours * 100, 0) if s.required_hours else 0
             rows_data.append([
                 s.student_id, s.full_name, (s.campus or "").title(),
                 s.qualification or "-", s.status.title(),
+                str(s.course_start_date) if s.course_start_date else "-",
+                str(s.course_end_date) if s.course_end_date else "-",
                 "-",  # compliance computed separately if needed
                 f"{pct:.0f}%",
             ])
@@ -434,12 +436,14 @@ def _build_custom_report_data(
             students = [s for s in students if _qual_match(s.qualification)]
         students = sorted(students, key=lambda s: s.completed_hours / (s.required_hours or 1))
 
-        headers = ["Student ID", "Name", "Campus", "Qualification", "Completed", "Required", "Progress"]
+        headers = ["Student ID", "Name", "Campus", "Qualification", "Course Start Date", "Course End Date", "Completed", "Required", "Progress"]
         for s in students:
             pct = round(s.completed_hours / s.required_hours * 100, 0) if s.required_hours else 0
             rows_data.append([
                 s.student_id, s.full_name, (s.campus or "").title(),
                 s.qualification or "-",
+                str(s.course_start_date) if s.course_start_date else "-",
+                str(s.course_end_date) if s.course_end_date else "-",
                 f"{s.completed_hours:.0f}h", f"{s.required_hours:.0f}h",
                 f"{pct:.0f}%",
             ])

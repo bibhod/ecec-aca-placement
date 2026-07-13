@@ -665,7 +665,7 @@ def send_compliance_reminders(
     current_user: User = Depends(require_admin),
 ):
     """Send reminder emails to all active students who have outstanding compliance documents."""
-    from app.services.email_service import send_email, base_template as _base_template
+    from app.services.email_service import send_email_verbose, base_template as _base_template
     from app.models import Communication
     from app.api.communications import render_auto_template
 
@@ -689,9 +689,11 @@ def send_compliance_reminders(
             student_name=s.full_name, outstanding_list_text=outstanding_list_text,
             submitted_count=submitted_count, total_required=total_required,
         )
-        ok = send_email(s.email, s.full_name, subject, _base_template(body_text))
+        ok, err = send_email_verbose(s.email, s.full_name, subject, _base_template(body_text))
 
-        # Record every attempt in the communications log
+        # Record every attempt in the communications log (including the error
+        # reason on failure, so a failed batch is diagnosable after the fact
+        # without needing application logs).
         comm = Communication(
             student_id=s.id,
             sender_id=current_user.id,
@@ -702,8 +704,10 @@ def send_compliance_reminders(
             body=_strip_html_tags(body_text),
             template_used="compliance_reminder_bulk",
             sent_successfully=ok,
+            error_message=err,
         )
         db.add(comm)
+        db.commit()
 
         if ok:
             sent.append({
@@ -713,9 +717,7 @@ def send_compliance_reminders(
                 "submitted_count": submitted_count,
             })
         else:
-            skipped.append({"student": s.full_name, "reason": "Email send failed"})
-
-    db.commit()
+            skipped.append({"student": s.full_name, "reason": f"Email send failed: {err}"})
 
     return {
         "message": f"Reminders sent to {len(sent)} students, {len(skipped)} skipped",
@@ -792,7 +794,7 @@ def send_hours_reminders(
     current_user: User = Depends(require_admin),
 ):
     """Send 'Hours Log Submission Reminder' emails to students who haven't met their required hours."""
-    from app.services.email_service import send_email, base_template as _base_template
+    from app.services.email_service import send_email_verbose, base_template as _base_template
     from app.models import Communication
     from app.api.communications import render_auto_template
 
@@ -819,7 +821,7 @@ def send_hours_reminders(
             required_hours=f"{required:.0f}", completed_hours=f"{completed:.1f}",
             remaining_hours=f"{remaining:.1f}",
         )
-        ok = send_email(s.email, s.full_name, subject, _base_template(body_text))
+        ok, err = send_email_verbose(s.email, s.full_name, subject, _base_template(body_text))
 
         comm = Communication(
             student_id=s.id,
@@ -831,8 +833,10 @@ def send_hours_reminders(
             body=_strip_html_tags(body_text),
             template_used="hours_log_reminder",
             sent_successfully=ok,
+            error_message=err,
         )
         db.add(comm)
+        db.commit()
 
         if ok:
             sent.append({
@@ -843,9 +847,8 @@ def send_hours_reminders(
                 "remaining_hours": remaining,
             })
         else:
-            skipped.append({"student": s.full_name, "reason": "Email send failed"})
+            skipped.append({"student": s.full_name, "reason": f"Email send failed: {err}"})
 
-    db.commit()
     return {
         "message": f"Hours reminders sent to {len(sent)} students, {len(skipped)} skipped",
         "sent":    sent,
