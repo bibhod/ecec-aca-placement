@@ -317,13 +317,15 @@ export default function ReportsPage() {
                           {isDateCol ? (
                             <button
                               onClick={() => toggleSort(i)}
-                              className="flex items-center gap-1 hover:text-navy"
+                              className="flex items-center gap-1.5 hover:text-navy group"
                               title={`Sort by ${h}`}
                             >
                               {h}
                               {sortCol === i
-                                ? (sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
-                                : <ArrowUpDown size={12} className="text-gray-300" />}
+                                ? (sortDir === 'asc'
+                                    ? <ArrowUp size={15} className="text-cyan" strokeWidth={3} />
+                                    : <ArrowDown size={15} className="text-cyan" strokeWidth={3} />)
+                                : <ArrowUpDown size={15} className="text-gray-500 group-hover:text-navy" strokeWidth={2.5} />}
                             </button>
                           ) : h}
                         </th>
