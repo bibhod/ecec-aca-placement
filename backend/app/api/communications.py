@@ -450,7 +450,7 @@ _AUTOMATED_REMINDER_CATALOG = [
         "template_name": "auto_low_attendance_alert",
     },
     {
-        "name": "Supervisor Feedback Pending",
+        "name": "Trainer/Assessor Feedback Pending",
         "recipients": "Trainer/assessor",
         "frequency": "3, 7, and 14 days after a completed visit with no feedback logged (stops once feedback is entered)",
         "template_name": "auto_supervisor_feedback_pending",
@@ -528,7 +528,7 @@ _AUTOMATED_TEMPLATE_DEFAULTS = {
         ),
     },
     "auto_supervisor_feedback_pending": {
-        "label": "Supervisor Feedback Pending",
+        "label": "Trainer/Assessor Feedback Pending",
         "subject_template": "Feedback Pending ({days_after} days) - {appointment_title}",
         "body_template": (
             "Dear {recipient_name},\n\n"
@@ -628,7 +628,7 @@ def _classify_reminder(template_used: Optional[str]) -> Optional[str]:
         return "Visit Imminent Reminder" if days in (1, 2) else "Visit Advance Reminder"
     m = _FEEDBACK_RE.match(template_used)
     if m:
-        return "Supervisor Feedback Pending"
+        return "Trainer/Assessor Feedback Pending"
     if _MONTHLY_VISIT_RE.match(template_used):
         return "Monthly Visit Reminder"
     return None
