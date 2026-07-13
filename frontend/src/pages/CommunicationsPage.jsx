@@ -197,10 +197,10 @@ export default function CommunicationsPage() {
             <div className="card overflow-x-auto">
               <table className="w-full text-sm table-fixed">
                 <colgroup>
-                  <col className="w-[14%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[52%]" />
-                  <col className="w-[18%]" />
+                  <col className="w-[27%]" />
+                  <col className="w-[27%]" />
+                  <col className="w-[27%]" />
+                  <col className="w-[19%]" />
                 </colgroup>
                 <thead>
                   <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
