@@ -98,7 +98,7 @@ def check_appointment_reminders():
 
                 from app.api.communications import render_auto_template
                 time_label = f"{hours_ahead}-Hour"
-                prep_html = f"<p><strong>Preparation Notes:</strong><br>{appt.preparation_notes}</p>" if appt.preparation_notes else ""
+                prep_text = f"Preparation Notes: {appt.preparation_notes}\n\n" if appt.preparation_notes else ""
 
                 def _send_imminent(recipient_name, recipient_email):
                     subject, body = render_auto_template(
@@ -106,7 +106,7 @@ def check_appointment_reminders():
                         recipient_name=recipient_name, student_name=student.full_name,
                         appointment_title=appt.title, scheduled_date=str(appt.scheduled_date),
                         scheduled_time=appt.scheduled_time, location_type="Onsite",
-                        location_detail=location_detail, preparation_notes_html=prep_html,
+                        location_detail=location_detail, preparation_notes_text=prep_text,
                         time_label=time_label, frontend_url=settings.FRONTEND_URL,
                     )
                     send_email(recipient_email, recipient_name, subject, base_template(body))
@@ -361,7 +361,7 @@ def check_visit_advance_reminders():
                 )
                 location_type = (getattr(appt, "visit_type", "onsite") or "onsite").title()
                 time_label = f"{days_ahead}-Day"
-                prep_html = f"<p><strong>Preparation Notes:</strong><br>{appt.preparation_notes}</p>" if appt.preparation_notes else ""
+                prep_text = f"Preparation Notes: {appt.preparation_notes}\n\n" if appt.preparation_notes else ""
 
                 # --- Write dedup sentinel BEFORE sending to prevent double-send on restart ---
                 _mark_visit_reminder_sent(db, appt, days_ahead)
@@ -373,7 +373,7 @@ def check_visit_advance_reminders():
                         recipient_name=recipient_name, student_name=student.full_name,
                         appointment_title=appt.title, scheduled_date=str(appt.scheduled_date),
                         scheduled_time=appt.scheduled_time or "09:00", location_type=location_type,
-                        location_detail=location_detail, preparation_notes_html=prep_html,
+                        location_detail=location_detail, preparation_notes_text=prep_text,
                         time_label=time_label, frontend_url=settings.FRONTEND_URL,
                     )
                     send_email(recipient_email, recipient_name, subject, base_template(body))

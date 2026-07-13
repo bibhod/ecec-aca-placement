@@ -409,9 +409,9 @@ export default function CommunicationsPage() {
                 onChange={e => setEditingAutoTemplate(t => ({ ...t, template_subject: e.target.value }))} />
             </FormRow>
             <FormRow label="Body Template">
-              <textarea className="input h-56 resize-y font-mono text-xs" value={editingAutoTemplate.template_body}
+              <textarea className="input h-56 resize-y text-sm" value={editingAutoTemplate.template_body}
                 onChange={e => setEditingAutoTemplate(t => ({ ...t, template_body: e.target.value }))} />
-              <p className="text-xs text-gray-400 mt-1">Body supports basic HTML. Placeholders in curly braces (e.g. {'{student_name}'}) are filled in automatically when the email is sent.</p>
+              <p className="text-xs text-gray-400 mt-1">Plain text - leave a blank line between paragraphs. Placeholders in curly braces (e.g. {'{student_name}'}) are filled in automatically when the email is sent.</p>
             </FormRow>
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
               <button onClick={() => setEditingAutoTemplate(null)} className="btn-secondary">Cancel</button>

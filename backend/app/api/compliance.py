@@ -683,10 +683,10 @@ def send_compliance_reminders(
             skipped.append({"student": s.full_name, "reason": "Fully compliant"})
             continue
 
-        outstanding_list_html = "".join(f"<li>{item}</li>" for item in outstanding_labels)
+        outstanding_list_text = "\n".join(f"- {item}" for item in outstanding_labels)
         subject, body_text = render_auto_template(
             db, "auto_compliance_bulk",
-            student_name=s.full_name, outstanding_list_html=outstanding_list_html,
+            student_name=s.full_name, outstanding_list_text=outstanding_list_text,
             submitted_count=submitted_count, total_required=total_required,
         )
         ok = send_email(s.email, s.full_name, subject, _base_template(body_text))

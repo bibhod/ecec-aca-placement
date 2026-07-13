@@ -487,97 +487,91 @@ class _SafeFormatDict(dict):
 
 _AUTOMATED_TEMPLATE_DEFAULTS = {
     "auto_appointment_reminder": {
-        "label": "Visit/Appointment Reminder Email",
+        "label": "Appointment Reminder",
         "subject_template": "{time_label} Reminder: {appointment_title}",
         "body_template": (
-            "<h2>Appointment Reminder</h2>"
-            "<p>Dear {recipient_name},</p>"
-            "<p>This is a reminder that you have an upcoming appointment in <strong>{time_label}</strong>.</p>"
-            "<div class=\"highlight\"><table>"
-            "<tr><th>Student</th><td>{student_name}</td></tr>"
-            "<tr><th>Appointment</th><td>{appointment_title}</td></tr>"
-            "<tr><th>Date</th><td>{scheduled_date}</td></tr>"
-            "<tr><th>Time</th><td>{scheduled_time}</td></tr>"
-            "<tr><th>Format</th><td>{location_type}</td></tr>"
-            "<tr><th>Location</th><td>{location_detail}</td></tr>"
-            "</table></div>"
-            "{preparation_notes_html}"
-            "<a href=\"{frontend_url}/appointments\" class=\"btn\">View in Portal</a>"
-            "<p style=\"margin-top:24px\">If you need to reschedule, please contact your coordinator as soon as possible.</p>"
+            "Dear {recipient_name},\n\n"
+            "This is a reminder that you have an upcoming appointment in {time_label}.\n\n"
+            "Student: {student_name}\n"
+            "Appointment: {appointment_title}\n"
+            "Date: {scheduled_date}\n"
+            "Time: {scheduled_time}\n"
+            "Format: {location_type}\n"
+            "Location: {location_detail}\n"
+            "{preparation_notes_text}"
+            "You can view this appointment in the portal at {frontend_url}/appointments.\n\n"
+            "If you need to reschedule, please contact your coordinator as soon as possible."
         ),
     },
     "auto_compliance_expiry": {
-        "label": "Compliance Document Expiring",
+        "label": "Compliance Document Expiring Soon",
         "subject_template": "Compliance Document Expiring Soon: {doc_label}",
         "body_template": (
-            "<h2>Compliance Document Expiring Soon</h2>"
-            "<p>Dear {student_name},</p>"
-            "<p>Please note that your <strong>{doc_label}</strong> is expiring in <strong>{days_until_expiry} days</strong> (on {expiry_date}).</p>"
-            "<div class=\"highlight\"><table>"
-            "<tr><th>Document</th><td>{doc_label}</td></tr>"
-            "<tr><th>Expiry Date</th><td>{expiry_date}</td></tr>"
-            "<tr><th>Days Remaining</th><td>{days_until_expiry} days</td></tr>"
-            "</table></div>"
-            "<p>Please arrange renewal of this document as soon as possible so your placement is not affected. If you have any questions, contact your coordinator.</p>"
-            "<a href=\"{frontend_url}/compliance\" class=\"btn\">View Compliance in Portal</a>"
+            "Dear {student_name},\n\n"
+            "Please note that your {doc_label} is expiring in {days_until_expiry} days (on {expiry_date}).\n\n"
+            "Document: {doc_label}\n"
+            "Expiry Date: {expiry_date}\n"
+            "Days Remaining: {days_until_expiry} days\n\n"
+            "Please arrange renewal of this document as soon as possible so your placement is not affected. "
+            "If you have any questions, contact your coordinator."
         ),
     },
     "auto_low_attendance_alert": {
         "label": "Low Attendance Alert",
         "subject_template": "Low Attendance Alert - Your Placement Hours",
         "body_template": (
-            "<h2>Low Attendance Alert</h2>"
-            "<p>Dear {student_name},</p>"
-            "<p>You have completed only <strong>{completed_hours} / {required_hours} hours ({pct}%)</strong> of your required "
-            "placement hours, with your placement ending on <strong>{placement_end_date}</strong>.</p>"
-            "<p>Please log your placement hours as soon as possible, or contact your coordinator if you need support to "
-            "complete your remaining hours in time.</p>"
+            "Dear {student_name},\n\n"
+            "You have completed only {completed_hours} / {required_hours} hours ({pct}%) of your required placement "
+            "hours, with your placement ending on {placement_end_date}.\n\n"
+            "Please log your placement hours as soon as possible, or contact your coordinator if you need support to "
+            "complete your remaining hours in time."
         ),
     },
     "auto_supervisor_feedback_pending": {
         "label": "Supervisor Feedback Pending",
         "subject_template": "Feedback Pending ({days_after} days) - {appointment_title}",
         "body_template": (
-            "<h2>Supervisor Feedback Pending</h2>"
-            "<p>Dear {recipient_name},</p>"
-            "<p>The appointment <strong>{appointment_title}</strong>{student_clause} was completed on {scheduled_date} "
-            "({days_after}+ days ago) but no feedback has been recorded.</p>"
-            "<p>Please log feedback in the portal at your earliest convenience.</p>"
+            "Dear {recipient_name},\n\n"
+            "The appointment {appointment_title}{student_clause} was completed on {scheduled_date} "
+            "({days_after}+ days ago) but no feedback has been recorded.\n\n"
+            "Please log feedback in the portal at your earliest convenience."
         ),
     },
     "auto_hours_log_reminder": {
         "label": "Placement Hours Log Reminder",
         "subject_template": "Reminder: Please Submit Your Placement Hours Log",
         "body_template": (
-            "<h2>Placement Hours Log Reminder</h2>"
-            "<p>Dear {student_name},</p>"
-            "<p>This is a reminder that your placement hours are still outstanding and need to be submitted and kept up to date.</p>"
-            "<div class=\"highlight\"><table>"
-            "<tr><th>Qualification</th><td>{qualification}</td></tr>"
-            "<tr><th>Required Hours</th><td>{required_hours} hours</td></tr>"
-            "<tr><th>Completed Hours</th><td>{completed_hours} hours</td></tr>"
-            "<tr><th>Remaining Hours</th><td>{remaining_hours} hours</td></tr>"
-            "</table></div>"
-            "<p>Please ensure you are submitting your placement hours log regularly so your coordinator can track your "
-            "progress and support your completion.</p>"
-            "<p>If you have recently completed placement hours that have not yet been recorded, please contact your "
-            "coordinator to update your records as soon as possible.</p>"
+            "Dear {student_name},\n\n"
+            "This is a reminder that your placement hours are still outstanding and need to be submitted and kept up to date.\n\n"
+            "Qualification: {qualification}\n"
+            "Required Hours: {required_hours} hours\n"
+            "Completed Hours: {completed_hours} hours\n"
+            "Remaining Hours: {remaining_hours} hours\n\n"
+            "Please ensure you are submitting your placement hours log regularly so your coordinator can track your "
+            "progress and support your completion.\n\n"
+            "If you have recently completed placement hours that have not yet been recorded, please contact your "
+            "coordinator to update your records as soon as possible."
         ),
     },
     "auto_compliance_bulk": {
-        "label": "Compliance Documents Reminder (Bulk)",
+        "label": "Compliance Documents Reminder",
         "subject_template": "Action Required: Outstanding Compliance Documents",
         "body_template": (
-            "<h2>Compliance Documents Reminder</h2>"
-            "<p>Dear {student_name},</p>"
-            "<p>This is a reminder that the following compliance documents are still outstanding for your work placement:</p>"
-            "<div class=\"highlight\"><ul>{outstanding_list_html}</ul></div>"
-            "<p>You currently have <strong>{submitted_count} of {total_required}</strong> required documents submitted.</p>"
-            "<p>Please submit the outstanding documents as soon as possible to ensure your placement is not affected.</p>"
-            "<p>If you have any questions, please contact your coordinator.</p>"
+            "Dear {student_name},\n\n"
+            "This is a reminder that the following compliance documents are still outstanding for your work placement:\n\n"
+            "{outstanding_list_text}\n\n"
+            "You currently have {submitted_count} of {total_required} required documents submitted.\n\n"
+            "Please submit the outstanding documents as soon as possible to ensure your placement is not affected.\n\n"
+            "If you have any questions, please contact your coordinator."
         ),
     },
 }
+
+
+def _text_to_html_paragraphs(text: str) -> str:
+    """Turn a plain-text template body (blank-line-separated paragraphs) into simple HTML for sending."""
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", (text or "").strip()) if p.strip()]
+    return "".join(f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs)
 
 
 def _get_auto_template(db: Session, name: str) -> EmailTemplate:
@@ -598,12 +592,18 @@ def _get_auto_template(db: Session, name: str) -> EmailTemplate:
 
 
 def render_auto_template(db: Session, name: str, **template_vars) -> "tuple[str, str]":
-    """Render an automated reminder's (editable) subject/body against the given variables."""
+    """
+    Render an automated reminder's (plain-text, editable) subject/body against the given
+    variables, and return (subject, html_body) - html_body is ready to pass straight into
+    base_template() for sending. The stored template itself stays plain text so it's easy
+    to read and edit in the UI.
+    """
     t = _get_auto_template(db, name)
     safe = _SafeFormatDict({k: ("" if v is None else v) for k, v in template_vars.items()})
     subject = t.subject_template.format_map(safe)
-    body = t.body_template.format_map(safe)
-    return subject, body
+    plain_body = t.body_template.format_map(safe)
+    html_body = f"<h2>{t.label}</h2>" + _text_to_html_paragraphs(plain_body)
+    return subject, html_body
 
 _REMINDER_LABELS = {
     "hours_log_reminder": "Placement Hours Log Reminder",

@@ -426,7 +426,7 @@ def send_reminder(
     from app.config import settings
     from app.services.email_service import send_email, base_template
     from app.api.communications import render_auto_template
-    prep_html = f"<p><strong>Preparation Notes:</strong><br>{a.preparation_notes}</p>" if a.preparation_notes else ""
+    prep_text = f"Preparation Notes: {a.preparation_notes}\n\n" if a.preparation_notes else ""
 
     for name, email_addr in [
         (student.full_name if student else None, student.email if student else None),
@@ -439,7 +439,7 @@ def send_reminder(
                     recipient_name=name, student_name=student.full_name if student else "",
                     appointment_title=a.title, scheduled_date=str(a.scheduled_date),
                     scheduled_time=a.scheduled_time, location_type="Onsite",
-                    location_detail=location, preparation_notes_html=prep_html,
+                    location_detail=location, preparation_notes_text=prep_text,
                     time_label=f"{days}-Day" if days > 0 else "Upcoming",
                     frontend_url=settings.FRONTEND_URL,
                 )
