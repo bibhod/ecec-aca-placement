@@ -122,9 +122,17 @@ def check_appointment_reminders():
                 if student.email:
                     _send_imminent(student.full_name, student.email)
 
-                # Email supervisor
+                # Email supervisor - uses its own externally-facing template, not the
+                # student/trainer one (no portal link, no "your coordinator" phrasing).
                 if centre and centre.supervisor_email:
-                    _send_imminent(centre.supervisor_name or "Supervisor", centre.supervisor_email)
+                    sup_subject, sup_body = render_auto_template(
+                        db, "auto_appointment_reminder_supervisor",
+                        recipient_name=centre.supervisor_name or "Supervisor",
+                        student_name=student.full_name, appointment_title=appt.title,
+                        scheduled_date=str(appt.scheduled_date), scheduled_time=appt.scheduled_time,
+                        location_detail=location_detail, time_label=time_label,
+                    )
+                    send_email(centre.supervisor_email, centre.supervisor_name or "Supervisor", sup_subject, base_template(sup_body))
 
                 _mark_visit_reminder_sent(db, appt, days_ahead)
                 setattr(appt, flag_field, True)

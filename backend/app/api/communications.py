@@ -433,9 +433,15 @@ _AUTOMATED_REMINDER_CATALOG = [
     },
     {
         "name": "Visit Imminent Reminder",
-        "recipients": "Student, trainer/assessor, site supervisor",
+        "recipients": "Student, trainer/assessor",
         "frequency": "48 hours and 24 hours before each scheduled appointment",
         "template_name": "auto_appointment_reminder",
+    },
+    {
+        "name": "Visit Imminent Reminder (Site Supervisor)",
+        "recipients": "Site supervisor (placement centre contact)",
+        "frequency": "48 hours and 24 hours before each scheduled appointment",
+        "template_name": "auto_appointment_reminder_supervisor",
     },
     {
         "name": "Compliance Document Expiring",
@@ -501,6 +507,22 @@ _AUTOMATED_TEMPLATE_DEFAULTS = {
             "{preparation_notes_text}"
             "You can view this appointment in the portal at {frontend_url}/appointments.\n\n"
             "If you need to reschedule, please contact your coordinator as soon as possible."
+        ),
+    },
+    "auto_appointment_reminder_supervisor": {
+        "label": "Visit Reminder - Site Supervisor",
+        "subject_template": "{time_label} Reminder: Trainer/Assessor Visit for {student_name}",
+        "body_template": (
+            "Dear {recipient_name},\n\n"
+            "This is a reminder that a Trainer/Assessor is scheduled to visit your centre in {time_label} "
+            "as part of a work placement assessment.\n\n"
+            "Student: {student_name}\n"
+            "Visit: {appointment_title}\n"
+            "Date: {scheduled_date}\n"
+            "Time: {scheduled_time}\n"
+            "Location: {location_detail}\n\n"
+            "Please ensure the student is available and a suitable space is arranged for the visit.\n\n"
+            "If you have any questions or need to reschedule, please contact the placement team at Academies Australasia."
         ),
     },
     "auto_compliance_expiry": {
