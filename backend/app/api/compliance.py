@@ -14,7 +14,7 @@ commencing work placement):
   5. National Child Safety Training (Geccko) - Education and Care Services
      National Law Act 2010, s.162B
 """
-import os, uuid, shutil
+import os, uuid, shutil, re
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -30,6 +30,12 @@ from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
 
 router = APIRouter()
+
+
+def _strip_html_tags(html: str) -> str:
+    """Plain-text rendering of a rendered HTML email body, for the Communication log preview."""
+    text = re.sub(r"<[^>]+>", " ", html or "")
+    return re.sub(r"\s+", " ", text).strip()
 
 # Directory for uploaded compliance files
 UPLOAD_DIR = "uploads/compliance"
@@ -659,8 +665,9 @@ def send_compliance_reminders(
     current_user: User = Depends(require_admin),
 ):
     """Send reminder emails to all active students who have outstanding compliance documents."""
-    from app.services.email_service import send_email, _base_template
+    from app.services.email_service import send_email, base_template as _base_template
     from app.models import Communication
+    from app.api.communications import render_auto_template
 
     students_list = db.query(Student).filter(Student.status == "current").all()
     sent, skipped = [], []
@@ -677,28 +684,12 @@ def send_compliance_reminders(
             continue
 
         outstanding_list_html = "".join(f"<li>{item}</li>" for item in outstanding_labels)
-        outstanding_list_txt = "\n".join(f"  - {item}" for item in outstanding_labels)
-        subject = "Action Required: Outstanding Compliance Documents"
-        body_text = (
-            f"Dear {s.full_name},\n\n"
-            f"This is a reminder that the following compliance documents are still outstanding "
-            f"for your work placement:\n\n{outstanding_list_txt}\n\n"
-            f"You currently have {submitted_count} of {total_required} required documents submitted.\n\n"
-            "Please submit the outstanding documents as soon as possible to ensure your placement "
-            "is not affected.\n\nIf you have any questions, please contact your coordinator."
+        subject, body_text = render_auto_template(
+            db, "auto_compliance_bulk",
+            student_name=s.full_name, outstanding_list_html=outstanding_list_html,
+            submitted_count=submitted_count, total_required=total_required,
         )
-        html_content = f"""
-<h2>Compliance Documents Reminder</h2>
-<p>Dear {s.full_name},</p>
-<p>This is a reminder that the following compliance documents are still outstanding for your work placement:</p>
-<div class="highlight">
-  <ul>{outstanding_list_html}</ul>
-</div>
-<p>You currently have <strong>{submitted_count} of {total_required}</strong> required documents submitted.</p>
-<p>Please submit the outstanding documents as soon as possible to ensure your placement is not affected.</p>
-<p>If you have any questions, please contact your coordinator.</p>
-"""
-        ok = send_email(s.email, s.full_name, subject, _base_template(html_content))
+        ok = send_email(s.email, s.full_name, subject, _base_template(body_text))
 
         # Record every attempt in the communications log
         comm = Communication(
@@ -708,7 +699,7 @@ def send_compliance_reminders(
             recipient_name=s.full_name,
             message_type="email",
             subject=subject,
-            body=body_text,
+            body=_strip_html_tags(body_text),
             template_used="compliance_reminder_bulk",
             sent_successfully=ok,
         )
@@ -801,8 +792,9 @@ def send_hours_reminders(
     current_user: User = Depends(require_admin),
 ):
     """Send 'Hours Log Submission Reminder' emails to students who haven't met their required hours."""
-    from app.services.email_service import send_email, _base_template
+    from app.services.email_service import send_email, base_template as _base_template
     from app.models import Communication
+    from app.api.communications import render_auto_template
 
     students_list = db.query(Student).filter(Student.status == "current").all()
     sent, skipped = [], []
@@ -821,36 +813,13 @@ def send_hours_reminders(
             skipped.append({"student": s.full_name, "reason": "Hours requirement met"})
             continue
 
-        subject = "Reminder: Please Submit Your Placement Hours Log"
-        body_text = (
-            f"Dear {s.full_name},\n\n"
-            f"This is a reminder that your placement hours are still outstanding.\n\n"
-            f"  Qualification:   {qual_label}\n"
-            f"  Required Hours:  {required:.0f} h\n"
-            f"  Completed Hours: {completed:.1f} h\n"
-            f"  Remaining Hours: {remaining:.1f} h\n\n"
-            f"Please ensure you are submitting your placement hours log regularly so your "
-            f"coordinator can track your progress.\n\n"
-            f"If you have recently completed placement hours that have not been recorded, "
-            f"please contact your coordinator to update your records as soon as possible."
+        subject, body_text = render_auto_template(
+            db, "auto_hours_log_reminder",
+            student_name=s.full_name, qualification=qual_label,
+            required_hours=f"{required:.0f}", completed_hours=f"{completed:.1f}",
+            remaining_hours=f"{remaining:.1f}",
         )
-        rem_color = "red" if remaining > required * 0.5 else "darkorange"
-        html_content = f"""
-<h2>Placement Hours Log Reminder</h2>
-<p>Dear {s.full_name},</p>
-<p>This is a reminder that your placement hours are still outstanding and need to be submitted and kept up to date.</p>
-<div class="highlight">
-  <table>
-    <tr><th>Qualification</th><td>{qual_label}</td></tr>
-    <tr><th>Required Hours</th><td>{required:.0f} hours</td></tr>
-    <tr><th>Completed Hours</th><td>{completed:.1f} hours</td></tr>
-    <tr><th>Remaining Hours</th><td style="color:{rem_color};font-weight:bold">{remaining:.1f} hours</td></tr>
-  </table>
-</div>
-<p>Please ensure you are submitting your placement hours log regularly so your coordinator can track your progress and support your completion.</p>
-<p>If you have recently completed placement hours that have not yet been recorded, please contact your coordinator to update your records as soon as possible.</p>
-"""
-        ok = send_email(s.email, s.full_name, subject, _base_template(html_content))
+        ok = send_email(s.email, s.full_name, subject, _base_template(body_text))
 
         comm = Communication(
             student_id=s.id,
@@ -859,7 +828,7 @@ def send_hours_reminders(
             recipient_name=s.full_name,
             message_type="email",
             subject=subject,
-            body=body_text,
+            body=_strip_html_tags(body_text),
             template_used="hours_log_reminder",
             sent_successfully=ok,
         )

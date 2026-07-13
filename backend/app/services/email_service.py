@@ -154,7 +154,7 @@ def _base_template(content: str) -> str:
       <p class="tagline">ECEC Work Placement Management System</p>
     </div>
     <div class="header-banner">
-      <p>Early Childhood Education &amp; Care &mdash; Work Placement Portal</p>
+      <p>Early Childhood Education &amp; Care - Work Placement Portal</p>
     </div>
   </div>
   <div class="body">{content}</div>
@@ -163,7 +163,7 @@ def _base_template(content: str) -> str:
     <p class="footer-address">
       Level 6, 505 George Street, Sydney NSW 2000<br>
       T: <a href="tel:+61292245500">+61 2 9224 5500</a><br>
-      E: <a href="mailto:info@academies.edu.au">info@academies.edu.au</a> &nbsp;&bull;&nbsp;
+      E: <a href="mailto:childcare@academies.edu.au">childcare@academies.edu.au</a> &nbsp;&bull;&nbsp;
       W: <a href="https://www.academies.edu.au">www.academies.edu.au</a>
     </p>
     <hr class="footer-divider">

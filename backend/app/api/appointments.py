@@ -423,17 +423,27 @@ def send_reminder(
     days = (a.scheduled_date - date.today()).days
     sent = []
 
+    from app.config import settings
+    from app.services.email_service import send_email, base_template
+    from app.api.communications import render_auto_template
+    prep_html = f"<p><strong>Preparation Notes:</strong><br>{a.preparation_notes}</p>" if a.preparation_notes else ""
+
     for name, email_addr in [
         (student.full_name if student else None, student.email if student else None),
         (ta.full_name if ta else None, ta.email if ta else None),
     ]:
         if email_addr:
             try:
-                email_appointment_reminder(
-                    name, email_addr, student.full_name if student else "",
-                    a.title, str(a.scheduled_date), a.scheduled_time,
-                    "onsite", location, a.preparation_notes or "", days * 24, "",
+                subject, body = render_auto_template(
+                    db, "auto_appointment_reminder",
+                    recipient_name=name, student_name=student.full_name if student else "",
+                    appointment_title=a.title, scheduled_date=str(a.scheduled_date),
+                    scheduled_time=a.scheduled_time, location_type="Onsite",
+                    location_detail=location, preparation_notes_html=prep_html,
+                    time_label=f"{days}-Day" if days > 0 else "Upcoming",
+                    frontend_url=settings.FRONTEND_URL,
                 )
+                send_email(email_addr, name, subject, base_template(body))
                 sent.append(email_addr)
             except Exception as e:
                 logger.error(f"Reminder email failed: {e}")

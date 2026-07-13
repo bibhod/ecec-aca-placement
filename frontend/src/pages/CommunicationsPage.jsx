@@ -24,6 +24,8 @@ export default function CommunicationsPage() {
   const [tab, setTab] = useState('log') // 'log' | 'reminders'
   const [reminderCatalog, setReminderCatalog] = useState([])
   const [reminderSummary, setReminderSummary] = useState([])
+  const [editingAutoTemplate, setEditingAutoTemplate] = useState(null)
+  const [savingAutoTemplate, setSavingAutoTemplate] = useState(false)
 
   // Email modal
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -130,6 +132,22 @@ export default function CommunicationsPage() {
     } finally { setSavingTemplate(false) }
   }
 
+  const saveAutoTemplate = async () => {
+    if (!editingAutoTemplate) return
+    setSavingAutoTemplate(true)
+    try {
+      await api.put(`/communications/templates/${editingAutoTemplate.template_id}`, {
+        subject_template: editingAutoTemplate.template_subject,
+        body_template: editingAutoTemplate.template_body,
+      })
+      toast.success('Reminder template saved')
+      setEditingAutoTemplate(null)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Save failed')
+    } finally { setSavingAutoTemplate(false) }
+  }
+
   const handleStudentEmailSelect = (v) => {
     const s = students.find(x => x.id === v)
     setEmailForm(f => ({ ...f, student_id: v, recipient_email: s?.email || '', recipient_name: s?.full_name || '' }))
@@ -182,7 +200,8 @@ export default function CommunicationsPage() {
                   <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
                     <th className="pb-2 pr-4">Reminder</th>
                     <th className="pb-2 pr-4">Recipients</th>
-                    <th className="pb-2">Frequency</th>
+                    <th className="pb-2 pr-4">Frequency</th>
+                    <th className="pb-2">Template</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -190,7 +209,12 @@ export default function CommunicationsPage() {
                     <tr key={i} className="border-t border-gray-100">
                       <td className="py-2.5 pr-4 font-medium text-gray-900 whitespace-nowrap">{r.name}</td>
                       <td className="py-2.5 pr-4 text-gray-600 whitespace-nowrap">{r.recipients}</td>
-                      <td className="py-2.5 text-gray-600">{r.frequency}</td>
+                      <td className="py-2.5 pr-4 text-gray-600">{r.frequency}</td>
+                      <td className="py-2.5">
+                        <button onClick={() => setEditingAutoTemplate({ ...r })} className="btn-secondary text-xs py-1 px-2.5 whitespace-nowrap">
+                          <Edit2 size={12} /> Edit
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -363,6 +387,36 @@ export default function CommunicationsPage() {
               <button onClick={() => setEditingTemplate(null)} className="btn-secondary">Cancel</button>
               <button onClick={saveTemplate} disabled={savingTemplate} className="btn-primary">
                 <Check size={15} />{savingTemplate ? 'Saving…' : 'Save Template'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+      {/* ── Edit Automated Reminder Template Modal ──────────────────────────── */}
+      <Modal open={!!editingAutoTemplate} onClose={() => setEditingAutoTemplate(null)}
+        title={editingAutoTemplate ? `Edit Template - ${editingAutoTemplate.name}` : 'Edit Template'} size="lg">
+        {editingAutoTemplate && (
+          <div className="space-y-4">
+            {reminderCatalog.filter(r => r.template_name === editingAutoTemplate.template_name && r.name !== editingAutoTemplate.name).length > 0 && (
+              <p className="text-xs text-gray-500 bg-blue-50 rounded-lg px-3 py-2">
+                This template is shared - it also sends for: {reminderCatalog
+                  .filter(r => r.template_name === editingAutoTemplate.template_name && r.name !== editingAutoTemplate.name)
+                  .map(r => r.name).join(', ')}
+              </p>
+            )}
+            <FormRow label="Subject Template">
+              <input className="input" value={editingAutoTemplate.template_subject}
+                onChange={e => setEditingAutoTemplate(t => ({ ...t, template_subject: e.target.value }))} />
+            </FormRow>
+            <FormRow label="Body Template">
+              <textarea className="input h-56 resize-y font-mono text-xs" value={editingAutoTemplate.template_body}
+                onChange={e => setEditingAutoTemplate(t => ({ ...t, template_body: e.target.value }))} />
+              <p className="text-xs text-gray-400 mt-1">Body supports basic HTML. Placeholders in curly braces (e.g. {'{student_name}'}) are filled in automatically when the email is sent.</p>
+            </FormRow>
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <button onClick={() => setEditingAutoTemplate(null)} className="btn-secondary">Cancel</button>
+              <button onClick={saveAutoTemplate} disabled={savingAutoTemplate} className="btn-primary">
+                <Check size={15} />{savingAutoTemplate ? 'Saving…' : 'Save Template'}
               </button>
             </div>
           </div>

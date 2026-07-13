@@ -428,44 +428,182 @@ _AUTOMATED_REMINDER_CATALOG = [
     {
         "name": "Visit Advance Reminder",
         "recipients": "Student, trainer/assessor",
-        "frequency": "14, 7, 3, and 1 day before each scheduled appointment",
+        "frequency": "14 and 7 days before each scheduled appointment (3-day and 1-day notice are covered by Visit Imminent Reminder below)",
+        "template_name": "auto_appointment_reminder",
     },
     {
         "name": "Visit Imminent Reminder",
         "recipients": "Student, trainer/assessor, site supervisor",
         "frequency": "48 hours and 24 hours before each scheduled appointment",
+        "template_name": "auto_appointment_reminder",
     },
     {
         "name": "Compliance Document Expiring",
         "recipients": "Student",
         "frequency": "30-day notice before a compliance document expires",
+        "template_name": "auto_compliance_expiry",
     },
     {
         "name": "Low Attendance Alert",
         "recipients": "Student",
         "frequency": "Checked daily - sent when hours completed are under 50% with under 30 days left in placement",
+        "template_name": "auto_low_attendance_alert",
     },
     {
         "name": "Supervisor Feedback Pending",
         "recipients": "Trainer/assessor",
         "frequency": "3, 7, and 14 days after a completed visit with no feedback logged (stops once feedback is entered)",
+        "template_name": "auto_supervisor_feedback_pending",
     },
     {
         "name": "Placement Hours Log Reminder",
         "recipients": "Student",
         "frequency": "Fortnightly (every 14 days), to any student behind on required placement hours",
+        "template_name": "auto_hours_log_reminder",
     },
     {
         "name": "Monthly Visit Reminder",
         "recipients": "Student, trainer/assessor",
         "frequency": "1st of each month, for any visit scheduled in the next 30 days",
+        "template_name": "auto_appointment_reminder",
     },
     {
         "name": "Compliance Documents Reminder (Bulk)",
         "recipients": "Student",
         "frequency": "1st of each month, to any student missing compliance documents",
+        "template_name": "auto_compliance_bulk",
     },
 ]
+
+# Note: Visit Advance Reminder, Visit Imminent Reminder, and Monthly Visit
+# Reminder all render through the same underlying "auto_appointment_reminder"
+# template (they share one code path) - editing it updates the email content
+# for all three.
+
+class _SafeFormatDict(dict):
+    def __missing__(self, key):
+        return ""
+
+
+_AUTOMATED_TEMPLATE_DEFAULTS = {
+    "auto_appointment_reminder": {
+        "label": "Visit/Appointment Reminder Email",
+        "subject_template": "{time_label} Reminder: {appointment_title}",
+        "body_template": (
+            "<h2>Appointment Reminder</h2>"
+            "<p>Dear {recipient_name},</p>"
+            "<p>This is a reminder that you have an upcoming appointment in <strong>{time_label}</strong>.</p>"
+            "<div class=\"highlight\"><table>"
+            "<tr><th>Student</th><td>{student_name}</td></tr>"
+            "<tr><th>Appointment</th><td>{appointment_title}</td></tr>"
+            "<tr><th>Date</th><td>{scheduled_date}</td></tr>"
+            "<tr><th>Time</th><td>{scheduled_time}</td></tr>"
+            "<tr><th>Format</th><td>{location_type}</td></tr>"
+            "<tr><th>Location</th><td>{location_detail}</td></tr>"
+            "</table></div>"
+            "{preparation_notes_html}"
+            "<a href=\"{frontend_url}/appointments\" class=\"btn\">View in Portal</a>"
+            "<p style=\"margin-top:24px\">If you need to reschedule, please contact your coordinator as soon as possible.</p>"
+        ),
+    },
+    "auto_compliance_expiry": {
+        "label": "Compliance Document Expiring",
+        "subject_template": "Compliance Document Expiring Soon: {doc_label}",
+        "body_template": (
+            "<h2>Compliance Document Expiring Soon</h2>"
+            "<p>Dear {student_name},</p>"
+            "<p>Please note that your <strong>{doc_label}</strong> is expiring in <strong>{days_until_expiry} days</strong> (on {expiry_date}).</p>"
+            "<div class=\"highlight\"><table>"
+            "<tr><th>Document</th><td>{doc_label}</td></tr>"
+            "<tr><th>Expiry Date</th><td>{expiry_date}</td></tr>"
+            "<tr><th>Days Remaining</th><td>{days_until_expiry} days</td></tr>"
+            "</table></div>"
+            "<p>Please arrange renewal of this document as soon as possible so your placement is not affected. If you have any questions, contact your coordinator.</p>"
+            "<a href=\"{frontend_url}/compliance\" class=\"btn\">View Compliance in Portal</a>"
+        ),
+    },
+    "auto_low_attendance_alert": {
+        "label": "Low Attendance Alert",
+        "subject_template": "Low Attendance Alert - Your Placement Hours",
+        "body_template": (
+            "<h2>Low Attendance Alert</h2>"
+            "<p>Dear {student_name},</p>"
+            "<p>You have completed only <strong>{completed_hours} / {required_hours} hours ({pct}%)</strong> of your required "
+            "placement hours, with your placement ending on <strong>{placement_end_date}</strong>.</p>"
+            "<p>Please log your placement hours as soon as possible, or contact your coordinator if you need support to "
+            "complete your remaining hours in time.</p>"
+        ),
+    },
+    "auto_supervisor_feedback_pending": {
+        "label": "Supervisor Feedback Pending",
+        "subject_template": "Feedback Pending ({days_after} days) - {appointment_title}",
+        "body_template": (
+            "<h2>Supervisor Feedback Pending</h2>"
+            "<p>Dear {recipient_name},</p>"
+            "<p>The appointment <strong>{appointment_title}</strong>{student_clause} was completed on {scheduled_date} "
+            "({days_after}+ days ago) but no feedback has been recorded.</p>"
+            "<p>Please log feedback in the portal at your earliest convenience.</p>"
+        ),
+    },
+    "auto_hours_log_reminder": {
+        "label": "Placement Hours Log Reminder",
+        "subject_template": "Reminder: Please Submit Your Placement Hours Log",
+        "body_template": (
+            "<h2>Placement Hours Log Reminder</h2>"
+            "<p>Dear {student_name},</p>"
+            "<p>This is a reminder that your placement hours are still outstanding and need to be submitted and kept up to date.</p>"
+            "<div class=\"highlight\"><table>"
+            "<tr><th>Qualification</th><td>{qualification}</td></tr>"
+            "<tr><th>Required Hours</th><td>{required_hours} hours</td></tr>"
+            "<tr><th>Completed Hours</th><td>{completed_hours} hours</td></tr>"
+            "<tr><th>Remaining Hours</th><td>{remaining_hours} hours</td></tr>"
+            "</table></div>"
+            "<p>Please ensure you are submitting your placement hours log regularly so your coordinator can track your "
+            "progress and support your completion.</p>"
+            "<p>If you have recently completed placement hours that have not yet been recorded, please contact your "
+            "coordinator to update your records as soon as possible.</p>"
+        ),
+    },
+    "auto_compliance_bulk": {
+        "label": "Compliance Documents Reminder (Bulk)",
+        "subject_template": "Action Required: Outstanding Compliance Documents",
+        "body_template": (
+            "<h2>Compliance Documents Reminder</h2>"
+            "<p>Dear {student_name},</p>"
+            "<p>This is a reminder that the following compliance documents are still outstanding for your work placement:</p>"
+            "<div class=\"highlight\"><ul>{outstanding_list_html}</ul></div>"
+            "<p>You currently have <strong>{submitted_count} of {total_required}</strong> required documents submitted.</p>"
+            "<p>Please submit the outstanding documents as soon as possible to ensure your placement is not affected.</p>"
+            "<p>If you have any questions, please contact your coordinator.</p>"
+        ),
+    },
+}
+
+
+def _get_auto_template(db: Session, name: str) -> EmailTemplate:
+    """Fetch the editable template row for an automated reminder, auto-seeding a default the first time."""
+    t = db.query(EmailTemplate).filter(EmailTemplate.name == name).first()
+    if not t:
+        defaults = _AUTOMATED_TEMPLATE_DEFAULTS[name]
+        t = EmailTemplate(
+            name=name, label=defaults["label"],
+            subject_template=defaults["subject_template"],
+            body_template=defaults["body_template"],
+            is_active=True,
+        )
+        db.add(t)
+        db.commit()
+        db.refresh(t)
+    return t
+
+
+def render_auto_template(db: Session, name: str, **template_vars) -> "tuple[str, str]":
+    """Render an automated reminder's (editable) subject/body against the given variables."""
+    t = _get_auto_template(db, name)
+    safe = _SafeFormatDict({k: ("" if v is None else v) for k, v in template_vars.items()})
+    subject = t.subject_template.format_map(safe)
+    body = t.body_template.format_map(safe)
+    return subject, body
 
 _REMINDER_LABELS = {
     "hours_log_reminder": "Placement Hours Log Reminder",
@@ -498,10 +636,29 @@ def _classify_reminder(template_used: Optional[str]) -> Optional[str]:
 
 @router.get("/reminder-catalog")
 def get_reminder_catalog(
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Static list of every automated reminder email and how often it's sent."""
-    return {"reminders": _AUTOMATED_REMINDER_CATALOG}
+    """
+    List of every automated reminder email, how often it's sent, and the
+    editable template behind it (auto-seeding a default template row the
+    first time each one is requested).
+    """
+    template_cache = {}
+    reminders = []
+    for entry in _AUTOMATED_REMINDER_CATALOG:
+        tname = entry["template_name"]
+        if tname not in template_cache:
+            template_cache[tname] = _get_auto_template(db, tname)
+        t = template_cache[tname]
+        reminders.append({
+            **entry,
+            "template_id": t.id,
+            "template_label": t.label,
+            "template_subject": t.subject_template,
+            "template_body": t.body_template,
+        })
+    return {"reminders": reminders}
 
 
 @router.get("/reminder-summary")

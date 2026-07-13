@@ -2,7 +2,7 @@
 Background scheduler (APScheduler) - runs automated email alerts.
 
 Automated reminders:
-  1. Upcoming work placement visits - 14/7/3/1 days and 48h/24h before
+  1. Upcoming work placement visits - 14/7 days advance, plus 48h/24h imminent
   2. Compliance document expiry - 30-day notice, sent directly to the student
   3. Low attendance (< 50 % hours with < 30 days left) - sent directly to the student
   4. Supervisor feedback pending - 3/7/14 days after a completed visit with no feedback logged
@@ -17,7 +17,7 @@ import logging
 
 from app.database import SessionLocal
 from app.models import Appointment, ComplianceDocument, Student, User
-from app.services.email_service import email_appointment_reminder, email_compliance_expiry_student
+from app.services.email_service import send_email, base_template
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -96,32 +96,35 @@ def check_appointment_reminders():
                     if centre else (appt.location_address or "To be confirmed")
                 )
 
+                from app.api.communications import render_auto_template
+                time_label = f"{hours_ahead}-Hour"
+                prep_html = f"<p><strong>Preparation Notes:</strong><br>{appt.preparation_notes}</p>" if appt.preparation_notes else ""
+
+                def _send_imminent(recipient_name, recipient_email):
+                    subject, body = render_auto_template(
+                        db, "auto_appointment_reminder",
+                        recipient_name=recipient_name, student_name=student.full_name,
+                        appointment_title=appt.title, scheduled_date=str(appt.scheduled_date),
+                        scheduled_time=appt.scheduled_time, location_type="Onsite",
+                        location_detail=location_detail, preparation_notes_html=prep_html,
+                        time_label=time_label, frontend_url=settings.FRONTEND_URL,
+                    )
+                    send_email(recipient_email, recipient_name, subject, base_template(body))
+
                 # Email coordinator / trainer
                 ta_id = getattr(appt, "trainer_assessor_id", None) or appt.coordinator_id
                 if ta_id:
                     ta = db.query(User).filter(User.id == ta_id).first()
                     if ta and ta.email:
-                        email_appointment_reminder(
-                            ta.full_name, ta.email, student.full_name, appt.title,
-                            str(appt.scheduled_date), appt.scheduled_time, "onsite",
-                            location_detail, appt.preparation_notes or "", hours_ahead, settings.FRONTEND_URL,
-                        )
+                        _send_imminent(ta.full_name, ta.email)
 
                 # Email student
                 if student.email:
-                    email_appointment_reminder(
-                        student.full_name, student.email, student.full_name, appt.title,
-                        str(appt.scheduled_date), appt.scheduled_time, "onsite",
-                        location_detail, appt.preparation_notes or "", hours_ahead, settings.FRONTEND_URL,
-                    )
+                    _send_imminent(student.full_name, student.email)
 
                 # Email supervisor
                 if centre and centre.supervisor_email:
-                    email_appointment_reminder(
-                        centre.supervisor_name or "Supervisor", centre.supervisor_email,
-                        student.full_name, appt.title, str(appt.scheduled_date), appt.scheduled_time,
-                        "onsite", location_detail, appt.preparation_notes or "", hours_ahead, settings.FRONTEND_URL,
-                    )
+                    _send_imminent(centre.supervisor_name or "Supervisor", centre.supervisor_email)
 
                 _mark_visit_reminder_sent(db, appt, days_ahead)
                 setattr(appt, flag_field, True)
@@ -149,6 +152,7 @@ def check_compliance_expiry():
         ).all()
 
         from app.models import Communication
+        from app.api.communications import render_auto_template
 
         for doc in docs:
             student = db.query(Student).filter(Student.id == doc.student_id).first()
@@ -156,16 +160,20 @@ def check_compliance_expiry():
                 continue
 
             if student.email:
-                ok = email_compliance_expiry_student(
-                    student.full_name, student.email,
-                    doc.document_type, str(doc.expiry_date), days_ahead, settings.FRONTEND_URL,
+                doc_label = doc.document_type.replace("_", " ").title()
+                subject, body = render_auto_template(
+                    db, "auto_compliance_expiry",
+                    student_name=student.full_name, doc_label=doc_label,
+                    expiry_date=str(doc.expiry_date), days_until_expiry=days_ahead,
+                    frontend_url=settings.FRONTEND_URL,
                 )
+                ok = send_email(student.email, student.full_name, subject, base_template(body))
                 db.add(Communication(
                     student_id=student.id,
                     recipient_email=student.email,
                     recipient_name=student.full_name,
                     message_type="email",
-                    subject=f"Compliance Document Expiring Soon: {doc.document_type.replace('_', ' ').title()}",
+                    subject=subject,
                     body=f"Automated 30-day compliance expiry reminder sent for document {doc.id}.",
                     template_used="compliance_expiry_30d",
                     sent_successfully=ok,
@@ -199,22 +207,20 @@ def check_low_attendance():
         ).all()
 
         from app.models import Communication
+        from app.api.communications import render_auto_template
 
         for s in students:
             pct = (s.completed_hours / s.required_hours * 100) if s.required_hours else 0
             if pct < 50 and s.email:
-                from app.services.email_service import send_email, base_template
-                subject = "Low Attendance Alert - Your Placement Hours"
-                body_html = (
-                    f"<h2>Low Attendance Alert</h2>"
-                    f"<p>Dear {s.full_name},</p>"
-                    f"<p>You have completed only <strong>{s.completed_hours:.1f} / {s.required_hours:.0f} hours "
-                    f"({pct:.0f}%)</strong> of your required placement hours, with your placement ending on "
-                    f"<strong>{s.placement_end_date}</strong>.</p>"
-                    f"<p>Please log your placement hours as soon as possible, or contact your coordinator "
-                    f"if you need support to complete your remaining hours in time.</p>"
+                subject, body = render_auto_template(
+                    db, "auto_low_attendance_alert",
+                    student_name=s.full_name,
+                    completed_hours=f"{s.completed_hours:.1f}",
+                    required_hours=f"{s.required_hours:.0f}",
+                    pct=f"{pct:.0f}",
+                    placement_end_date=str(s.placement_end_date),
                 )
-                ok = send_email(s.email, s.full_name, subject, base_template(body_html))
+                ok = send_email(s.email, s.full_name, subject, base_template(body))
                 db.add(Communication(
                     student_id=s.id,
                     recipient_email=s.email,
@@ -282,17 +288,14 @@ def check_supervisor_feedback():
                 if ta_id:
                     ta = db.query(User).filter(User.id == ta_id).first()
                     if ta and ta.email:
-                        from app.services.email_service import send_email, base_template
+                        from app.api.communications import render_auto_template
                         student = db.query(Student).filter(Student.id == appt.student_id).first()
-                        subject = f"Feedback Pending ({days_after} days) - {appt.title}"
-                        body = (
-                            f"<h2>Supervisor Feedback Pending</h2>"
-                            f"<p>Dear {ta.full_name},</p>"
-                            f"<p>The appointment <strong>{appt.title}</strong>"
-                            + (f" for {student.full_name}" if student else "")
-                            + f" was completed on {appt.scheduled_date} ({days_after}+ days ago) but no "
-                            f"feedback has been recorded.</p>"
-                            f"<p>Please log feedback in the portal at your earliest convenience.</p>"
+                        student_clause = f" for {student.full_name}" if student else ""
+                        subject, body = render_auto_template(
+                            db, "auto_supervisor_feedback_pending",
+                            recipient_name=ta.full_name, appointment_title=appt.title,
+                            student_clause=student_clause, scheduled_date=str(appt.scheduled_date),
+                            days_after=days_after,
                         )
                         send_email(ta.email, ta.full_name, subject, base_template(body))
 
@@ -309,7 +312,9 @@ def check_supervisor_feedback():
 
 def check_visit_advance_reminders():
     """
-    Send 14-day, 7-day, 3-day, and 1-day advance reminders for upcoming appointments.
+    Send 14-day and 7-day advance reminders for upcoming appointments (3-day and
+    1-day notice are covered by check_appointment_reminders' 48h/24h Visit
+    Imminent Reminder instead, so they're not repeated here).
     Sends to both the student and assigned trainer/assessor.
     Uses the Communication log as a dedup gate - each appointment+interval is sent only once,
     even if the scheduler restarts.
@@ -318,9 +323,9 @@ def check_visit_advance_reminders():
     try:
         today = date.today()
         from app.models import PlacementCentre
-        from app.services.email_service import email_appointment_reminder
+        from app.api.communications import render_auto_template
 
-        for days_ahead in [14, 7, 3, 1]:
+        for days_ahead in [14, 7]:
             target_date = today + timedelta(days=days_ahead)
             appointments = db.query(Appointment).filter(
                 Appointment.scheduled_date == target_date,
@@ -330,8 +335,7 @@ def check_visit_advance_reminders():
 
             for appt in appointments:
                 # Skip if already sent for this appointment + interval - by this
-                # job, a previous run, or the 48h/24h job for the 1-day/2-day
-                # overlap case.
+                # job or a previous run.
                 if _visit_reminder_already_sent(db, appt, days_ahead):
                     continue
 
@@ -355,18 +359,24 @@ def check_visit_advance_reminders():
                     or getattr(appt, "location_address", None)
                     or "To be confirmed"
                 )
-                location_type = getattr(appt, "visit_type", "onsite") or "onsite"
-                hours_ahead_equiv = days_ahead * 24  # pass to email template for label
+                location_type = (getattr(appt, "visit_type", "onsite") or "onsite").title()
+                time_label = f"{days_ahead}-Day"
+                prep_html = f"<p><strong>Preparation Notes:</strong><br>{appt.preparation_notes}</p>" if appt.preparation_notes else ""
 
                 # --- Write dedup sentinel BEFORE sending to prevent double-send on restart ---
                 _mark_visit_reminder_sent(db, appt, days_ahead)
-                # Also set the 48h/24h job's own flags for the overlapping days,
-                # so it recognises this appointment+interval as already handled.
-                if days_ahead == 2:
-                    appt.email_sent_48h = True
-                elif days_ahead == 1:
-                    appt.email_sent_24h = True
                 db.commit()
+
+                def _send_advance(recipient_name, recipient_email):
+                    subject, body = render_auto_template(
+                        db, "auto_appointment_reminder",
+                        recipient_name=recipient_name, student_name=student.full_name,
+                        appointment_title=appt.title, scheduled_date=str(appt.scheduled_date),
+                        scheduled_time=appt.scheduled_time or "09:00", location_type=location_type,
+                        location_detail=location_detail, preparation_notes_html=prep_html,
+                        time_label=time_label, frontend_url=settings.FRONTEND_URL,
+                    )
+                    send_email(recipient_email, recipient_name, subject, base_template(body))
 
                 # --- Send to trainer/assessor ---
                 ta_id = getattr(appt, "trainer_assessor_id", None) or appt.coordinator_id
@@ -374,30 +384,14 @@ def check_visit_advance_reminders():
                     ta = db.query(User).filter(User.id == ta_id).first()
                     if ta and ta.email:
                         try:
-                            email_appointment_reminder(
-                                ta.full_name, ta.email, student.full_name, appt.title,
-                                str(appt.scheduled_date),
-                                appt.scheduled_time or "09:00",
-                                location_type, location_detail,
-                                appt.preparation_notes or "",
-                                hours_ahead_equiv,
-                                settings.FRONTEND_URL,
-                            )
+                            _send_advance(ta.full_name, ta.email)
                         except Exception as e:
                             logger.warning(f"Failed to email trainer {ta.email}: {e}")
 
                 # --- Send to student ---
                 if student.email:
                     try:
-                        email_appointment_reminder(
-                            student.full_name, student.email, student.full_name, appt.title,
-                            str(appt.scheduled_date),
-                            appt.scheduled_time or "09:00",
-                            location_type, location_detail,
-                            appt.preparation_notes or "",
-                            hours_ahead_equiv,
-                            settings.FRONTEND_URL,
-                        )
+                        _send_advance(student.full_name, student.email)
                     except Exception as e:
                         logger.warning(f"Failed to email student {student.email}: {e}")
 
