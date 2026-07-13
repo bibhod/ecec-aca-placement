@@ -32,6 +32,46 @@ const REPORT_TYPES = [
 // cover any legacy campuses so past data remains visible.
 const CAMPUSES = ['sydney', 'melbourne', 'perth']
 
+// Preset cohort intake dates for the Placement Hours Summary filters, rather
+// than a free-form date range - these are the fixed course start/finish
+// dates the college actually runs, "(Mid)" marking the mid-year intakes.
+const START_DATE_OPTIONS = [
+  { value: '2026-08-03', label: '3 August 2026 (Mid)' },
+  { value: '2026-09-21', label: '21 September 2026' },
+  { value: '2026-10-26', label: '26 October 2026 (Mid)' },
+  { value: '2027-01-11', label: '11 January 2027' },
+  { value: '2027-02-15', label: '15 February 2027 (Mid)' },
+  { value: '2027-04-05', label: '5 April 2027' },
+  { value: '2027-05-10', label: '10 May 2027 (Mid)' },
+  { value: '2027-06-28', label: '28 June 2027' },
+  { value: '2027-08-02', label: '2 August 2027 (Mid)' },
+  { value: '2027-09-20', label: '20 September 2027' },
+  { value: '2027-10-25', label: '25 October 2027 (Mid)' },
+]
+
+const FINISH_DATE_OPTIONS = [
+  { value: '2026-08-28', label: '28 August 2026' },
+  { value: '2026-11-20', label: '20 November 2026' },
+  { value: '2027-03-12', label: '12 March 2027' },
+  { value: '2027-06-04', label: '4 June 2027' },
+  { value: '2027-08-27', label: '27 August 2027' },
+  { value: '2027-11-19', label: '19 November 2027' },
+]
+
+// Cert III students require 160 placement hours, Diploma students require
+// 280 - shown here just as a reference; the Completed Hours filter below
+// buckets by percentage of each student's own required hours.
+const CERT_III_REQUIRED_HOURS = 160
+const DIPLOMA_REQUIRED_HOURS = 280
+
+const COMPLETED_HOURS_OPTIONS = [
+  { value: 'lt25', label: 'Less than 25%' },
+  { value: 'gt25', label: 'More than 25%' },
+  { value: '50',   label: '50%' },
+  { value: 'gt75', label: 'More than 75%' },
+  { value: '100',  label: '100%' },
+]
+
 export default function ReportsPage() {
   const [reportType, setReportType] = useState('enrollment_summary')
   const [campus, setCampus] = useState('')
@@ -39,14 +79,9 @@ export default function ReportsPage() {
   const [status, setStatus] = useState('current')
   const [days, setDays] = useState(30)
   const [missingOnly, setMissingOnly] = useState(false)
-  const [startDateFrom, setStartDateFrom] = useState('')
-  const [startDateTo, setStartDateTo] = useState('')
-  const [finishDateFrom, setFinishDateFrom] = useState('')
-  const [finishDateTo, setFinishDateTo] = useState('')
-  const [requiredHoursMin, setRequiredHoursMin] = useState('')
-  const [requiredHoursMax, setRequiredHoursMax] = useState('')
-  const [completedHoursMin, setCompletedHoursMin] = useState('')
-  const [completedHoursMax, setCompletedHoursMax] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [finishDate, setFinishDate] = useState('')
+  const [completedBucket, setCompletedBucket] = useState('')
   const [downloading, setDownloading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)   // { title, filter_desc, headers, rows, row_count }
@@ -66,14 +101,9 @@ export default function ReportsPage() {
     if (showDays) params.append('days', String(days))
     if (showMissingOnly) params.append('missing_only', String(missingOnly))
     if (showHoursFilters) {
-      if (startDateFrom) params.append('start_date_from', startDateFrom)
-      if (startDateTo) params.append('start_date_to', startDateTo)
-      if (finishDateFrom) params.append('finish_date_from', finishDateFrom)
-      if (finishDateTo) params.append('finish_date_to', finishDateTo)
-      if (requiredHoursMin) params.append('required_hours_min', requiredHoursMin)
-      if (requiredHoursMax) params.append('required_hours_max', requiredHoursMax)
-      if (completedHoursMin) params.append('completed_hours_min', completedHoursMin)
-      if (completedHoursMax) params.append('completed_hours_max', completedHoursMax)
+      if (startDate) params.append('start_date', startDate)
+      if (finishDate) params.append('finish_date', finishDate)
+      if (completedBucket) params.append('completed_bucket', completedBucket)
     }
     return params
   }
@@ -171,32 +201,31 @@ export default function ReportsPage() {
         {showHoursFilters && (
           <div className="grid grid-cols-2 gap-4 pt-1 border-t border-gray-100">
             <FormRow label="Start Date">
-              <div className="flex items-center gap-2">
-                <input className="input" type="date" value={startDateFrom} onChange={e => setStartDateFrom(e.target.value)} />
-                <span className="text-xs text-gray-400">to</span>
-                <input className="input" type="date" value={startDateTo} onChange={e => setStartDateTo(e.target.value)} />
-              </div>
+              <Select
+                value={startDate}
+                onChange={setStartDate}
+                options={START_DATE_OPTIONS}
+                placeholder="Any Start Date"
+              />
             </FormRow>
             <FormRow label="Finish Date">
-              <div className="flex items-center gap-2">
-                <input className="input" type="date" value={finishDateFrom} onChange={e => setFinishDateFrom(e.target.value)} />
-                <span className="text-xs text-gray-400">to</span>
-                <input className="input" type="date" value={finishDateTo} onChange={e => setFinishDateTo(e.target.value)} />
-              </div>
-            </FormRow>
-            <FormRow label="Required Hours">
-              <div className="flex items-center gap-2">
-                <input className="input" type="number" min="0" placeholder="Min" value={requiredHoursMin} onChange={e => setRequiredHoursMin(e.target.value)} />
-                <span className="text-xs text-gray-400">to</span>
-                <input className="input" type="number" min="0" placeholder="Max" value={requiredHoursMax} onChange={e => setRequiredHoursMax(e.target.value)} />
-              </div>
+              <Select
+                value={finishDate}
+                onChange={setFinishDate}
+                options={FINISH_DATE_OPTIONS}
+                placeholder="Any Finish Date"
+              />
             </FormRow>
             <FormRow label="Completed Hours">
-              <div className="flex items-center gap-2">
-                <input className="input" type="number" min="0" placeholder="Min" value={completedHoursMin} onChange={e => setCompletedHoursMin(e.target.value)} />
-                <span className="text-xs text-gray-400">to</span>
-                <input className="input" type="number" min="0" placeholder="Max" value={completedHoursMax} onChange={e => setCompletedHoursMax(e.target.value)} />
-              </div>
+              <Select
+                value={completedBucket}
+                onChange={setCompletedBucket}
+                options={COMPLETED_HOURS_OPTIONS}
+                placeholder="Any"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                % of each student's own required hours (Cert III: {CERT_III_REQUIRED_HOURS}h, Diploma: {DIPLOMA_REQUIRED_HOURS}h). Results still show actual hours completed.
+              </p>
             </FormRow>
           </div>
         )}

@@ -371,14 +371,9 @@ def _build_custom_report_data(
     days: str,
     missing_only: bool,
     db: Session,
-    start_date_from: str = "",
-    start_date_to: str = "",
-    finish_date_from: str = "",
-    finish_date_to: str = "",
-    required_hours_min: str = "",
-    required_hours_max: str = "",
-    completed_hours_min: str = "",
-    completed_hours_max: str = "",
+    start_date: str = "",
+    finish_date: str = "",
+    completed_bucket: str = "",
 ):
     """
     Shared data builder for the "Custom Report" - used by both the on-screen
@@ -398,11 +393,33 @@ def _build_custom_report_data(
         except ValueError:
             return None
 
-    def _parse_num(s):
-        try:
-            return float(s) if s not in (None, "") else None
-        except ValueError:
-            return None
+    # Fallback required-hours-by-qualification, used only if a student record
+    # is somehow missing its own required_hours value.
+    CERT_III_HOURS = 160
+    DIPLOMA_HOURS = 280
+
+    def _required_hours_for(s):
+        if s.required_hours:
+            return s.required_hours
+        return DIPLOMA_HOURS if "50" in (s.qualification or "") else CERT_III_HOURS
+
+    def _completed_pct(s):
+        req = _required_hours_for(s)
+        return (s.completed_hours or 0) / req * 100 if req else 0
+
+    COMPLETED_BUCKET_LABELS = {
+        "lt25": "Less than 25%", "gt25": "More than 25%", "50": "50% or more",
+        "gt75": "More than 75%", "100": "100% or more",
+    }
+
+    def _completed_bucket_match(s, bucket):
+        pct = _completed_pct(s)
+        if bucket == "lt25":  return pct < 25
+        if bucket == "gt25":  return pct > 25
+        if bucket == "50":    return pct >= 50
+        if bucket == "gt75":  return pct > 75
+        if bucket == "100":   return pct >= 100
+        return True
 
     def _qual_match(s_qual):
         if not qualification:
@@ -441,20 +458,16 @@ def _build_custom_report_data(
 
     elif report_type == "placement_hours":
         title = "Placement Hours Summary"
-        sdf, sdt = _parse_date(start_date_from), _parse_date(start_date_to)
-        fdf, fdt = _parse_date(finish_date_from), _parse_date(finish_date_to)
-        rhmin, rhmax = _parse_num(required_hours_min), _parse_num(required_hours_max)
-        chmin, chmax = _parse_num(completed_hours_min), _parse_num(completed_hours_max)
+        sd = _parse_date(start_date)
+        fd = _parse_date(finish_date)
 
         filter_parts = []
         if campus:   filter_parts.append(f"Campus: {campus.title()}")
         if qualification: filter_parts.append(f"Qualification: {qualification}")
-        if sdf or sdt: filter_parts.append(f"Start Date: {sdf or '...'} to {sdt or '...'}")
-        if fdf or fdt: filter_parts.append(f"Finish Date: {fdf or '...'} to {fdt or '...'}")
-        if rhmin is not None or rhmax is not None:
-            filter_parts.append(f"Required Hours: {rhmin if rhmin is not None else '...'} to {rhmax if rhmax is not None else '...'}")
-        if chmin is not None or chmax is not None:
-            filter_parts.append(f"Completed Hours: {chmin if chmin is not None else '...'} to {chmax if chmax is not None else '...'}")
+        if sd: filter_parts.append(f"Start Date: {_fmt_date(sd)}")
+        if fd: filter_parts.append(f"Finish Date: {_fmt_date(fd)}")
+        if completed_bucket in COMPLETED_BUCKET_LABELS:
+            filter_parts.append(f"Completed Hours: {COMPLETED_BUCKET_LABELS[completed_bucket]}")
         filter_desc = "  |  ".join(filter_parts) if filter_parts else "All current students"
 
         q = db.query(Student)
@@ -465,22 +478,12 @@ def _build_custom_report_data(
             students = [s for s in students if (s.campus or "").lower() == campus.lower()]
         if qualification:
             students = [s for s in students if _qual_match(s.qualification)]
-        if sdf:
-            students = [s for s in students if s.course_start_date and s.course_start_date >= sdf]
-        if sdt:
-            students = [s for s in students if s.course_start_date and s.course_start_date <= sdt]
-        if fdf:
-            students = [s for s in students if s.course_end_date and s.course_end_date >= fdf]
-        if fdt:
-            students = [s for s in students if s.course_end_date and s.course_end_date <= fdt]
-        if rhmin is not None:
-            students = [s for s in students if (s.required_hours or 0) >= rhmin]
-        if rhmax is not None:
-            students = [s for s in students if (s.required_hours or 0) <= rhmax]
-        if chmin is not None:
-            students = [s for s in students if (s.completed_hours or 0) >= chmin]
-        if chmax is not None:
-            students = [s for s in students if (s.completed_hours or 0) <= chmax]
+        if sd:
+            students = [s for s in students if s.course_start_date == sd]
+        if fd:
+            students = [s for s in students if s.course_end_date == fd]
+        if completed_bucket:
+            students = [s for s in students if _completed_bucket_match(s, completed_bucket)]
         students = sorted(students, key=lambda s: s.completed_hours / (s.required_hours or 1))
 
         headers = ["Student ID", "Name", "Qualification", "Course Start Date", "Course End Date", "Completed", "Required", "Progress"]
@@ -585,14 +588,9 @@ def get_custom_report_data(
     status: str = "current",
     days: str = "30",
     missing_only: bool = False,
-    start_date_from: str = "",
-    start_date_to: str = "",
-    finish_date_from: str = "",
-    finish_date_to: str = "",
-    required_hours_min: str = "",
-    required_hours_max: str = "",
-    completed_hours_min: str = "",
-    completed_hours_max: str = "",
+    start_date: str = "",
+    finish_date: str = "",
+    completed_bucket: str = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -602,8 +600,7 @@ def get_custom_report_data(
     """
     title, filter_desc, headers, rows_data = _build_custom_report_data(
         report_type, campus, qualification, status, days, missing_only, db,
-        start_date_from, start_date_to, finish_date_from, finish_date_to,
-        required_hours_min, required_hours_max, completed_hours_min, completed_hours_max,
+        start_date, finish_date, completed_bucket,
     )
     return {
         "title": title,
@@ -622,14 +619,9 @@ def export_report_pdf(
     status: str = "current",
     days: str = "30",
     missing_only: bool = False,
-    start_date_from: str = "",
-    start_date_to: str = "",
-    finish_date_from: str = "",
-    finish_date_to: str = "",
-    required_hours_min: str = "",
-    required_hours_max: str = "",
-    completed_hours_min: str = "",
-    completed_hours_max: str = "",
+    start_date: str = "",
+    finish_date: str = "",
+    completed_bucket: str = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -664,8 +656,7 @@ def export_report_pdf(
 
     title, filter_desc, headers, rows_data = _build_custom_report_data(
         report_type, campus, qualification, status, days, missing_only, db,
-        start_date_from, start_date_to, finish_date_from, finish_date_to,
-        required_hours_min, required_hours_max, completed_hours_min, completed_hours_max,
+        start_date, finish_date, completed_bucket,
     )
 
     # ── Build PDF ─────────────────────────────────────────────────────────────
