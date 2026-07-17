@@ -103,9 +103,13 @@ export default function CentresPage() {
   const [editCentre, setEditCentre] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [trainers, setTrainers] = useState([])
 
   const load = () => api.get('/centres').then(r => setCentres(r.data)).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    api.get('/users').then(r => setTrainers(r.data.filter(u => u.role === 'trainer'))).catch(() => {})
+  }, [])
 
   // Inject Google Maps script if API key is available
   useEffect(() => {
@@ -282,7 +286,20 @@ export default function CentresPage() {
           <div className="col-span-full border-t border-gray-100 pt-4 mt-1">
             <p className="text-sm font-medium text-gray-700 mb-3">Trainer/Assessor Contact Details</p>
           </div>
-          <FormRow label="Trainer/Assessor Name"><input className="input" value={form.supervisor_name} onChange={e => setForm(f => ({ ...f, supervisor_name: e.target.value }))} /></FormRow>
+          <FormRow label="Trainer/Assessor Name" hint="Selecting a name fills in their email and phone from User Management - both stay editable if this centre needs a different contact.">
+            <Select value={form.supervisor_name}
+              onChange={v => {
+                const t = trainers.find(t => t.full_name === v)
+                setForm(f => ({
+                  ...f,
+                  supervisor_name: v,
+                  supervisor_email: t ? (t.email || '') : f.supervisor_email,
+                  supervisor_phone: t ? (t.phone || '') : f.supervisor_phone,
+                }))
+              }}
+              options={trainers.map(t => ({ value: t.full_name, label: t.full_name }))}
+              placeholder="Select trainer/assessor..." />
+          </FormRow>
           <FormRow label="Trainer/Assessor Email"><input className="input" type="email" value={form.supervisor_email} onChange={e => setForm(f => ({ ...f, supervisor_email: e.target.value }))} /></FormRow>
           <FormRow label="Trainer/Assessor Phone"><input className="input" value={form.supervisor_phone} onChange={e => setForm(f => ({ ...f, supervisor_phone: e.target.value }))} /></FormRow>
 
