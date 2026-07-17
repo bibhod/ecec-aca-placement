@@ -259,12 +259,17 @@ def create_student(
         status=(data.status or "current").lower().strip(),
         course_start_date=date.fromisoformat(data.course_start_date) if data.course_start_date else None,
         course_end_date=date.fromisoformat(data.course_end_date) if data.course_end_date else None,
-        placement_centre_id=data.placement_centre_id,
+        # Empty strings from the Add/Edit Student form (e.g. "Placement Centre"
+        # and "Trainer/Assessor" left unselected) must be stored as NULL, not
+        # "" - these are foreign keys, and "" doesn't match any row, which
+        # trips the FK constraint and previously surfaced as an unhandled 500
+        # on every new student until a centre and trainer were picked.
+        placement_centre_id=data.placement_centre_id or None,
         placement_start_date=date.fromisoformat(data.placement_start_date) if data.placement_start_date else None,
         placement_end_date=date.fromisoformat(data.placement_end_date) if data.placement_end_date else None,
         required_hours=required_hours,
         completed_hours=0,
-        coordinator_id=data.coordinator_id,
+        coordinator_id=data.coordinator_id or None,
         preferred_suburb=data.preferred_suburb,
         preferred_state=data.preferred_state,
         notes=data.notes,
@@ -316,9 +321,16 @@ def update_student(
         "course_start_date", "course_end_date",
         "placement_start_date", "placement_end_date", "date_of_birth",
     }
+    # Foreign keys: an empty string ("" - what the form sends when the
+    # Placement Centre / Trainer-Assessor dropdown is left unselected) must
+    # be written as NULL, never "", or the FK constraint rejects the update
+    # with an unhandled 500 (same root cause as the create-student bug).
+    fk_fields = {"placement_centre_id", "coordinator_id"}
     for field, val in data.dict(exclude_none=True).items():
         if field in date_fields:
             setattr(s, field, date.fromisoformat(val) if val else None)
+        elif field in fk_fields:
+            setattr(s, field, val or None)
         elif field == "campus":
             s.campus = (val or "").lower().strip()
         elif field == "status":

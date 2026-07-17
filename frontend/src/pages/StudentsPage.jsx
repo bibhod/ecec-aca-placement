@@ -84,7 +84,7 @@ export default function StudentsPage() {
   // ── Student list state ────────────────────────────────────────────────────
   const [students, setStudents] = useState([])
   const [centres, setCentres] = useState([])
-  const [coordinators, setCoordinators] = useState([])
+  const [trainers, setTrainers] = useState([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('grid')
   const [search, setSearch] = useState('')
@@ -114,7 +114,7 @@ export default function StudentsPage() {
   useEffect(() => { load() }, [load])
   useEffect(() => {
     api.get('/centres').then(r => setCentres(r.data)).catch(() => {})
-    api.get('/users').then(r => setCoordinators(r.data.filter(u => ['coordinator', 'admin'].includes(u.role)))).catch(() => {})
+    api.get('/users').then(r => setTrainers(r.data.filter(u => u.role === 'trainer'))).catch(() => {})
   }, [])
 
   const openAdd = () => {
@@ -262,13 +262,13 @@ export default function StudentsPage() {
               </FormRow>
               <FormRow label="Course Start Date"><input className="input" type="date" value={form.course_start_date} onChange={e => setForm(f => ({ ...f, course_start_date: e.target.value }))} /></FormRow>
               <FormRow label="Course End Date"><input className="input" type="date" value={form.course_end_date} onChange={e => setForm(f => ({ ...f, course_end_date: e.target.value }))} /></FormRow>
-              <FormRow label="Placement Centre">
+              <FormRow label="Placement Centre" hint="Optional - students often don't have one yet when the course starts. Can be added later.">
                 <Select value={form.placement_centre_id} onChange={v => setForm(f => ({ ...f, placement_centre_id: v }))}
                   options={centres.map(c => ({ value: c.id, label: c.centre_name }))} placeholder="Select centre..." />
               </FormRow>
-              <FormRow label="Coordinator">
+              <FormRow label="Trainer/Assessor">
                 <Select value={form.coordinator_id} onChange={v => setForm(f => ({ ...f, coordinator_id: v }))}
-                  options={coordinators.map(c => ({ value: c.id, label: c.full_name }))} placeholder="Select coordinator..." />
+                  options={trainers.map(c => ({ value: c.id, label: c.full_name }))} placeholder="Select trainer/assessor..." />
               </FormRow>
               <FormRow label="Placement Start Date"><input className="input" type="date" value={form.placement_start_date} onChange={e => setForm(f => ({ ...f, placement_start_date: e.target.value }))} /></FormRow>
               <FormRow label="Placement End Date"><input className="input" type="date" value={form.placement_end_date} onChange={e => setForm(f => ({ ...f, placement_end_date: e.target.value }))} /></FormRow>
