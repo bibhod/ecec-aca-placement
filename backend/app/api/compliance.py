@@ -224,6 +224,10 @@ def create_document(
             detail=f"Invalid document type. Valid types: {COMPLIANCE_DOC_TYPE_CHOICES}",
         )
 
+    # Documents are only ever added through admin access, and are checked
+    # against the physical/uploaded file before being entered here - so they
+    # are auto-verified on creation rather than sitting in a manual-review
+    # queue that nothing in the UI currently exposes a way to clear.
     doc = ComplianceDocument(
         student_id=data.student_id,
         document_type=data.document_type,
@@ -231,7 +235,9 @@ def create_document(
         document_number=data.document_number,
         issue_date=date.fromisoformat(data.issue_date) if data.issue_date else None,
         expiry_date=date.fromisoformat(data.expiry_date) if data.expiry_date else None,
-        verified=False,
+        verified=True,
+        verified_by=current_user.full_name,
+        verified_at=date.today(),
         notes=data.notes,
     )
     db.add(doc)
@@ -278,6 +284,8 @@ async def create_document_with_upload(
     if qualification:
         notes = f"Qualification: {qualification}\n{notes}".strip() if notes else f"Qualification: {qualification}"
 
+    # Auto-verified for the same reason as create_document() above - admin-only
+    # upload, already checked before it's entered.
     doc = ComplianceDocument(
         student_id=student_id,
         document_type=document_type,
@@ -285,7 +293,9 @@ async def create_document_with_upload(
         document_number=document_number or None,
         issue_date=date.fromisoformat(issue_date) if issue_date else None,
         expiry_date=date.fromisoformat(expiry_date) if expiry_date else None,
-        verified=False,
+        verified=True,
+        verified_by=current_user.full_name,
+        verified_at=date.today(),
         notes=notes or None,
     )
     db.add(doc)

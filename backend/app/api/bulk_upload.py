@@ -475,13 +475,18 @@ async def import_compliance(
             note_parts.append(notes_raw)
         final_notes = "\n".join(note_parts) or None
 
+        # Auto-verified for the same reason as the manual Add Document paths -
+        # bulk import is admin-only and the source spreadsheet has already
+        # been checked before upload.
         doc = ComplianceDocument(
             student_id=student.id,
             document_type=doc_type,
             issue_date=issue_date,
             expiry_date=expiry_date,
             notes=final_notes,
-            verified=False,
+            verified=True,
+            verified_by=current_user.full_name,
+            verified_at=date.today(),
         )
         db.add(doc)
         created.append(f"{sid} / {doc_type}")
