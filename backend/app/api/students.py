@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
+from app.config import settings
 
 router = APIRouter()
 
@@ -289,7 +290,7 @@ def create_student(
             campus=s.campus,
             coordinator_name=coordinator.full_name if coordinator else current_user.full_name,
             coordinator_email=coordinator.email if coordinator else current_user.email,
-            frontend_url="",
+            frontend_url=settings.FRONTEND_URL,
         )
 
     # Audit: record student creation

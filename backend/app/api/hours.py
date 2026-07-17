@@ -18,6 +18,7 @@ from app.models import (
 )
 from app.utils.auth import get_current_user, require_admin
 from app.api.audit import write_audit
+from app.config import settings
 
 router = APIRouter()
 
@@ -224,7 +225,7 @@ def create_hours_log(
     for milestone in [50, 100]:
         if prev_pct < milestone <= new_pct and student.email:
             from app.services.email_service import email_hours_milestone
-            email_hours_milestone(student.full_name, student.email, student.completed_hours, student.required_hours, milestone, "")
+            email_hours_milestone(student.full_name, student.email, student.completed_hours, student.required_hours, milestone, settings.FRONTEND_URL)
 
     write_audit(
         db, current_user, "hours.create", "hours_log",
@@ -299,7 +300,7 @@ def create_hours_bulk(
     for milestone in [50, 100]:
         if prev_pct < milestone <= new_pct and student.email:
             from app.services.email_service import email_hours_milestone
-            email_hours_milestone(student.full_name, student.email, student.completed_hours, student.required_hours, milestone, "")
+            email_hours_milestone(student.full_name, student.email, student.completed_hours, student.required_hours, milestone, settings.FRONTEND_URL)
 
     return {"message": f"{len(results)} entries processed", "results": results}
 

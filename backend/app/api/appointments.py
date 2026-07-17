@@ -21,6 +21,7 @@ from app.models import (
     UNITS_CHC30125, UNITS_CHC50125, VISIT_LIMITS,
 )
 from app.utils.auth import get_current_user, require_admin, require_admin_or_trainer
+from app.config import settings
 from app.api.audit import write_audit
 from app.services.email_service import email_appointment_reminder
 from app.services.sms_service import sms_appointment_reminder
@@ -254,7 +255,10 @@ def create_appointment(
         title=data.title,
         appointment_type=data.appointment_type,
         visit_type=data.visit_type,
-        placement_centre_id=data.placement_centre_id,
+        # Placement Centre is optional on this form - "" (left unselected)
+        # must be stored as NULL, not "", or the FK constraint rejects the
+        # insert with an unhandled 500 (same bug as the old Add Student form).
+        placement_centre_id=data.placement_centre_id or None,
         location_address=data.location_address,
         scheduled_date=date.fromisoformat(data.scheduled_date),
         scheduled_time=data.scheduled_time,
@@ -292,7 +296,8 @@ def create_appointment(
                 email_appointment_reminder(
                     student.full_name, student.email, student.full_name,
                     data.title, data.scheduled_date, data.scheduled_time,
-                    "onsite", location, data.preparation_notes or "", 999, "",
+                    "onsite", location, data.preparation_notes or "", 999,
+                    settings.FRONTEND_URL,
                 )
             except Exception as e:
                 logger.error(f"Email to student failed: {e}")
@@ -302,7 +307,8 @@ def create_appointment(
                 email_appointment_reminder(
                     ta.full_name, ta.email, student.full_name,
                     data.title, data.scheduled_date, data.scheduled_time,
-                    "onsite", location, data.preparation_notes or "", 999, "",
+                    "onsite", location, data.preparation_notes or "", 999,
+                    settings.FRONTEND_URL,
                 )
             except Exception as e:
                 logger.error(f"Email to trainer failed: {e}")
@@ -374,8 +380,12 @@ def update_appointment(
         if resulting_status == "not_completed" and not (resulting_feedback or "").strip():
             raise HTTPException(400, "Please add a note explaining why the visit didn't take place")
 
+    # Foreign keys: "" (an unselected dropdown) must be written as NULL,
+    # never "", or the FK constraint rejects the update with an unhandled 500.
+    fk_fields = {"placement_centre_id", "trainer_assessor_id"}
     for f, v in update_fields.items():
         if f == "scheduled_date": a.scheduled_date = date.fromisoformat(v)
+        elif f in fk_fields: setattr(a, f, v or None)
         elif hasattr(a, f): setattr(a, f, v)
     db.commit(); db.refresh(a)
 
