@@ -34,6 +34,18 @@ const QUAL_SHORT = {
   'CHC30125': 'Cert III',
   'CHC50125': 'Diploma',
 }
+// Bug fix (critical): qualification LEVEL (Cert III vs Diploma) must never be
+// changed on an existing student row via Edit - completed_hours, visits, and
+// compliance docs are all scoped to that row's id, so flipping the level here
+// silently carried a student's Cert III hours over to their Diploma record.
+// Progressing a student to the next level must go through "Add Student"
+// (same Student ID, new qualification) to create a fresh row at 0 hours.
+// The backend enforces this too (PUT /students/{id} rejects level changes);
+// this just keeps the option out of the dropdown in the first place.
+const QUAL_LEVEL = {
+  'CHC30121': 'Cert III', 'CHC30125': 'Cert III',
+  'CHC50121': 'Diploma',  'CHC50125': 'Diploma',
+}
 
 function StudentCard({ student, onClick }) {
   const compColor = { compliant: 'text-green-600', expired: 'text-red-600', pending: 'text-yellow-600' }
@@ -243,8 +255,21 @@ export default function StudentsPage() {
               <FormRow label="Phone">
                 <input className="input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
               </FormRow>
-              <FormRow label="Qualification" required>
-                <Select value={form.qualification} onChange={handleQualChange} options={editStudent ? QUALIFICATIONS : NEW_STUDENT_QUALIFICATIONS} placeholder="" />
+              <FormRow
+                label="Qualification"
+                required
+                hint={editStudent ? `Locked to ${QUAL_LEVEL[editStudent.qualification]} - to progress this student to the next level, use "Add Student" with the same Student ID instead.` : undefined}
+              >
+                <Select
+                  value={form.qualification}
+                  onChange={handleQualChange}
+                  options={
+                    editStudent
+                      ? QUALIFICATIONS.filter(q => QUAL_LEVEL[q.value] === QUAL_LEVEL[editStudent.qualification])
+                      : NEW_STUDENT_QUALIFICATIONS
+                  }
+                  placeholder=""
+                />
               </FormRow>
               <FormRow label="Campus" required>
                 <Select value={form.campus} onChange={v => setForm(f => ({ ...f, campus: v }))} options={(editStudent ? CAMPUSES : NEW_STUDENT_CAMPUSES).map(c => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} placeholder="" />

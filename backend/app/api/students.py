@@ -318,6 +318,40 @@ def update_student(
     if data.qualification not in QUALIFICATION_CHOICES:
         raise HTTPException(status_code=400, detail=f"Invalid qualification. Valid: {QUALIFICATION_CHOICES}")
 
+    # Bug fix (critical): a student's Certificate III and Diploma placement
+    # hours/visits/compliance are only ever correct when each qualification
+    # level lives on its own Student row - HoursLog, Appointment, and
+    # ComplianceDocument totals are all scoped to a single student row's id.
+    # Previously this endpoint let an admin flip the "Qualification" dropdown
+    # on an EXISTING row from a Cert III code straight to a Diploma code (or
+    # vice versa). That silently carried the row's completed_hours (and every
+    # hours log / visit tied to that row's id) over to the new level, since
+    # completed_hours is never reset on update - producing Diploma students
+    # who appeared to already have their full Cert III hours banked before
+    # submitting a single Diploma placement hour.
+    #
+    # A qualification-LEVEL change is a new enrolment, not an edit, and the
+    # data model already supports this (student_id is not globally unique -
+    # uq_student_id_qualification allows a second row for the same person
+    # under a new qualification). So level changes must go through
+    # POST /students (Add Student) to create a fresh row with
+    # completed_hours=0, not through this update endpoint.
+    # Same-level code changes (e.g. superseded CHC30121 -> CHC30125) are
+    # still allowed here since they represent the same placement history.
+    old_level = qualification_level_for_code(s.qualification)
+    new_level = qualification_level_for_code(data.qualification)
+    if data.qualification != s.qualification and old_level and new_level and old_level != new_level:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot change qualification level from {old_level} to {new_level} on an existing "
+                f"student record - this would carry {s.completed_hours or 0} completed hours (and any "
+                f"logged visits) from {old_level} over to {new_level}. To progress this student, use "
+                f"\"Add Student\" with the same Student ID ({s.student_id}) to create a new {new_level} "
+                f"enrolment starting at 0 hours, and set this record's status to Completed."
+            ),
+        )
+
     date_fields = {
         "course_start_date", "course_end_date",
         "placement_start_date", "placement_end_date", "date_of_birth",
