@@ -445,7 +445,7 @@ export default function StudentDetailPage() {
                   <p className="text-xs text-gray-500">Completed</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-3">
-                  <p className="text-xl font-bold text-navy">{student.required_hours - student.completed_hours}</p>
+                  <p className="text-xl font-bold text-navy">{Math.max(0, student.required_hours - student.completed_hours)}</p>
                   <p className="text-xs text-gray-500">Remaining</p>
                 </div>
               </div>
